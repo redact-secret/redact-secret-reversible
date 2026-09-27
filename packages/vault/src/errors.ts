@@ -45,6 +45,7 @@ export type DenialReason =
   | "invalid-request"
   | "malformed-token"
   | "unknown-token"
+  | "source"
   | "expired"
   | "sink-or-path"
   | "budget"
