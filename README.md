@@ -15,7 +15,7 @@ The core detects and redacts without storing matched plaintext. This repository 
 | [redact-secret-adapters](https://github.com/redact-secret/redact-secret-adapters) | Host integrations for logs, traces, AI context, and MCP | Restoration or emitting mapped plaintext to observability |
 | [redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks) | Detection and support evidence | Treating restoration success as detection accuracy |
 
-Dependency direction is one way: this repository may consume the core's documented public API; the core and adapters must not depend on this repository. A separate release cadence and an explicitly tested core compatibility range will apply when a package exists. See [Architecture](ARCHITECTURE.md) and [boundary decision](docs/decisions/2026-09-27-separate-reversible-boundary.md).
+Dependency direction is one way: this repository may consume the core's documented public API; the core and adapters must not depend on this repository. A separate release cadence and an explicitly tested core compatibility range will apply when a package exists. See [Architecture](ARCHITECTURE.md) and [boundary decision](docs/decisions/separate-reversible-boundary.md).
 
 ## Packages and distribution
 
@@ -27,13 +27,13 @@ The agreed JavaScript package names describe two different responsibilities:
 | `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths | Qualified server runtimes |
 | `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
 
-A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
+A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/name-vault-packages-and-language-contract.md).
 
 ## Typed placeholders are independent
 
 The core already offers a typed formatter using safe finding metadata, such as `<JWT_1>`. If a future PII detector reports type `ssn`, a typed display label such as `<SSN_1>` remains a core formatting concern. Such a label does **not** imply that the original value was retained or can be restored.
 
-A reversible token will need a session-scoped, collision-resistant identity and an authorized mapping lookup. Its exact syntax is not yet selected. Restoration must not infer authority from the visible type name or parse a core display placeholder as proof of ownership. See [typed placeholder decision](docs/decisions/2026-09-27-decouple-typed-placeholders-from-restoration.md).
+A reversible token will need a session-scoped, collision-resistant identity and an authorized mapping lookup. Its exact syntax is not yet selected. Restoration must not infer authority from the visible type name or parse a core display placeholder as proof of ownership. See [typed placeholder decision](docs/decisions/decouple-typed-placeholders-from-restoration.md).
 
 ## Security direction
 
@@ -46,7 +46,7 @@ A reversible token will need a session-scoped, collision-resistant identity and 
 - No library can guarantee that a managed-runtime string has been wiped from every memory copy.
 - Model output, tool arguments, and visible placeholder text cannot authorize their own restoration.
 
-These are design requirements, not claims of current implementation. The [security decision](docs/decisions/2026-09-27-restore-authority-and-lifecycle.md) distinguishes invariants from consumer choices.
+These are design requirements, not claims of current implementation. The [security decision](docs/decisions/restore-authority-and-lifecycle.md) distinguishes invariants from consumer choices.
 
 ## Proposed delivery
 
@@ -56,7 +56,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 
 - [Architecture](ARCHITECTURE.md): trust boundaries and proposed components.
 - [Conventions](CONVENTIONS.md): documentation, implementation, and review rules.
-- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions.
+- [Decisions](docs/decisions/DECISIONS.md): accepted boundaries and open design questions.
 - [Browser in-memory security](docs/specs/in-memory-security.md): proposed guarantees, limits, and deployment alternatives.
 - [Core integration research](docs/research/core-integration.md): public API facts and proof-of-concept questions.
 - [Executed verification](docs/research/verification-2026-09-27.md): Node addon and WASM findings, with browser qualification still open.

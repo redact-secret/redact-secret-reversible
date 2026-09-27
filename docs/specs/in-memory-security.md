@@ -3,7 +3,7 @@
 **Status:** proposed design requirements; no package or restore API is implemented.
 **Scope:** `@redact-secret/vault` in a browser page or a dedicated Web Worker. This specification does not define server authorization or persistent storage.
 
-This document defines the security contract to validate before browser support is claimed. The [architecture](../../ARCHITECTURE.md) and [restore authority decision](../decisions/2026-09-27-restore-authority-and-lifecycle.md) define the repository-wide boundary. The core remains independent and does not retain original values.
+This document defines the security contract to validate before browser support is claimed. The [architecture](../../ARCHITECTURE.md) and [restore authority decision](../decisions/restore-authority-and-lifecycle.md) define the repository-wide boundary. The core remains independent and does not retain original values.
 
 ## Security objective and limits
 

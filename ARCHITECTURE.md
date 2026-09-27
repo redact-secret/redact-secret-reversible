@@ -8,7 +8,7 @@ This is a design contract for an unimplemented, optional restoration product. It
 
 `@redact-secret/vault` is the proposed portable in-memory session primitive for browser, Node.js, and separately qualified edge runtimes. `@redact-secret/vault-server` adds server authority for principals, tenants, sources, destinations, paths, and usage budgets; it can still use memory. `@redact-secret/store-*` packages are optional persistence implementations, not a third execution profile. An application may also provide its own store when it satisfies the same contract.
 
-The server security specification and adversarial conformance cases belong to this repository, independently of language. JavaScript uses the npm names above. Python, Rust, and Go need their own native distribution or a separately qualified service boundary; no JavaScript dependency is imposed on them. See [package decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
+The server security specification and adversarial conformance cases belong to this repository, independently of language. JavaScript uses the npm names above. Python, Rust, and Go need their own native distribution or a separately qualified service boundary; no JavaScript dependency is imposed on them. See [package decision](docs/decisions/name-vault-packages-and-language-contract.md).
 
 ## Trust boundaries
 
@@ -78,4 +78,4 @@ This repository versions independently from the core and adapters. Each language
 - No plaintext in errors, diagnostic hooks, logging, OTel, snapshots, or published fixtures.
 - Real-core integration at the declared dependency range endpoints.
 
-See [Decisions](docs/decisions/README.md) for settled boundaries and open questions.
+See [Decisions](docs/decisions/DECISIONS.md) for settled boundaries and open questions.
