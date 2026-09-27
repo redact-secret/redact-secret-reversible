@@ -10,19 +10,8 @@ import { extname, join, normalize } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 import { build } from "vite";
 
-import { makeConsumer, packVault, summarize, writeReport } from "./lib.mjs";
+import { makeConsumer, packVault, STRICT_CSP, summarize, writeReport } from "./lib.mjs";
 
-export const STRICT_CSP = [
-  "default-src 'none'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "connect-src 'self'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "require-trusted-types-for 'script'",
-  "trusted-types 'none'",
-].join("; ");
 // Identical except WebAssembly compilation is not permitted.
 const NO_WASM_CSP = STRICT_CSP.replace(" 'wasm-unsafe-eval'", "");
 

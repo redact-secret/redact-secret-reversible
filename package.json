@@ -10,6 +10,7 @@
     "typecheck": "npm run typecheck -w @redact-secret/vault",
     "qualify:node": "node qualification/node.mjs",
     "qualify:browser": "node qualification/browser.mjs",
+    "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs"
   },
   "devDependencies": {
