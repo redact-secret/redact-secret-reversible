@@ -119,7 +119,7 @@ function resolveLimits(partial: Partial<VaultLimits> | undefined): VaultLimits {
   }
   const resolved: Record<string, number> = { ...DEFAULT_LIMITS };
   for (const key of Object.keys(partial ?? {})) {
-    if (!(key in DEFAULT_LIMITS)) throw new VaultError("INVALID_ARGUMENT");
+    if (!Object.hasOwn(DEFAULT_LIMITS, key)) throw new VaultError("INVALID_ARGUMENT");
     const value = (partial as Record<string, unknown>)[key];
     if (value === undefined) continue;
     if (!isCount(value, LIMIT_CEILINGS[key as keyof VaultLimits])) {
@@ -153,6 +153,17 @@ function resolveGrants(release: unknown): Map<string, Set<string>> {
 }
 
 /**
+ * Wall-clock milliseconds anchored once, then advanced by the monotonic
+ * `performance.now()`, so a system clock change cannot extend a TTL.
+ */
+function monotonicEpochClock(): () => number {
+  const perf = (globalThis as { performance?: { now(): number } }).performance;
+  if (perf === undefined || typeof perf.now !== "function") return Date.now;
+  const base = Date.now() - perf.now();
+  return () => base + perf.now();
+}
+
+/**
  * Opens an explicit, bounded, in-memory vault session.
  *
  * Importing this package creates nothing; only this call does. It awaits the
@@ -164,7 +175,7 @@ export async function createVault(options: VaultOptions = {}): Promise<Vault> {
   const limits = resolveLimits(options.limits);
   const releasePolicy: ReleasePolicy | undefined = options.releasePolicy;
   const onAudit: AuditHook | undefined = options.onAudit;
-  const clock = options.now ?? Date.now;
+  const clock = options.now ?? monotonicEpochClock();
   if (releasePolicy !== undefined && typeof releasePolicy !== "function") {
     throw new VaultError("INVALID_ARGUMENT");
   }
@@ -182,12 +193,20 @@ export async function createVault(options: VaultOptions = {}): Promise<Vault> {
     throw new VaultError("CORE_FAILURE", { coreCode: coreCodeOf(thrown) });
   }
 
+  let latest = Number.NEGATIVE_INFINITY;
   const now = (): number => {
-    const value = clock();
+    let value: unknown;
+    try {
+      value = clock();
+    } catch {
+      throw new VaultError("INVALID_ARGUMENT");
+    }
     if (typeof value !== "number" || !Number.isFinite(value)) {
       throw new VaultError("INVALID_ARGUMENT");
     }
-    return value;
+    // Monotonic: a clock moving backwards cannot extend any lifetime.
+    latest = Math.max(latest, value);
+    return latest;
   };
 
   return new InMemoryVault(limits, fill, now, releasePolicy, onAudit, now() + limits.vaultTtlMs);
@@ -253,6 +272,22 @@ class InMemoryVault implements Vault {
   }
 
   stats(): VaultStats {
+    // Apply expiry before reporting, unless an operation is in progress (a
+    // callback reading stats must not mutate the vault mid-operation).
+    if (!this.#disposed && !this.#busy) {
+      this.#busy = true;
+      try {
+        const at = this.#now();
+        if (at >= this.#expiresAt) {
+          const removed = this.#disposeAll();
+          this.#audit({ operation: "dispose", outcome: "committed", at, entries: removed });
+        } else this.#sweep(at);
+      } catch {
+        // A failing clock leaves the counters as they are.
+      } finally {
+        this.#busy = false;
+      }
+    }
     return Object.freeze({
       entries: this.#entries.size,
       retainedBytes: this.#retainedBytes,
@@ -273,7 +308,14 @@ class InMemoryVault implements Vault {
     if (this.#disposed) throw new VaultError("DISPOSED");
     this.#busy = true;
     try {
-      const at = this.#now();
+      let at: number;
+      try {
+        at = this.#now();
+      } catch (thrown) {
+        const error = thrown instanceof VaultError ? thrown : new VaultError("INVALID_ARGUMENT");
+        this.#audit({ operation, outcome: "failed", at: Number.NaN, code: error.code });
+        throw error;
+      }
       if (at >= this.#expiresAt) {
         const removed = this.#disposeAll();
         this.#audit({ operation: "dispose", outcome: "committed", at, entries: removed });
@@ -344,6 +386,7 @@ class InMemoryVault implements Vault {
 
     // Gate on every finalized action before staging anything.
     let passedThrough = 0;
+    const passedTypes = new Set<string>();
     const retain: SecretFinding[] = [];
     let unrestorable = 0;
     let previousEnd = 0;
@@ -365,6 +408,7 @@ class InMemoryVault implements Vault {
         case "warn":
         case "allow":
           passedThrough += 1;
+          passedTypes.add(finding.type);
           break;
         case "redact": {
           let keep = true;
@@ -463,7 +507,8 @@ class InMemoryVault implements Vault {
       tokens.push(Object.freeze({ token: entry.token, type: entry.type }));
     }
     this.#retainedBytes += stagedBytes;
-    this.#captures.set(captureId, captureTokens);
+    // A capture that retained nothing has nothing to revoke; do not track it.
+    if (captureTokens.size > 0) this.#captures.set(captureId, captureTokens);
     staged.clear();
 
     this.#audit({ operation: "capture", outcome: "committed", at, entries: tokens.length });
@@ -472,6 +517,7 @@ class InMemoryVault implements Vault {
       text,
       tokens: Object.freeze(tokens),
       passedThrough,
+      passedThroughTypes: Object.freeze([...passedTypes].sort()),
       unrestorable,
       expiresAt,
     });
@@ -479,12 +525,23 @@ class InMemoryVault implements Vault {
 
   #restore(request: RestoreRequest, at: number): RestoreResult {
     if (typeof request !== "object" || request === null) throw new VaultError("INVALID_ARGUMENT");
-    const { sink, fields } = request;
+    const { sink, fields, captures } = request;
     if (!isIdentifier(sink)) throw new VaultError("INVALID_ARGUMENT");
     if (typeof fields !== "object" || fields === null || Array.isArray(fields)) {
       throw new VaultError("INVALID_ARGUMENT");
     }
+    if (!Array.isArray(captures) || captures.length === 0 || captures.length > MAX_GRANTS * 16) {
+      throw new VaultError("INVALID_ARGUMENT");
+    }
+    const sources = new Set<string>();
+    for (const id of captures as unknown[]) {
+      if (!isIdentifier(id)) throw new VaultError("INVALID_ARGUMENT");
+      sources.add(id);
+    }
     const deny = (reason: DenialReason): never => {
+      // Expired entries seen by a denied request are dropped now rather than
+      // left in memory until the next successful operation.
+      this.#sweep(at);
       throw new VaultError("RESTORE_DENIED", { reason });
     };
 
@@ -524,6 +581,9 @@ class InMemoryVault implements Vault {
       }
     }
     for (const { entry } of uses.values()) {
+      if (!sources.has(entry.captureId)) deny("source");
+    }
+    for (const { entry } of uses.values()) {
       if (at >= entry.expiresAt) deny("expired");
     }
     for (const { entry, paths } of uses.values()) {
@@ -536,7 +596,7 @@ class InMemoryVault implements Vault {
       if (entry.used + count > entry.maxUses) deny("budget");
     }
     if (this.#releasePolicy !== undefined) {
-      for (const { entry, paths } of uses.values()) {
+      for (const { entry, paths, count: total } of uses.values()) {
         for (const [path, count] of paths) {
           let allowed = false;
           try {
@@ -548,6 +608,7 @@ class InMemoryVault implements Vault {
                   path,
                   type: entry.type,
                   occurrences: count,
+                  totalOccurrences: total,
                   used: entry.used,
                 }),
               ) === true;

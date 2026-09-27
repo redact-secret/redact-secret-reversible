@@ -14,11 +14,12 @@ export const TOKEN_LENGTH = TOKEN_BODY_LENGTH + 6;
 export const TOKEN_PATTERN = /<rsv_[a-z2-7]{26}>/g;
 
 /**
- * Any case-insensitive occurrence of the token marker. Text containing a
+ * Any case-insensitive occurrence of the token marker, including one split by
+ * invisible format characters (Unicode category Cf). Text containing a
  * marker that is not part of an exact token is treated as an altered or
  * spoofed token and rejected, never passed through as if ordinary text.
  */
-export const MARKER_PATTERN = /rsv_/gi;
+export const MARKER_PATTERN = /r\p{Cf}*s\p{Cf}*v\p{Cf}*_/giu;
 
 export type RandomFill = (bytes: Uint8Array) => void;
 

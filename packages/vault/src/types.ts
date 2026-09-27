@@ -46,8 +46,10 @@ export interface ReleaseRequest {
   readonly path: string;
   /** Core finding type of the retained value. Descriptive only. */
   readonly type: string;
-  /** Occurrences this request would consume. */
+  /** Occurrences of this entry in this path. */
   readonly occurrences: number;
+  /** Occurrences of this entry across every field of the request. */
+  readonly totalOccurrences: number;
   /** Uses already consumed before this request. */
   readonly used: number;
 }
@@ -78,7 +80,15 @@ export interface VaultOptions {
   readonly limits?: Partial<VaultLimits>;
   readonly releasePolicy?: ReleasePolicy;
   readonly onAudit?: AuditHook;
-  /** Millisecond clock. Defaults to `Date.now`. */
+  /**
+   * Millisecond clock, for tests and controlled environments. The default is
+   * `Date.now()` anchored at creation and advanced by the monotonic
+   * `performance.now()`, so system clock changes do not move TTLs. An injected
+   * clock is trusted: the vault never lets *observed* time go backwards (a
+   * decrease is treated as no change), but it cannot detect a clock that runs
+   * slow. A clock that throws or returns a non-finite value
+   * fails the call with `INVALID_ARGUMENT`.
+   */
   readonly now?: () => number;
 }
 
@@ -119,6 +129,8 @@ export interface CaptureResult {
   readonly tokens: readonly IssuedToken[];
   /** `warn`/`allow` findings left as plaintext in `text`. */
   readonly passedThrough: number;
+  /** Distinct core finding types among `passedThrough`, sorted. */
+  readonly passedThroughTypes: readonly string[];
   /** `redact` findings replaced by a non-restorable display placeholder. */
   readonly unrestorable: number;
   readonly expiresAt: number;
@@ -127,6 +139,12 @@ export interface CaptureResult {
 export interface RestoreRequest {
   /** The application-chosen destination. */
   readonly sink: string;
+  /**
+   * The captures this output may draw from, by `captureId`. Required and
+   * non-empty: a token issued by any other capture in the same vault is
+   * denied (`source`), even when that capture granted the same sink and path.
+   */
+  readonly captures: readonly string[];
   /** Field path → text that may contain issued tokens. */
   readonly fields: Readonly<Record<string, string>>;
 }

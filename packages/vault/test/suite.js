@@ -113,6 +113,7 @@ function expand(template, fixtures, captures) {
     if (transform === "upper") value = value.toUpperCase();
     if (transform === "truncate") value = value.slice(0, -3) + ">";
     if (transform === "space") value = "< " + value.slice(1);
+    if (transform === "zwsp") value = value.slice(0, 2) + "\u200b" + value.slice(2);
     return value;
   });
 }
@@ -169,10 +170,11 @@ async function runCase(V, C, testCase, fixtures, observed) {
         const outcome = attempt(() => vault.capture(expand(step.input, fixtures, captures), options));
         if (expectError(outcome)) break;
         const result = outcome.value;
-        if (step.as) captures.set(step.as, result);
+        if (step.as) captures.set(step.as, { ...result, vault: step.vault ?? "A" });
         if (expect.tokens !== undefined) assert(result.tokens.length === expect.tokens, `${where(i)}: expected ${expect.tokens} tokens, got ${result.tokens.length}`);
         if (expect.types) assert(JSON.stringify(result.tokens.map((t) => t.type)) === JSON.stringify(expect.types), `${where(i)}: token types differ`);
         if (expect.passedThrough !== undefined) assert(result.passedThrough === expect.passedThrough, `${where(i)}: passedThrough ${result.passedThrough}`);
+        if (expect.passedThroughTypes) assert(JSON.stringify(result.passedThroughTypes) === JSON.stringify(expect.passedThroughTypes), `${where(i)}: passedThroughTypes differ`);
         if (expect.unrestorable !== undefined) assert(result.unrestorable === expect.unrestorable, `${where(i)}: unrestorable ${result.unrestorable}`);
         if (expect.expiresAt !== undefined) assert(result.expiresAt === expect.expiresAt, `${where(i)}: expiresAt ${result.expiresAt}`);
         if (expect.text !== undefined) assert(result.text === expand(expect.text, fixtures, captures), `${where(i)}: text differs`);
@@ -185,7 +187,11 @@ async function runCase(V, C, testCase, fixtures, observed) {
       }
       case "restore": {
         const fields = Object.fromEntries(Object.entries(step.fields).map(([k, v]) => [k, expand(v, fixtures, captures)]));
-        const outcome = attempt(() => vault.restore({ sink: step.sink, fields }));
+        const vaultName = step.vault ?? "A";
+        const ids = step.captures
+          ? step.captures.map((n) => captures.get(n)?.captureId ?? "cap_unknown")
+          : [...captures.values()].filter((c) => c.vault === vaultName).map((c) => c.captureId);
+        const outcome = attempt(() => vault.restore({ sink: step.sink, captures: ids, fields }));
         if (expectError(outcome)) break;
         const result = outcome.value;
         for (const [path, text] of Object.entries(expect.fields ?? {})) {
@@ -288,10 +294,10 @@ const runtimeChecks = {
     await Promise.all([
       Promise.resolve().then(() => order.push(["revoke-a", vault.revoke(a.captureId)])),
       Promise.resolve().then(() => {
-        try { vault.restore({ sink: "reply", fields: { body: a.tokens[0].token } }); order.push(["restore-a", "ok"]); } catch (e) { order.push(["restore-a", e.reason]); }
+        try { vault.restore({ sink: "reply", captures: [a.captureId], fields: { body: a.tokens[0].token } }); order.push(["restore-a", "ok"]); } catch (e) { order.push(["restore-a", e.reason]); }
       }),
       Promise.resolve().then(() => {
-        try { vault.restore({ sink: "reply", fields: { body: b.tokens[0].token } }); order.push(["restore-b", "ok"]); } catch (e) { order.push(["restore-b", e.reason]); }
+        try { vault.restore({ sink: "reply", captures: [b.captureId], fields: { body: b.tokens[0].token } }); order.push(["restore-b", "ok"]); } catch (e) { order.push(["restore-b", e.reason]); }
       }),
       Promise.resolve().then(() => order.push(["revoke-b", vault.revoke(b.captureId)])),
     ]);
@@ -310,7 +316,7 @@ const runtimeChecks = {
       },
     });
     const capture = vault.capture(`${F.GH}`, { release: RELEASE });
-    const result = vault.restore({ sink: "reply", fields: { body: capture.tokens[0].token } });
+    const result = vault.restore({ sink: "reply", captures: [capture.captureId], fields: { body: capture.tokens[0].token } });
     assert(result.fields.body === F.GH, "restore failed");
     assert(reentry === "BUSY,BUSY", `re-entry outcome ${reentry}`);
     assert(!vault.stats().disposed, "reentrant dispose took effect");
@@ -330,7 +336,7 @@ const runtimeChecks = {
     vault = await V.createVault({ onAudit: () => { vault.dispose(); throw new Error(`hook ${F.GH}`); } });
     const capture = vault.capture(F.GH, { release: RELEASE });
     assert(vault.stats().entries === 1 && !vault.stats().disposed, "audit hook changed the outcome");
-    const restored = vault.restore({ sink: "reply", fields: { body: capture.tokens[0].token } });
+    const restored = vault.restore({ sink: "reply", captures: [capture.captureId], fields: { body: capture.tokens[0].token } });
     assert(restored.fields.body === F.GH, "restore failed");
     vault.dispose();
   },
@@ -400,11 +406,11 @@ const runtimeChecks = {
     let touched = false;
     const fields = {};
     Object.defineProperty(fields, "body", { enumerable: true, get() { touched = true; return capture.tokens[0].token; } });
-    expectVaultError(V, observed, () => vault.restore({ sink: "reply", fields }), "RESTORE_DENIED", { reason: "invalid-request" });
+    expectVaultError(V, observed, () => vault.restore({ sink: "reply", captures: [capture.captureId], fields }), "RESTORE_DENIED", { reason: "invalid-request" });
     assert(!touched, "getter executed");
-    expectVaultError(V, observed, () => vault.restore({ sink: "reply", fields: [capture.tokens[0].token] }), "INVALID_ARGUMENT");
-    expectVaultError(V, observed, () => vault.restore({ sink: "reply", fields: { body: 42 } }), "RESTORE_DENIED", { reason: "invalid-request" });
-    const proto = vault.restore({ sink: "reply", fields: JSON.parse(`{"__proto__": "x", "body": "${capture.tokens[0].token}"}`) });
+    expectVaultError(V, observed, () => vault.restore({ sink: "reply", captures: [capture.captureId], fields: [capture.tokens[0].token] }), "INVALID_ARGUMENT");
+    expectVaultError(V, observed, () => vault.restore({ sink: "reply", captures: [capture.captureId], fields: { body: 42 } }), "RESTORE_DENIED", { reason: "invalid-request" });
+    const proto = vault.restore({ sink: "reply", captures: [capture.captureId], fields: JSON.parse(`{"__proto__": "x", "body": "${capture.tokens[0].token}"}`) });
     assert(proto.fields.body === undefined || typeof proto.fields.body === "string", "unexpected proto handling");
     vault.dispose();
   },
@@ -412,7 +418,7 @@ const runtimeChecks = {
   async "prototype-key-path-is-exact"(V, C, F, observed) {
     const vault = await V.createVault();
     const capture = vault.capture(F.GH, { release: [{ sink: "reply", paths: ["__proto__"] }] });
-    const result = vault.restore({ sink: "reply", fields: JSON.parse(`{"__proto__": "${capture.tokens[0].token}"}`) });
+    const result = vault.restore({ sink: "reply", captures: [capture.captureId], fields: JSON.parse(`{"__proto__": "${capture.tokens[0].token}"}`) });
     assert(Object.getOwnPropertyDescriptor(result.fields, "__proto__")?.value === F.GH, "own __proto__ field not restored");
     assert(Object.getPrototypeOf(result.fields) === Object.prototype, "result prototype polluted");
     vault.dispose();
@@ -423,7 +429,7 @@ const runtimeChecks = {
     const input = "password=SYNTH$&$1$`$'_REVOKED";
     const capture = vault.capture(input, { release: RELEASE, policy: { evaluate: () => "redact" } });
     assert(capture.tokens.length === 1, "fixture not detected");
-    const result = vault.restore({ sink: "reply", fields: { body: capture.text } });
+    const result = vault.restore({ sink: "reply", captures: [capture.captureId], fields: { body: capture.text } });
     assert(result.fields.body === input, "replacement patterns were interpreted");
     vault.dispose();
   },
@@ -442,6 +448,45 @@ const runtimeChecks = {
     vault.dispose();
   },
 
+  async "throwing-clock-is-sanitized"(V, C, F, observed) {
+    let explode = false;
+    const events = [];
+    const vault = await V.createVault({ now: () => { if (explode) throw new Error(`clock ${F.GH}`); return 0; }, onAudit: (e) => events.push(e) });
+    const capture = vault.capture(F.GH, { release: RELEASE });
+    explode = true;
+    expectVaultError(V, observed, () => vault.restore({ sink: "reply", captures: [capture.captureId], fields: { body: capture.tokens[0].token } }), "INVALID_ARGUMENT");
+    expectVaultError(V, observed, () => vault.capture(F.AWS, { release: RELEASE }), "INVALID_ARGUMENT");
+    assert(vault.stats().entries === 1, "stats changed under a failing clock");
+    explode = false;
+    observed.audit.push(...events);
+    assert(events.filter((e) => e.outcome === "failed" && e.code === "INVALID_ARGUMENT").length === 2, "clock failures not audited");
+    vault.dispose();
+    await V.createVault({ now: () => { throw new Error(F.GH); } }).then(
+      () => { throw new AssertionFailure("vault created with a throwing clock"); },
+      (e) => { observed.errors.push(e); assert(e instanceof V.VaultError && e.code === "INVALID_ARGUMENT", "createVault clock failure not sanitized"); },
+    );
+  },
+
+  async "restore-requires-captures"(V, C, F, observed) {
+    const vault = await V.createVault();
+    const capture = vault.capture(F.GH, { release: RELEASE });
+    for (const captures of [undefined, [], "cap", [42]]) {
+      expectVaultError(V, observed, () => vault.restore({ sink: "reply", captures, fields: { body: capture.tokens[0].token } }), "INVALID_ARGUMENT");
+    }
+    assert(vault.stats().entries === 1, "invalid request changed state");
+    vault.dispose();
+  },
+
+  async "policy-sees-request-wide-occurrences"(V, C, F, observed) {
+    const seen = [];
+    const vault = await V.createVault({ releasePolicy: (r) => { seen.push([r.path, r.occurrences, r.totalOccurrences, r.used]); return r.used + r.totalOccurrences <= 1; } });
+    const capture = vault.capture(F.GH, { release: [{ sink: "reply", paths: ["a", "b"] }], maxUses: 2 });
+    expectVaultError(V, observed, () => vault.restore({ sink: "reply", captures: [capture.captureId], fields: { a: capture.tokens[0].token, b: capture.tokens[0].token } }), "RESTORE_DENIED", { reason: "policy" });
+    assert(JSON.stringify(seen[0]) === JSON.stringify(["a", 1, 2, 0]), `policy request ${JSON.stringify(seen)}`);
+    assert(vault.stats().entries === 1, "denied request consumed budget");
+    vault.dispose();
+  },
+
   // Mirrors the README usage example, including its denial fallback.
   async "readme-example-flow"(V, C, F) {
     const vault = await V.createVault({ limits: { entryTtlMs: 5 * 60_000 } });
@@ -456,7 +501,7 @@ const runtimeChecks = {
         const modelReply = await model(captured.text);
         let body;
         try {
-          ({ fields: { body } } = vault.restore({ sink: "draft-reply", fields: { body: modelReply } }));
+          ({ fields: { body } } = vault.restore({ sink: "draft-reply", captures: [captured.captureId], fields: { body: modelReply } }));
         } catch (error) {
           if (!(error instanceof V.VaultError) || error.code !== "RESTORE_DENIED") throw error;
           body = modelReply;
@@ -483,8 +528,8 @@ const runtimeChecks = {
     const events = [];
     const vault = await V.createVault({ onAudit: (e) => events.push(e) });
     const c = vault.capture(F.GH, { release: RELEASE });
-    try { vault.restore({ sink: "reply", fields: { body: "<rsv_aaaaaaaaaaaaaaaaaaaaaaaaaa>" } }); } catch (e) { observed.errors.push(e); }
-    vault.restore({ sink: "reply", fields: { body: c.tokens[0].token } });
+    try { vault.restore({ sink: "reply", captures: [c.captureId], fields: { body: "<rsv_aaaaaaaaaaaaaaaaaaaaaaaaaa>" } }); } catch (e) { observed.errors.push(e); }
+    vault.restore({ sink: "reply", captures: [c.captureId], fields: { body: c.tokens[0].token } });
     vault.revoke(c.captureId);
     vault.dispose();
     observed.audit.push(...events);
