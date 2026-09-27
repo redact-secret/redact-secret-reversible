@@ -1,0 +1,144 @@
+name: release
+
+# Publishes @redact-secret/vault to npm. Triggered by pushing a `v<version>`
+# tag (RELEASING.md step 3) or manually via workflow_dispatch (e.g. to retry
+# after a transient failure — the publish job is idempotent, see below).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          # This workflow only ever runs to publish; never restore npm's
+          # cache here, so a poisoned Actions cache can't reach an artifact
+          # that gets published.
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run check:boundaries
+
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run qualify:node
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: release-reports-node
+          path: .qualification/reports/
+          if-no-files-found: error
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run qualify:browser
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: release-reports-browser
+          path: .qualification/reports/
+          if-no-files-found: error
+
+  # Publishes with npm trusted publishing (OIDC): no long-lived npm token, an
+  # `id-token: write` grant scoped to this job only, and `--provenance` for a
+  # signed build provenance attestation. Requires a trusted publisher
+  # configured for @redact-secret/vault on npmjs.com pointing at this
+  # workflow (manual npmjs.com step — see RELEASING.md and issue #24). Until
+  # that is configured, this job fails with an auth error; it does not fall
+  # back to a token.
+  publish:
+    needs: [boundaries, node, browser]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      # Trusted publishing (OIDC) requires npm CLI >= 11.5.1; the runners'
+      # bundled npm may be older. Pinned (not @latest) so this step installs
+      # a known version rather than whatever the registry resolves at
+      # run time; bump deliberately.
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@12.1.0
+      - run: npm run build -w @redact-secret/vault
+
+      - name: Resolve version and dist-tag
+        id: pkg
+        run: |
+          set -eu
+          VERSION=$(node -p "require('./packages/vault/package.json').version")
+          DIST_TAG=$(node -p "require('./packages/vault/package.json').publishConfig.tag")
+          if [ "$DIST_TAG" = "latest" ]; then
+            echo "::error::publishConfig.tag is 'latest' — this workflow only publishes explicit, non-latest dist-tags. See RELEASING.md's note on the latest dist-tag." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+
+      # Guards against double-publishing a version that already exists on the
+      # registry (npm itself also refuses this, but failing early here keeps
+      # the run's intent — "nothing to publish" — legible in the logs, and
+      # makes workflow_dispatch reruns on an already-published tag a no-op
+      # instead of an error). The version/tag values from the previous step
+      # are passed through `env:` rather than interpolated directly into the
+      # script, so they're never substituted into shell syntax.
+      - name: Check whether this version is already published
+        id: guard
+        env:
+          PKG_VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          set -eu
+          SPEC="@redact-secret/vault@${PKG_VERSION}"
+          if npm view "$SPEC" version >/dev/null 2>&1; then
+            echo "$SPEC is already on the registry; skipping publish." >&2
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: npm publish --provenance
+        if: steps.guard.outputs.publish == 'true'
+        env:
+          DIST_TAG: ${{ steps.pkg.outputs.dist_tag }}
+        run: npm publish -w @redact-secret/vault --provenance --tag "$DIST_TAG"
