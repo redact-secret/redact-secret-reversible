@@ -12,6 +12,12 @@ Use **current** only for implemented and verified behavior, **proposed** for a d
 4. Do not turn a core `block` outcome into a restorable entry. Document any other eligibility policy explicitly.
 5. Keep logging and tracing integrations redaction-only. A restore feature must not be introduced through adapters.
 
+## Package boundaries
+
+The portable `vault` package may own in-memory mappings and final-application restoration but must not claim that browser code can authenticate another tenant or defend against compromised same-page scripts. The `vault-server` layer owns multi-principal source-to-sink authorization and all-or-nothing restore preflight; it may use memory or a qualified external store. A `store-*` package supplies a backend under the shared lifecycle and atomicity contract; it must not bypass server authorization. Keep browser bundles free of server-only and backend SDK dependencies.
+
+Npm names apply to JavaScript only. Maintain language-neutral security requirements and shared adversarial cases for future Python, Rust, and Go surfaces. Do not claim an unimplemented language is supported.
+
 ## Security-sensitive changes
 
 Before changing token identity, value capture, storage, authorization, or restore semantics, update the threat model and relevant decision record. Add negative tests for forged, expired, revoked, cross-session, cross-tenant, and policy-changed requests; include failures and cancellation. Use only unmistakably synthetic or revoked values in tests and documentation. Do not log original or restored values, raw mappings, sensitive exceptions, or raw input in CI output.
@@ -24,4 +30,4 @@ Keep README concise for consumers, ARCHITECTURE.md for trust boundaries, and `do
 
 ## Releases
 
-Publish independently of the core. A supported core version range requires integration tests at both ends. Do not claim browser, Python, Rust, CLI, persistent store, streaming, or host integration support until each is implemented and qualified.
+Publish independently of the core. A supported core version range requires integration tests at both ends. Do not claim browser, Node.js, Python, Rust, Go, CLI, persistent store, streaming, or host integration support until each is implemented and qualified.
