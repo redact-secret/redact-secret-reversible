@@ -1,12 +1,17 @@
+# macOS Finder metadata, at any directory depth
+.DS_Store
+
 # Build and qualification outputs
 node_modules/
 dist/
 *.tgz
 .qualification/
 
-# Local agent tooling caches
+# Local agent tooling
+/_notes/
+/.agents/skills/context-governance/
+# graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
-.ignore
 
 # OpenGrep verified-binary cache and CI scan output
 /.cache/opengrep/
