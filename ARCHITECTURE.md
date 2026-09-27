@@ -4,6 +4,12 @@
 
 This is a design contract for an unimplemented, optional restoration product. It records where plaintext is permitted, which repository owns each behavior, and what must be verified before publishing. Concrete interfaces and storage backends remain open.
 
+## Package and language boundaries
+
+`@redact-secret/vault` is the proposed portable in-memory session primitive for browser, Node.js, and separately qualified edge runtimes. `@redact-secret/vault-server` adds server authority for principals, tenants, sources, destinations, paths, and usage budgets; it can still use memory. `@redact-secret/store-*` packages are optional persistence implementations, not a third execution profile. An application may also provide its own store when it satisfies the same contract.
+
+The server security specification and adversarial conformance cases belong to this repository, independently of language. JavaScript uses the npm names above. Python, Rust, and Go need their own native distribution or a separately qualified service boundary; no JavaScript dependency is imposed on them. See [package decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
+
 ## Trust boundaries
 
 ```text
@@ -14,7 +20,7 @@ Redact Secret public scan/policy/range API
     |
     +--> ordinary core redaction --> safe text + safe metadata
     |
-    +--> explicit reversible session (opt-in, trusted process)
+    +--> explicit reversible session (opt-in, trusted runtime)
               | original spans retained only for eligible findings
               v
         session-scoped mapping store
@@ -36,11 +42,11 @@ The core remains side-effect-free and never receives a storage dependency. This 
 
 ## Proposed session lifecycle
 
-1. A trusted caller creates a session with explicit identity/tenant context, bounds, and an authorization policy.
+1. A caller explicitly opens an in-memory vault with bounded scope and lifetime. Browser-only final-display use stays within the page's trust boundary; multi-principal server use additionally requires server-owned identity, tenant, source, and authorization policy.
 2. The session asks the core to inspect input under the application's policy. Only eligible finalized ranges may be captured. A `block` outcome fails the relevant operation rather than entering the mapping.
 3. For each retained occurrence, the session issues a collision-resistant, session-bound token and records a mapping with bounded lifetime and size. Visible type information is descriptive only.
 4. The caller sends only sanitized text across the intended boundary. The store and session handle remain in the trusted environment.
-5. At restore time, the trusted application names the principal, purpose, destination, and target operation. The product checks current authorization, session/tenant binding, expiry/revocation, and the exact issued token before retrieval.
+5. At restore time, a server integration resolves the principal, purpose, destination, and structural value path from trusted runtime context, never a model assertion. It preflights the entire operation against current authorization, source, session/tenant binding, expiry/revocation, usage limits, and exact issued tokens; one violation rejects the complete operation without partial plaintext or budget consumption. A browser final-display integration has a different trust model and cannot claim server-grade caller authentication.
 6. The caller sends the restored value only to its approved destination. Abort, expiry, revoke, and completion invalidate the mapping according to the documented store contract.
 
 An LLM response or tool argument is untrusted input to step 5. It may carry a token but cannot supply an authoritative grant. The application must decide whether and where restoration is permitted. A constrained structured-field operation can be the safe default; an advanced arbitrary-text operation may be provided only with the same mandatory authorization checks.
@@ -53,7 +59,7 @@ Whole-input capture should be designed first. Streaming introduces unresolved ra
 
 ## Storage and authorization
 
-The first proposed implementation is short-lived in-process memory with explicit limits. This is a proposal, not a guarantee that process memory can be securely erased. A consumer-provided store must preserve session and tenant binding, expiry, atomic revocation semantics, and non-leaking failure behavior. If persistent storage is supported, encryption, key ownership, rotation, backup retention, and access auditing need separate qualification. The library must not force one vendor's vault or the consumer's identity provider.
+The proposed portable default is short-lived in-runtime memory with explicit limits. In a browser, the same-page scripts share that trust boundary; encryption with a key available to the page does not protect against compromised page code. In a server, memory belongs to the process and still requires application authorization before any external destination receives a value. Neither environment can promise that all managed-runtime copies have been erased. A consumer-provided store must preserve session and tenant binding, expiry, atomic revocation semantics, and non-leaking failure behavior. If persistent storage is supported, encryption, key ownership, rotation, backup retention, and access auditing need separate qualification. The library must not force one vendor's vault or the consumer's identity provider.
 
 The package enforces invariant checks but cannot authenticate a principal on behalf of an application. The consumer supplies authentication, authorization policy, destination identity, and permitted purpose. Authorization is re-evaluated at restore time; an earlier grant does not override later revocation.
 
@@ -61,7 +67,7 @@ No raw mapping, value, restore result, or payload-bearing exception may be sent 
 
 ## Release and language strategy
 
-This repository versions independently from the core and adapters. A future package declares and tests a supported range of core versions, including range endpoints. Node.js is the proposed first surface. A language-neutral security contract can later drive Python or Rust implementations with shared adversarial cases; it does not require lockstep artifacts. Browser and CLI restoration require their own threat models.
+This repository versions independently from the core and adapters. Each language distribution declares and tests its supported core range and runtime matrix. JavaScript browser and Node.js are intended early vault targets; JavaScript and Python are intended early server targets. Rust and Go integrations are separately qualified as core support permits, without reimplementing detection. Shared conformance cases protect the language-neutral security contract without requiring lockstep releases. CLI restoration remains a separate threat-model decision.
 
 ## Required qualification before an API is declared supported
 
