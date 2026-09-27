@@ -66,7 +66,7 @@ This row is tested by this package's own adversarial suite (`packages/vault-serv
 
 - **Assets added:** ciphertext at rest, keys, backups, replicas.
 - **Attackers added:** database disclosure, record substitution, key compromise, stale backups, replica lag.
-- **Required controls:** authenticated encryption bound to tenant, session, and entry metadata; consumer-owned keys; logical expiry and revocation at use time; a backend-specific linearization proof; deletion and backup policy ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19), [#20](https://github.com/redact-secret/redact-secret-reversible/issues/20)). The alpha vault never persists anything.
+- **Required controls:** authenticated encryption bound to tenant, session, and entry metadata; consumer-owned keys; logical expiry and revocation at use time; a backend-specific linearization proof; deletion and backup policy. The exact store interface, AEAD/AAD binding, key-injection and rotation shape, deletion/backup guarantees, and fail-closed failure behavior are now decided as a contract — not yet an implementation — in the [persistent store contract](../decisions/2026-09-27-define-persistent-store-contract.md) ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)), which a concrete qualified backend ([#20](https://github.com/redact-secret/redact-secret-reversible/issues/20)) builds against. The alpha vault never persists anything.
 
 ## Residual risks accepted for alpha.1
 
