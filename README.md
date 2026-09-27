@@ -2,7 +2,7 @@
 
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret).
 
-**Status: design-only scaffold.** This repository has no published package, supported runtime, or implemented restore API yet. The documents describe the intended security boundary and decisions to validate before implementation.
+**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). Worker mode, server authorization, persistent stores, Python, and streaming remain design work; nothing here claims them.
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -23,7 +23,7 @@ The agreed JavaScript package names describe two different responsibilities:
 
 | Package | Proposed responsibility | Intended runtimes |
 | --- | --- | --- |
-| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle | Browser, Node.js, and qualified edge runtimes |
+| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | Qualified: Node.js 20/22/24 and browser main thread. Not yet: Worker, edge |
 | `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths | Qualified server runtimes |
 | `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
 
@@ -46,7 +46,7 @@ A reversible token will need a session-scoped, collision-resistant identity and 
 - No library can guarantee that a managed-runtime string has been wiped from every memory copy.
 - Model output, tool arguments, and visible placeholder text cannot authorize their own restoration.
 
-These are design requirements, not claims of current implementation. The [security decision](docs/decisions/2026-09-27-restore-authority-and-lifecycle.md) distinguishes invariants from consumer choices.
+The in-memory vault implements these for its scope; server and persistence items remain design requirements. The [security decision](docs/decisions/2026-09-27-restore-authority-and-lifecycle.md) distinguishes invariants from consumer choices.
 
 ## Proposed delivery
 
@@ -57,7 +57,11 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Architecture](ARCHITECTURE.md): trust boundaries and proposed components.
 - [Conventions](CONVENTIONS.md): documentation, implementation, and review rules.
 - [Decisions](docs/decisions/README.md): accepted boundaries and open design questions.
-- [Browser in-memory security](docs/specs/in-memory-security.md): proposed guarantees, limits, and deployment alternatives.
+- [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
+- [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
+- [Qualification record](docs/research/qualification-0.1.0-alpha.1.md): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
+- [Conformance corpus](conformance/README.md): language-neutral adversarial cases.
+- [Security policy](SECURITY.md) and [releasing](RELEASING.md).
 - [Core integration research](docs/research/core-integration.md): public API facts and proof-of-concept questions.
 - [Executed verification](docs/research/verification-2026-09-27.md): Node addon and WASM findings, with browser qualification still open.
 - [Security research](docs/research/security-foundations-2026-09-27.md): primary-source findings for browser, authorization, persistence, and release review.
@@ -65,4 +69,4 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Issue roadmap](docs/plans/issue-roadmap.md): registered epics, child issues, dependencies, and acceptance gates.
 - [Alpha.1 orchestrator prompt](docs/plans/alpha1-orchestrator-prompt.md): end-to-end implementation, PR, merge, and release instructions.
 
-Report security concerns through the core project's [private advisory channel](https://github.com/redact-secret/redact-secret/security/advisories/new) until this repository defines its own reporting channel. Never submit live credentials in a public issue or fixture.
+Report security concerns privately through this repository's [security advisories](https://github.com/redact-secret/redact-secret-reversible/security/advisories/new) (see [SECURITY.md](SECURITY.md)). Never submit live credentials in a public issue or fixture.
