@@ -1,17 +1,20 @@
 ---
 decision_id: decision-define-restore-transaction-boundary
-status: proposed
+status: accepted
 scope: repository
 title: Define atomic restore checks within the vault boundary
 proposed_at: 2026-09-27
+decided_at: 2026-09-27
 ---
 # Define the restore transaction boundary
+
+> **Accepted 2026-09-27** for the single-process in-memory vault ([#9](https://github.com/redact-secret/redact-secret-reversible/issues/9)). External stores, multi-process deployments, and server authorization must each prove their own linearization point before claiming this contract ([#16](https://github.com/redact-secret/redact-secret-reversible/issues/16), [#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)).
 
 ## Context
 
 Restoration combines lookup, fresh authorization, expiry, revocation, usage budgets, and plaintext delivery. Concurrent restore/revoke requests can race, and a store may succeed while the response to the consumer is lost. A storage transaction cannot retract plaintext already handed to the application or a downstream sink. Redis serializes transaction commands but does not roll them back; other stores need their own concurrency proof. [Redis transactions](https://redis.io/docs/latest/develop/using-commands/transactions/), [PostgreSQL isolation](https://www.postgresql.org/docs/current/transaction-iso.html).
 
-## Proposed decision
+## Decision
 
 - For one restore request, validate the entire set of requested issued entries and their authorization before returning any plaintext. Unknown, expired, revoked, wrong-session, wrong-tenant, wrong-sink/path, over-budget, or disallowed entries reject the full request; no subset is returned.
 - A qualified store must define one linearization point at which restore eligibility and any usage-budget change take effect relative to concurrent restore/revoke. No other restore may consume the same one-time allowance after that point. A revoke committed before a restore's linearization point must deny it; a later revoke cannot undo an already released value.
@@ -34,3 +37,17 @@ Restoration combines lookup, fresh authorization, expiry, revocation, usage budg
 ## Verification before acceptance
 
 Run concurrent restore/restore and restore/revoke, multi-token failures, policy changes, store exceptions, timeout, commit-success/response-loss, retry, process restart, replica lag, and background expiry delay. Verify no partial plaintext and correct budget state at the declared boundary for each backend. See [security research](../research/security-foundations-2026-09-27.md).
+
+## Resolved choices (in-memory vault, alpha.1)
+
+- **Linearization point.** Each `capture`, `restore`, `revoke`, and `dispose` is one synchronous call and linearizes at that call. JavaScript runs it to completion, so concurrent callers (promises, timers, events) observe calls in invocation order. A consumer callback invoked during an operation (core policy, `eligible`, `displayFormatter`, `releasePolicy`, `onAudit`) that re-enters the vault gets `BUSY`, so it cannot interleave a revoke or dispose with a half-validated restore.
+- **Preflight.** A restore snapshots the request (own data properties only; accessors are rejected without being invoked). It then checks every occurrence in every field in this order: marker/grammar, known entry, expiry, sink and path grant, use budget, and last the page-local `releasePolicy` for each entry and path. Only a literal `true` allows; a throwing policy denies. Any failure throws `RESTORE_DENIED` with a coarse `reason`, consumes no budget, and returns no plaintext.
+- **Budget.** Default one use per entry (at-most-once). An entry whose budget is exhausted is deleted immediately. Consumption happens in the same synchronous step that builds the returned object, so a use is consumed if and only if `restore` returns normally.
+- **Response loss.** The in-process call cannot lose its response. If the application loses or fails to deliver the returned value afterward, the use is still consumed and cannot be replayed. The application may capture again from the original input if it still holds it.
+- **Revocation.** A revoke before a restore denies it (`unknown-token`). A revoke after a restore removes only unconsumed entries and cannot retract released values.
+- **Expiry.** Checked at use time against the injected or default clock. Expired entries are swept at the start of each capture and after each successful restore; no timers are used. The vault's own lifetime (`vaultTtlMs`) disposes it on the first call after expiry.
+- **Capture commit.** Staged entries become visible only after output validation. Every failure before that leaves `stats()` unchanged.
+
+## Evidence
+
+Corpus cases `preflight.all-or-nothing`, `budget.*`, `lifecycle.*`, `policy.*`, and `token.duplicate-beyond-budget`, plus runtime checks `revoke-and-restore-race-in-microtasks`, `reentrant-policy-cannot-mutate-mid-restore`, `reentrant-core-policy-fails-capture`, `audit-hook-failure-and-reentry-do-not-change-outcome`, and `restore-request-snapshot-resists-getters`, pass on Node.js and in three browser engines. Deliberately broken builds (budget check removed, expiry check removed, partial commit on formatter failure) are caught by the suite. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).
