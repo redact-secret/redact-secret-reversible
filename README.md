@@ -62,6 +62,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Executed verification](docs/research/verification-2026-09-27.md): Node addon and WASM findings, with browser qualification still open.
 - [Security research](docs/research/security-foundations-2026-09-27.md): primary-source findings for browser, authorization, persistence, and release review.
 - [Pre-implementation plan](docs/plans/pre-implementation.md): research sequence and release gates.
-- [Issue roadmap](docs/plans/issue-roadmap.md): proposed epics, child issues, dependencies, and acceptance gates.
+- [Issue roadmap](docs/plans/issue-roadmap.md): registered epics, child issues, dependencies, and acceptance gates.
+- [Alpha.1 orchestrator prompt](docs/plans/alpha1-orchestrator-prompt.md): end-to-end implementation, PR, merge, and release instructions.
 
 Report security concerns through the core project's [private advisory channel](https://github.com/redact-secret/redact-secret/security/advisories/new) until this repository defines its own reporting channel. Never submit live credentials in a public issue or fixture.
