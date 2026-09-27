@@ -19,8 +19,17 @@ export function run(cmd, args, cwd) {
   return execFileSync(cmd, args, { cwd, stdio: ["ignore", "pipe", "inherit"], encoding: "utf8" });
 }
 
-/** Builds and packs the vault once; returns the tarball path. */
+/**
+ * Builds and packs the vault once; returns the tarball path.
+ *
+ * Set `VAULT_SPEC` (e.g. `@redact-secret/vault@0.1.0-alpha.1`) to skip the
+ * local build/pack and return that npm install spec instead, so the
+ * qualification runners install the *published registry package* rather than
+ * the working tree. This is the post-publish registry verification in
+ * RELEASING.md step 5 (run ad hoc for alpha.1; now scriptable from the repo).
+ */
 export function packVault() {
+  if (process.env.VAULT_SPEC) return process.env.VAULT_SPEC;
   const packDir = join(WORK, "pack");
   rmSync(packDir, { recursive: true, force: true });
   mkdirSync(packDir, { recursive: true });
