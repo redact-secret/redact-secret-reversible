@@ -93,3 +93,35 @@ jobs:
           name: reports-browser
           path: .qualification/reports/
           if-no-files-found: error
+
+  python:
+    name: python ${{ matrix.python }} (vault-server-py)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # @redact-secret/core has no native Python distribution; the package's
+      # capture path shells out to it over a Node.js subprocess boundary
+      # (packages/vault-server-py/src/redact_secret_vault_server/boundary/core_bridge.mjs).
+      # See docs/research/python-server-integration-2026-09-27.md.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: packages/vault-server-py/pyproject.toml
+      - run: pip install -e ".[test,lint]"
+        working-directory: packages/vault-server-py
+      - run: ruff check .
+        working-directory: packages/vault-server-py
+      - run: pytest -q
+        working-directory: packages/vault-server-py

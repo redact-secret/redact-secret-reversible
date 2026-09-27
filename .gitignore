@@ -7,6 +7,14 @@ dist/
 *.tgz
 .qualification/
 
+# Python build/test artifacts
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
 # Local agent tooling
 /_notes/
 /.agents/skills/context-governance/
