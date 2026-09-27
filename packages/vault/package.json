@@ -10,6 +10,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./worker": {
+      "types": "./dist/worker-client.d.ts",
+      "import": "./dist/worker-client.js"
+    },
+    "./worker/host": {
+      "types": "./dist/worker-host.d.ts",
+      "import": "./dist/worker-host.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
