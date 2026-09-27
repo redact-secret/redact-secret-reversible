@@ -1,0 +1,49 @@
+{
+  "name": "@redact-secret/vault",
+  "version": "0.1.0-alpha.1",
+  "description": "Opt-in, bounded, in-memory vault that restores values redacted by @redact-secret/core into application-designated fields.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@redact-secret/core": "0.1.0-beta.9"
+  },
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-reversible.git",
+    "directory": "packages/vault"
+  },
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-reversible/issues"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-reversible/tree/main/packages/vault#readme",
+  "keywords": [
+    "redaction",
+    "secrets",
+    "llm",
+    "vault"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

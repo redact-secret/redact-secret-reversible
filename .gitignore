@@ -1,0 +1,9 @@
+# Build and qualification outputs
+node_modules/
+dist/
+*.tgz
+.qualification/
+
+# Local agent tooling caches
+/graft/
+.ignore
