@@ -3,7 +3,7 @@
 **Status:** proposed issue plan, 2026-09-27. This document does not claim packages or runtimes are implemented.
 **Release cadence:** independent of the core's beta milestones. A core release is a tested compatibility input, not this repository's release clock.
 
-The repository currently has no issues. The plan groups work by a security exit gate rather than by language alone. Epics can become GitHub parent issues, with the numbered tasks below as linked child issues. Titles are ready to use as English issue titles. Avoid assigning dates or versions until gates are met.
+The plan groups work by a security exit gate rather than by language alone. Epics [#1–#5](https://github.com/redact-secret/redact-secret-reversible/issues/1) and linked child issues #6–#22 are registered on GitHub. The initial release target is **0.1.0-alpha.1**: F1–F5, V1–V3, R1–R2. Worker V4, server S1–S4, and persistence P1–P2 are follow-up scopes unless they independently meet their gates before a later release. No fixed date is assigned.
 
 ## Phase 0 — security contract and evidence
 
@@ -62,7 +62,7 @@ The repository currently has no issues. The plan groups work by a security exit 
 
 | ID | Proposed child issue title | Reviewable result and acceptance | Depends on |
 | --- | --- | --- | --- |
-| R1 | Audit public APIs and examples for accidental plaintext disclosure | No plaintext/mappings in logs, traces, errors, audit events, snapshots, or docs; examples show explicit denial/cleanup and explain residual risks. Independent security review of misuse paths. | V3, S2 |
+| R1 | Audit public APIs and examples for accidental plaintext disclosure | No plaintext/mappings in logs, traces, errors, audit events, snapshots, or docs; examples show explicit denial/cleanup and explain residual risks. Independent security review of misuse paths. | V3 for alpha; repeat after S2 |
 | R2 | Establish independent releases, provenance, and security reporting | Versioned compatibility matrix, pinned core test artifacts, package provenance, vulnerability reporting channel, and no claims for unqualified runtimes. | V3; S/P claims only after their gates |
 
 ## Critical path and scope discipline
