@@ -57,7 +57,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 
 - [Architecture](ARCHITECTURE.md): trust boundaries and proposed components.
 - [Conventions](CONVENTIONS.md): documentation, implementation, and review rules.
-- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (contract only; no implementation yet).
+- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) and the [persistent store contract](docs/decisions/2026-09-27-define-persistent-store-contract.md) (both contract only; no implementation yet).
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](docs/research/qualification-0.1.0-alpha.1.md): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
