@@ -3,6 +3,8 @@
 **Status:** proposed work sequence. The repository is design-only; the checkboxes are gates, not completed implementation.
 **Goal:** establish a testable security contract and explicit alternatives for every material browser, server, and persistence limitation before public APIs are fixed.
 
+The [security research foundations](../research/security-foundations-2026-09-27.md) provide source-backed inputs for the gates below, including the boundary of storage atomicity and external plaintext delivery.
+
 ## Deliverables and gates
 
 | Phase | Work and reviewable output | Exit gate |
