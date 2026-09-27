@@ -153,14 +153,17 @@ function resolveGrants(release: unknown): Map<string, Set<string>> {
 }
 
 /**
- * Wall-clock milliseconds anchored once, then advanced by the monotonic
- * `performance.now()`, so a system clock change cannot extend a TTL.
+ * The later of wall-clock time and a monotonic timeline anchored to it.
+ * `performance.now()` keeps a backwards system-clock change from extending a
+ * TTL; `Date.now()` keeps time that the monotonic clock may not count (such
+ * as system sleep) from extending one. Combined with the never-decreasing
+ * clamp in `createVault`, neither can lengthen a lifetime.
  */
 function monotonicEpochClock(): () => number {
   const perf = (globalThis as { performance?: { now(): number } }).performance;
   if (perf === undefined || typeof perf.now !== "function") return Date.now;
   const base = Date.now() - perf.now();
-  return () => base + perf.now();
+  return () => Math.max(Date.now(), base + perf.now());
 }
 
 /**

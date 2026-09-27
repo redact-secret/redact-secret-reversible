@@ -28,4 +28,4 @@ Fixed-message errors without `cause`; safe-metadata audit events; the action gat
 
 ## Verification after fixes
 
-The fixes were re-reviewed by the same reviewer (see PR discussion), and the full suite was rerun on Node.js (addon and WASM fallback) and in Chromium, Firefox, and WebKit. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).
+The same reviewer re-verified the fixes: all eleven findings were fixed or documented, and no new critical, high, or medium defect was found. Two low leftovers were then addressed. The default clock now takes the later of wall-clock and monotonic time, so system sleep cannot pause TTLs. The README names non-format invisible marks explicitly. The full suite was rerun on Node.js (addon and WASM fallback) and in Chromium, Firefox, and WebKit. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).

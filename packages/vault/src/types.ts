@@ -82,8 +82,9 @@ export interface VaultOptions {
   readonly onAudit?: AuditHook;
   /**
    * Millisecond clock, for tests and controlled environments. The default is
-   * `Date.now()` anchored at creation and advanced by the monotonic
-   * `performance.now()`, so system clock changes do not move TTLs. An injected
+   * the later of `Date.now()` and a `performance.now()` timeline anchored at
+   * creation, so neither a backwards system-clock change nor system sleep
+   * extends a TTL. An injected
    * clock is trusted: the vault never lets *observed* time go backwards (a
    * decrease is treated as no change), but it cannot detect a clock that runs
    * slow. A clock that throws or returns a non-finite value
