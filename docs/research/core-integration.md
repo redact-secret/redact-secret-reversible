@@ -3,6 +3,8 @@
 **Status:** research snapshot, 2026-09-27. Recheck against an exact supported core release before implementation.
 **Question:** Can the reversible product capture eligible originals and issue its own tokens using only the JavaScript core's public API?
 
+The [executed beta.8 verification](verification-2026-09-27.md) confirms action semantics and a literal token collision on both the Node addon and the WASM artifact in Node. A WASM finding rejected reuse in a second `redact` call, so the sequence below assumes one redaction attempt per scan; retries require a new scan. Real browser and Worker execution remain unverified.
+
 ## Confirmed public surface
 
 At the inspected core revision, `@redact-secret/core` exports `initialize`, `scan`, `redact`, `scanAndRedact`, a `PlaceholderFormatter` hook, `RANGE_UNIT`, and the finding types. Findings contain action/type/range metadata, never the matched value. JavaScript ranges are half-open UTF-16 code-unit offsets: `input.slice(start, end)` selects the matched span. The formatter receives safe finding metadata and a one-based replacement index, not the original value. The core package supports browser WebAssembly after initialization. [Types](https://github.com/redact-secret/redact-secret/blob/main/packages/javascript/src/types.ts), [runtime](https://github.com/redact-secret/redact-secret/blob/main/packages/javascript/src/runtime.ts), [package guide](https://github.com/redact-secret/redact-secret/blob/main/packages/javascript/README.md).
