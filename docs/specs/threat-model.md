@@ -70,5 +70,8 @@ This document names the assets, attackers, data flows, trust boundary, residual 
 | Plaintext remains in JavaScript memory after revoke or dispose | Managed runtimes copy and intern strings | Short TTLs; dispose on task end; do not claim zeroization |
 | `warn`/`allow` plaintext when the application opts into `"pass-through"` | The core leaves them unchanged by contract | Default `"reject"`; `passedThrough` count on every result |
 | Undetected secrets pass through as ordinary text | Detection is incomplete by design | Treat output as "known findings removed", never "safe to send" |
-| Denial reasons tell the caller which check failed | Useful for integrators; the caller is already inside the trust boundary | Do not forward `reason` to the model or end user |
+| Denial reasons tell the caller which check failed, and so whether a token is live | Useful for integrators; the caller is already inside the trust boundary | Do not forward `reason` to the model or end user |
+| A value copied between conversations sharing one vault | The vault cannot know conversations; `captures` scopes each restore to listed captures | One vault per user task; list only the current conversation's captures |
+| Token altered with a homoglyph so the marker disappears | Destroying the marker also destroys the token; nothing is restored | None needed: that text stays as ordinary text |
+| Private fields visible to debuggers and DevTools | Runtime inspection is outside the page API | Do not inspect vaults in shared sessions |
 | Same-page script compromise | Outside any in-page control | Strict CSP, Trusted Types, fewer third-party scripts, or a server/origin alternative |

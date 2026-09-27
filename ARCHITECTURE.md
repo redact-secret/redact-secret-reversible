@@ -2,7 +2,7 @@
 
 ## Status and intent
 
-This is a design contract for an unimplemented, optional restoration product. It records where plaintext is permitted, which repository owns each behavior, and what must be verified before publishing. Concrete interfaces and storage backends remain open.
+This is the design contract for an optional restoration product. Its in-memory vault is implemented as `@redact-secret/vault` 0.1.0-alpha.1; server authority and persistence are not. It records where plaintext is permitted, which repository owns each behavior, and what must be verified before publishing. Concrete interfaces and storage backends remain open.
 
 ## Package and language boundaries
 

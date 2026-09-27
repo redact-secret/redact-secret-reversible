@@ -1,6 +1,6 @@
 # Browser in-memory vault security specification
 
-**Status:** proposed design requirements; no package or restore API is implemented.
+**Status:** implemented for the browser main thread by `@redact-secret/vault@0.1.0-alpha.1` (see the [threat model](threat-model.md) and [qualification record](../research/qualification-0.1.0-alpha.1.md)); the dedicated Worker requirements in section 5 remain proposed and unsupported.
 **Scope:** `@redact-secret/vault` in a browser page or a dedicated Web Worker. This specification does not define server authorization or persistent storage.
 
 This document defines the security contract to validate before browser support is claimed. The [architecture](../../ARCHITECTURE.md) and [restore authority decision](../decisions/2026-09-27-restore-authority-and-lifecycle.md) define the repository-wide boundary. The core remains independent and does not retain original values.
