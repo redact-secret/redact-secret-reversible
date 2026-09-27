@@ -2,7 +2,7 @@
 
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret).
 
-**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). Worker mode, server authorization, persistent stores, Python, and streaming remain design work; nothing here claims them.
+**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). [`@redact-secret/vault-server`](packages/vault-server/README.md) `0.1.0-alpha.1` adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. Worker mode, persistent stores, Python, and streaming remain design work; nothing here claims them.
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -24,7 +24,7 @@ The agreed JavaScript package names describe two different responsibilities:
 | Package | Proposed responsibility | Intended runtimes |
 | --- | --- | --- |
 | `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | Qualified: Node.js 20/22/24 and browser main thread. Not yet: Worker, edge |
-| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths | Qualified server runtimes |
+| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | Qualified: Node.js 20/22/24. Not yet: persistent backends, Python |
 | `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
 
 A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
@@ -56,7 +56,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 
 - [Architecture](ARCHITECTURE.md): trust boundaries and proposed components.
 - [Conventions](CONVENTIONS.md): documentation, implementation, and review rules.
-- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (contract only; no implementation yet).
+- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) and [its in-memory implementation](docs/decisions/2026-09-27-implement-vault-server-in-memory.md).
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](docs/research/qualification-0.1.0-alpha.1.md): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
