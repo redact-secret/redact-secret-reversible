@@ -1,0 +1,82 @@
+# Repository-specific rules: the @redact-secret/vault security contract as
+# code patterns. Authored here (not vendored); covered by the same rules digest.
+rules:
+  - id: vault-no-dynamic-code
+    message: Dynamic code execution in package source. The vault must never evaluate strings.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: ["/packages/"]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: setTimeout("...", ...)
+      - pattern: setInterval("...", ...)
+
+  - id: vault-no-dom-html-sinks
+    message: HTML injection sink in package source. Restored plaintext must be returned to the application, never written to the DOM by the library.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: ["/packages/"]
+    pattern-either:
+      - pattern: $E.innerHTML = $V
+      - pattern: $E.outerHTML = $V
+      - pattern: $E.insertAdjacentHTML(...)
+      - pattern: document.write(...)
+      - pattern: document.writeln(...)
+
+  - id: vault-no-side-channels
+    message: Logging, network, storage, or cross-context messaging in vault source. The vault retains values in memory only and emits nothing but safe audit events.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: ["/packages/vault/src/"]
+    pattern-either:
+      - pattern: console.$M(...)
+      - pattern: fetch(...)
+      - pattern: new XMLHttpRequest(...)
+      - pattern: new WebSocket(...)
+      - pattern: new EventSource(...)
+      - pattern: new BroadcastChannel(...)
+      - pattern: navigator.sendBeacon(...)
+      - pattern: $X.postMessage(...)
+      - pattern: localStorage
+      - pattern: sessionStorage
+      - pattern: indexedDB
+      - pattern: document.cookie
+
+  - id: vault-no-weak-random
+    message: Math.random is not a CSPRNG. Token and capture identities must come from crypto.getRandomValues.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: ["/packages/vault/src/"]
+    pattern: Math.random()
+
+  - id: vault-no-error-cause
+    message: Errors must not carry a cause; a payload-bearing exception could reach a structured logger.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: ["/packages/vault/src/"]
+    pattern-either:
+      - pattern: "new $ERR($MSG, {..., cause: $C, ...})"
+      - pattern: "$E.cause = $C"
+
+  - id: vault-replace-with-string
+    message: String replacement interprets `$&`, `$1`, and similar patterns inside restored values. Pass a replacer function.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: ["/packages/vault/src/"]
+    patterns:
+      - pattern-either:
+          - pattern: $S.replace($P, $R)
+          - pattern: $S.replaceAll($P, $R)
+      - metavariable-pattern:
+          metavariable: $R
+          patterns:
+            - pattern-not: "(...) => $B"
+            - pattern-not: "function (...) { ... }"

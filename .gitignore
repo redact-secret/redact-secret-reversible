@@ -7,3 +7,7 @@ dist/
 # Local agent tooling caches
 /graft/
 .ignore
+
+# OpenGrep verified-binary cache and CI scan output
+/.cache/opengrep/
+/sast/reports/ci-latest.*
