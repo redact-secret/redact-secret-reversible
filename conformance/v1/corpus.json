@@ -1,0 +1,397 @@
+{
+  "corpus": "redact-secret-reversible/conformance",
+  "version": "1.0.0",
+  "coreCompatibility": "@redact-secret/core 0.1.0-beta.9 (full profile)",
+  "notes": [
+    "Every value below is synthetic and unmistakably fake. None is a live credential.",
+    "Templates: {NAME} is a fixture; {cN.i} is token i of capture cN; {cN.text} is capture cN's redacted text.",
+    "policy maps a core finding type to an action; unmapped types use policy.default, else redact. Omitting policy uses the core's built-in policy.",
+    "Every case also asserts that no fixture value appears in any error, audit event, or console output.",
+    "This corpus is versioned independently of detection benchmarks; it measures vault behavior, not detection accuracy."
+  ],
+  "fixtures": {
+    "GH": "ghp_SYNTHETICxREVOKEDxTESTx0000000000000",
+    "GH2": "ghp_SYNTHETICxREVOKEDxTESTx1111111111111",
+    "AWS": "AKIASYNTHETIC0TEST00",
+    "JWT": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzeW50aGV0aWMifQ.c3ludGhldGljLXJldm9rZWQtc2lnbmF0dXJl",
+    "KV_VALUE": "SYNTH_REVOKED_42",
+    "SHORT_VALUE": "abcd1234",
+    "ACCENT_VALUE": "SYNTHÉTIQUE_révoqué_ÆØÅ",
+    "EMOJI_VALUE": "🔑SYNTHETIC🔑VALUE"
+  },
+  "cases": [
+    {
+      "id": "capture.redact.roundtrip",
+      "covers": ["F2", "V2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "deploy with {GH} now", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] },
+          "expect": { "tokens": 1, "types": ["github_token"], "textExcludes": ["{GH}"], "passedThrough": 0 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "Use {c1.0} please" }, "expect": { "fields": { "body": "Use {GH} please" }, "restored": 1 } },
+        { "op": "stats", "expect": { "entries": 0, "retainedBytes": 0 } }
+      ]
+    },
+    {
+      "id": "capture.unicode.ranges",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "👩‍👩‍👧 مرحبا password={EMOJI_VALUE} 終わり é password={ACCENT_VALUE} 😀 {GH}",
+          "options": { "release": [{ "sink": "reply", "paths": ["body"] }] },
+          "expect": { "tokens": 3, "textExcludes": ["{EMOJI_VALUE}", "{ACCENT_VALUE}", "{GH}"] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.text}" },
+          "expect": { "fields": { "body": "👩‍👩‍👧 مرحبا password={EMOJI_VALUE} 終わり é password={ACCENT_VALUE} 😀 {GH}" }, "restored": 3 } }
+      ]
+    },
+    {
+      "id": "capture.short-match",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "password={SHORT_VALUE}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "policy": { "contextual_secret": "redact" } },
+          "expect": { "tokens": 1, "textExcludes": ["{SHORT_VALUE}"] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "fields": { "body": "{SHORT_VALUE}" } } }
+      ]
+    },
+    {
+      "id": "capture.repeated-values.distinct-tokens",
+      "covers": ["F2", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH} and again {GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] },
+          "expect": { "tokens": 2, "distinctTokens": true } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.1} then {c1.0}" }, "expect": { "fields": { "body": "{GH} then {GH}" }, "restored": 2 } }
+      ]
+    },
+    {
+      "id": "action.block.aborts-before-publication",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "input": "{GH} then {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "policy": { "aws_access_key_id": "block" } },
+          "expect": { "error": "BLOCKED_FINDING" } },
+        { "op": "stats", "expect": { "entries": 0, "captures": 0, "retainedBytes": 0 } }
+      ]
+    },
+    {
+      "id": "action.block.default-policy-custom-all",
+      "covers": ["F3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "input": "{JWT}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "policy": { "default": "block" } },
+          "expect": { "error": "BLOCKED_FINDING" } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    },
+    {
+      "id": "action.warn.rejected-by-default",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "input": "{GH} password={SHORT_VALUE}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] },
+          "expect": { "error": "UNREDACTED_FINDINGS" } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    },
+    {
+      "id": "action.allow.rejected-by-default",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "policy": { "aws_access_key_id": "allow" } },
+          "expect": { "error": "UNREDACTED_FINDINGS" } }
+      ]
+    },
+    {
+      "id": "action.warn-allow.explicit-pass-through-is-visible",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH} password={SHORT_VALUE} {AWS}",
+          "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "unredacted": "pass-through", "policy": { "aws_access_key_id": "allow", "contextual_secret": "warn" } },
+          "expect": { "tokens": 1, "passedThrough": 2, "textIncludes": ["{SHORT_VALUE}", "{AWS}"], "textExcludes": ["{GH}"] } }
+      ]
+    },
+    {
+      "id": "action.ineligible-redact.display-only",
+      "covers": ["F3", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "eligibleTypes": ["github_token"] },
+          "expect": { "tokens": 1, "unrestorable": 1, "textIncludes": ["<SECRET_2>"], "textExcludes": ["{AWS}", "{GH}"] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.text}" }, "expect": { "fields": { "body": "{GH} <SECRET_2>" } } }
+      ]
+    },
+    {
+      "id": "literal.token-like-text-in-input",
+      "covers": ["F2", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "input": "{GH} <rsv_aaaaaaaaaaaaaaaaaaaaaaaaaa>", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "TOKEN_LITERAL_IN_INPUT" } },
+        { "op": "capture", "input": "{GH} RSV_ marker", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "TOKEN_LITERAL_IN_INPUT" } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    },
+    {
+      "id": "literal.previously-issued-token-in-input",
+      "covers": ["F2", "V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "tokens": 1 } },
+        { "op": "capture", "input": "echo {c1.0} and {GH2}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "TOKEN_LITERAL_IN_INPUT" } },
+        { "op": "stats", "expect": { "entries": 1 } }
+      ]
+    },
+    {
+      "id": "token.forged-well-formed",
+      "covers": ["F2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "<rsv_aaaaaaaaaaaaaaaaaaaaaaaaaa>" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0} <rsv_aaaaaaaaaaaaaaaaaaaaaaaaaa>" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } },
+        { "op": "stats", "expect": { "entries": 1 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "fields": { "body": "{GH}" } } }
+      ]
+    },
+    {
+      "id": "token.altered-or-malformed",
+      "covers": ["F2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0:upper}" }, "expect": { "error": "RESTORE_DENIED", "reason": "malformed-token" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0:truncate}" }, "expect": { "error": "RESTORE_DENIED", "reason": "malformed-token" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0:space}" }, "expect": { "error": "RESTORE_DENIED", "reason": "malformed-token" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "<SECRET_1> <GITHUB_TOKEN_1>" }, "expect": { "fields": { "body": "<SECRET_1> <GITHUB_TOKEN_1>" }, "restored": 0 } },
+        { "op": "stats", "expect": { "entries": 1 } }
+      ]
+    },
+    {
+      "id": "token.cross-session",
+      "covers": ["F2", "V3"],
+      "steps": [
+        { "op": "vault", "id": "A" },
+        { "op": "vault", "id": "B" },
+        { "op": "capture", "vault": "A", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "vault": "B", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } },
+        { "op": "revoke", "vault": "B", "capture": "c1", "expect": { "removed": 0 } },
+        { "op": "restore", "vault": "A", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "fields": { "body": "{GH}" } } }
+      ]
+    },
+    {
+      "id": "token.copied-to-unapproved-path",
+      "covers": ["F2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "ok", "subject": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "sink-or-path" } },
+        { "op": "restore", "sink": "tool-call", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "sink-or-path" } },
+        { "op": "stats", "expect": { "entries": 1 } }
+      ]
+    },
+    {
+      "id": "token.duplicate-beyond-budget",
+      "covers": ["F2", "F4", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body", "footer"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0} {c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "budget" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}", "footer": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "budget" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "fields": { "body": "{GH}" } } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } }
+      ]
+    },
+    {
+      "id": "token.reordered-within-approved-path",
+      "covers": ["F2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "first {GH} second {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.1} before {c1.0}" }, "expect": { "fields": { "body": "{AWS} before {GH}" }, "restored": 2 } }
+      ]
+    },
+    {
+      "id": "budget.multi-use-explicit",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body", "footer"] }], "maxUses": 2 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}", "footer": "{c1.0}" }, "expect": { "restored": 2 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } }
+      ]
+    },
+    {
+      "id": "preflight.all-or-nothing",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "capture", "as": "c2", "input": "{JWT}", "options": { "release": [{ "sink": "other", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0} {c1.1} {c2.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "sink-or-path" } },
+        { "op": "stats", "expect": { "entries": 3 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0} {c1.1}" }, "expect": { "restored": 2 } }
+      ]
+    },
+    {
+      "id": "policy.page-local-denial",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault", "releasePolicy": { "denyTypes": ["aws_access_key_id"] } },
+        { "op": "capture", "as": "c1", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0} {c1.1}" }, "expect": { "error": "RESTORE_DENIED", "reason": "policy" } },
+        { "op": "stats", "expect": { "entries": 2 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "fields": { "body": "{GH}" } } }
+      ]
+    },
+    {
+      "id": "policy.throwing-callback-denies",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault", "releasePolicy": { "throw": true } },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "policy" } },
+        { "op": "stats", "expect": { "entries": 1 } }
+      ]
+    },
+    {
+      "id": "policy.truthy-non-true-denies",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault", "releasePolicy": { "returns": "yes" } },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "policy" } }
+      ]
+    },
+    {
+      "id": "lifecycle.revoke-before-restore",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "revoke", "capture": "c1", "expect": { "removed": 2 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } },
+        { "op": "revoke", "capture": "c1", "expect": { "removed": 0 } },
+        { "op": "stats", "expect": { "entries": 0, "retainedBytes": 0, "captures": 0 } }
+      ]
+    },
+    {
+      "id": "lifecycle.restore-before-revoke",
+      "covers": ["F4", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "restored": 1 } },
+        { "op": "revoke", "capture": "c1", "expect": { "removed": 1 } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.1}" }, "expect": { "error": "RESTORE_DENIED", "reason": "unknown-token" } }
+      ]
+    },
+    {
+      "id": "lifecycle.entry-expiry",
+      "covers": ["F4", "V2"],
+      "steps": [
+        { "op": "vault", "limits": { "entryTtlMs": 1000 } },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "expiresAt": 1000 } },
+        { "op": "advance", "ms": 999 },
+        { "op": "capture", "as": "c2", "input": "{AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "advance", "ms": 1 },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "RESTORE_DENIED", "reason": "expired" } },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c2.0}" }, "expect": { "fields": { "body": "{AWS}" } } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    },
+    {
+      "id": "lifecycle.vault-expiry-disposes",
+      "covers": ["F4", "V2"],
+      "steps": [
+        { "op": "vault", "limits": { "vaultTtlMs": 5000 } },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "advance", "ms": 5000 },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "DISPOSED" } },
+        { "op": "stats", "expect": { "entries": 0, "disposed": true, "retainedBytes": 0 } }
+      ]
+    },
+    {
+      "id": "lifecycle.dispose",
+      "covers": ["V2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "dispose" },
+        { "op": "dispose" },
+        { "op": "restore", "sink": "reply", "fields": { "body": "{c1.0}" }, "expect": { "error": "DISPOSED" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "DISPOSED" } },
+        { "op": "revoke", "capture": "c1", "expect": { "removed": 0 } },
+        { "op": "stats", "expect": { "entries": 0, "disposed": true } }
+      ]
+    },
+    {
+      "id": "limits.entries",
+      "covers": ["V2"],
+      "steps": [
+        { "op": "vault", "limits": { "maxEntries": 2 } },
+        { "op": "capture", "as": "c1", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] } },
+        { "op": "capture", "input": "{JWT}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "LIMIT_EXCEEDED" } },
+        { "op": "stats", "expect": { "entries": 2 } },
+        { "op": "revoke", "capture": "c1", "expect": { "removed": 2 } },
+        { "op": "capture", "input": "{JWT}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "tokens": 1 } }
+      ]
+    },
+    {
+      "id": "limits.retained-and-value-bytes",
+      "covers": ["V2"],
+      "steps": [
+        { "op": "vault", "limits": { "maxRetainedBytes": 50, "maxValueBytes": 45 } },
+        { "op": "capture", "input": "{JWT}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "LIMIT_EXCEEDED" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "tokens": 1 } },
+        { "op": "capture", "input": "{AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "LIMIT_EXCEEDED" } },
+        { "op": "stats", "expect": { "entries": 1, "retainedBytes": 40 } }
+      ]
+    },
+    {
+      "id": "limits.input-and-findings",
+      "covers": ["V2"],
+      "steps": [
+        { "op": "vault", "limits": { "maxInputBytes": 64, "maxFindings": 1 } },
+        { "op": "capture", "input": "{GH} {GH} {GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "LIMIT_EXCEEDED" } },
+        { "op": "capture", "input": "{GH} {AWS}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] }, "expect": { "error": "CORE_FAILURE", "coreCode": "FINDING_LIMIT_EXCEEDED" } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    },
+    {
+      "id": "limits.restore-request",
+      "covers": ["V3"],
+      "steps": [
+        { "op": "vault", "limits": { "maxRestoreFields": 2, "maxRestoreFieldBytes": 64 } },
+        { "op": "capture", "as": "c1", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["a", "b", "c"] }] } },
+        { "op": "restore", "sink": "reply", "fields": { "a": "{c1.0}", "b": "x", "c": "y" }, "expect": { "error": "RESTORE_DENIED", "reason": "invalid-request" } },
+        { "op": "restore", "sink": "reply", "fields": { "a": "{c1.0} {repeat:x:80}" }, "expect": { "error": "RESTORE_DENIED", "reason": "invalid-request" } },
+        { "op": "stats", "expect": { "entries": 1 } }
+      ]
+    },
+    {
+      "id": "arguments.release-grant-required",
+      "covers": ["V2", "V3"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "input": "{GH}", "options": {}, "expect": { "error": "INVALID_ARGUMENT" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [] }, "expect": { "error": "INVALID_ARGUMENT" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": [] }] }, "expect": { "error": "INVALID_ARGUMENT" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [{ "sink": "", "paths": ["body"] }] }, "expect": { "error": "INVALID_ARGUMENT" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "maxUses": 17 }, "expect": { "error": "INVALID_ARGUMENT" } },
+        { "op": "capture", "input": "{GH}", "options": { "release": [{ "sink": "reply", "paths": ["body"] }], "unredacted": "ignore" }, "expect": { "error": "INVALID_ARGUMENT" } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    },
+    {
+      "id": "no-findings.no-mapping",
+      "covers": ["V2"],
+      "steps": [
+        { "op": "vault" },
+        { "op": "capture", "as": "c1", "input": "nothing sensitive here", "options": { "release": [{ "sink": "reply", "paths": ["body"] }] },
+          "expect": { "tokens": 0, "text": "nothing sensitive here" } },
+        { "op": "stats", "expect": { "entries": 0 } }
+      ]
+    }
+  ]
+}
