@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Let freshly published versions age before proposing them.
+    cooldown:
+      default-days: 7
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Let freshly published versions age before proposing them.
+    cooldown:
+      default-days: 7
+    ignore:
+      # A core version change needs a new qualification run and an explicit
+      # compatibility decision; it is never an automated bump.
+      - dependency-name: "@redact-secret/core"
