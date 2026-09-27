@@ -13,6 +13,29 @@ The vault is inside the trust boundary of the page that receives the original in
 
 The browser package must not claim multi-user or tenant authorization. Applications needing enforcement across principals or tenants must use a trusted server authority, such as the proposed `vault-server` layer. Encryption with a key available to page code does not resolve same-page script compromise; a non-extractable Web Crypto key prevents export of key material, not authorized use of that key or observation of decrypted results.
 
+## Risk-driven deployment choices
+
+The library must describe what each mode protects, what it cannot protect, and what the consumer can choose instead. It must not silently downgrade from a requested mode to a weaker one. These are design options, not claims that any package is currently available.
+
+| Concern | Browser-memory control | Alternative when the residual risk is unacceptable |
+| --- | --- | --- |
+| Same-page XSS or compromised third-party code | Reduce XSS exposure with safe rendering, CSP, Trusted Types where available, and fewer third-party scripts. A Worker narrows direct mapping access but does not stop an attacker that can invoke restore or observe input/output. | Move capture and restoration to an independently trusted server with server-enforced identity, source, destination, and path policy. This transfers plaintext to the server; the consumer must trust that operator and its controls. For a browser-only product, use a separately controlled origin for both sensitive input and final output, with a narrowly defined cross-origin protocol; embedding it in a compromised parent page cannot protect data entered into or returned to that parent. |
+| Other scripts in the same application origin | Keep mapping private to a task and optionally a dedicated Worker. JavaScript delivered under the same page authority still shares the page's trust boundary. | Host the entire sensitive workflow under a distinct, tightly controlled origin, or choose server authority. Origin separation helps only when plaintext and restore results do not pass through the less trusted page. |
+| Multi-user authorization or enforced tenant separation | Browser session binding prevents accidental cross-session lookup, but client-side checks cannot authenticate another user or defend against a modified client. | Use a trusted server authority with application-supplied principal, tenant, purpose, and approved output path. The in-memory server vault can still be the storage backend. |
+| Restoring after page reload or on another device | Dispose memory on page exit; a new page has no mapping. | Opt in to a separately qualified persistent store with encryption and keys controlled outside the untrusted page, or to a server-side mapping. This adds retention and key-management risk; do not persist the browser key beside ciphertext and imply XSS resistance. |
+| Browser extension, local malware, compromised device, or deliberate recipient exfiltration | The browser vault has no reliable defense once that environment or recipient is hostile. | Avoid client-side reversibility for that threat model; use an independently trusted environment and release plaintext only to a destination whose confidentiality can be enforced. If no acceptable authority exists, keep the value redacted and decline restoration. |
+| Consumer does not need restoration | No browser mapping is created. | Use core redaction alone. This is the preferred lowest-exposure option. |
+
+The choices above are **not** interchangeable upgrades. Moving to a server changes who receives plaintext. An isolated origin changes the application's input/output workflow. A persistent store changes retention. The documentation and proposed API must make those tradeoffs explicit so consumers can choose according to their own security policy.
+
+### Required behavior when a guarantee cannot be met
+
+- A consumer requesting Worker-only operation MUST get an explicit unsupported/error result if Worker isolation cannot be established; a main-thread fallback requires a separate explicit choice.
+- A consumer requiring server-enforced identity or tenant isolation MUST NOT be told that browser policy callbacks, opaque tokens, Web Crypto keys, or Worker messages provide it. Point to the server authority contract.
+- A consumer requiring restoration across reloads MUST NOT have browser in-memory mappings persisted automatically. Persistence requires a separate opt-in contract.
+- If the requested destination or current policy cannot be verified, restoration MUST fail closed. Applications must be able to continue with redacted output or abort the workflow.
+- Public documentation MUST show the residual risk alongside each recommended mode, and distinguish tested guarantees from deployment guidance.
+
 ## Normative requirements for a supported implementation
 
 “MUST” and “SHOULD” below are proposed release requirements. They do not describe shipped behavior.
