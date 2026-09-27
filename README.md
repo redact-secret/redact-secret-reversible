@@ -2,7 +2,7 @@
 
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret).
 
-**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). Worker mode, server authorization, persistent stores, Python, and streaming remain design work; nothing here claims them.
+**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). JS server authorization (`@redact-secret/vault-server`), Worker mode, persistent stores, and streaming remain design work; nothing here claims them.
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -26,6 +26,7 @@ The agreed JavaScript package names describe two different responsibilities:
 | `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | Qualified: Node.js 20/22/24 and browser main thread. Not yet: Worker, edge |
 | `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths | Qualified server runtimes |
 | `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
+| `redact-secret-vault-server` (Python, [packages/vault-server-py](packages/vault-server-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | Python 3.10+ server processes with a `node` executable available |
 
 A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
 
@@ -50,7 +51,7 @@ The in-memory vault implements these for its scope; server and persistence items
 
 ## Proposed delivery
 
-Define shared security and conformance contracts first. Qualify `@redact-secret/vault` for browser and Node.js memory use, then qualify server authorization, including Python as an early target. Rust and Go support follow available core integration and measured demand; do not reimplement detectors here. Each language/runtime is supported only after its own threat model and tests. The names above are selected, but exact API signatures, package versions, TTL defaults, token syntax, store implementations, and release dates remain open.
+Define shared security and conformance contracts first. Qualify `@redact-secret/vault` for browser and Node.js memory use, then qualify server authorization, including Python as an early target — `packages/vault-server-py` is that initial, research-grade Python implementation, still gated on its own conformance evidence and the boundary qualification gaps its research doc names. Rust and Go support follow available core integration and measured demand; do not reimplement detectors here. Each language/runtime is supported only after its own threat model and tests. The names above are selected, but exact API signatures, package versions, TTL defaults, token syntax, store implementations, and release dates remain open.
 
 ## Documents
 
@@ -63,6 +64,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Conformance corpus](conformance/README.md): language-neutral adversarial cases.
 - [Security policy](SECURITY.md) and [releasing](RELEASING.md).
 - [Core integration research](docs/research/core-integration.md): public API facts and proof-of-concept questions.
+- [Python server integration research](docs/research/python-server-integration-2026-09-27.md): core inventory, the qualified service-boundary decision, conformance evidence, and candid differences from the JS server authority contract.
 - [Executed verification](docs/research/verification-2026-09-27.md): Node addon and WASM findings, with browser qualification still open.
 - [Security research](docs/research/security-foundations-2026-09-27.md): primary-source findings for browser, authorization, persistence, and release review.
 - [Pre-implementation plan](docs/plans/pre-implementation.md): research sequence and release gates.
