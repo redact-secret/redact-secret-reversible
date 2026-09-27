@@ -59,6 +59,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Decisions](docs/decisions/README.md): accepted boundaries and open design questions.
 - [Browser in-memory security](docs/specs/in-memory-security.md): proposed guarantees, limits, and deployment alternatives.
 - [Core integration research](docs/research/core-integration.md): public API facts and proof-of-concept questions.
+- [Executed verification](docs/research/verification-2026-09-27.md): Node addon and WASM findings, with browser qualification still open.
 - [Pre-implementation plan](docs/plans/pre-implementation.md): research sequence and release gates.
 
 Report security concerns through the core project's [private advisory channel](https://github.com/redact-secret/redact-secret/security/advisories/new) until this repository defines its own reporting channel. Never submit live credentials in a public issue or fixture.
