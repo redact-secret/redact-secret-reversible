@@ -1,0 +1,12 @@
+{
+  "findings": {
+    "762bff0d2bdd5716": {
+      "classification": "false_positive",
+      "line": 36,
+      "path": "qualification/browser.mjs",
+      "rationale": "`dir` is the qualification runner's own temporary directory, used only as the file-system path passed to join() for writeFileSync. The written HTML is a constant template literal with no interpolation, so no external value reaches a <script> tag. The rule flags the path argument, not the markup.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    }
+  },
+  "known_errors": {}
+}

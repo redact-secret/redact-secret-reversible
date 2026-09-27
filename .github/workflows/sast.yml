@@ -1,0 +1,75 @@
+name: sast
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: sast-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sast:
+    name: sast
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Only for the SARIF upload; the gate itself needs contents: read.
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # continue-on-error defers the failure to "Enforce scan result" so the
+      # reports and the SARIF upload still run; steps.scan.outcome is exact.
+      - name: Run the pinned, provenance-verified OpenGrep scan
+        id: scan
+        continue-on-error: true
+        run: python3 -B scripts/run-sast.py --out sast/reports/ci-latest.json --sarif-out sast/reports/ci-latest.sarif
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: opengrep-sast-report
+          path: |
+            sast/reports/ci-latest.json
+            sast/reports/ci-latest.sarif
+          if-no-files-found: ignore
+
+      # Best-effort visibility in code scanning; never the enforcement signal.
+      - name: Upload SARIF to code scanning
+        id: upload
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: sast/reports/ci-latest.sarif
+          wait-for-processing: true
+
+      # Reviewed baseline suppressions are applied to alert state only from main.
+      - name: Synchronize reviewed SARIF suppressions
+        if: github.ref == 'refs/heads/main' && steps.upload.outcome == 'success'
+        continue-on-error: true
+        uses: advanced-security/dismiss-alerts@a18f986bdb40edba0dd7a74382c15d4a3d50a1c8 # v2.0.3
+        with:
+          sarif-id: ${{ steps.upload.outputs.sarif-id }}
+          sarif-file: sast/reports/ci-latest.sarif
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Enforce scan result
+        if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          if [ "$SCAN_OUTCOME" != "success" ]; then
+            echo "OpenGrep SAST gate failed: unclassified or blocking finding, unacknowledged scan error, or tool/rules integrity failure. See the scan step." >&2
+            exit 1
+          fi
