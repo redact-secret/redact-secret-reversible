@@ -1,17 +1,20 @@
 ---
 decision_id: decision-bind-issued-tokens-to-approved-output
-status: proposed
+status: accepted
 scope: repository
 title: Bind issued tokens to application-approved output locations
 proposed_at: 2026-09-27
+decided_at: 2026-09-27
 ---
 # Bind issued tokens to approved output locations
+
+> **Accepted 2026-09-27** for the in-memory `@redact-secret/vault` ([#7](https://github.com/redact-secret/redact-secret-reversible/issues/7)). Server principal/tenant binding remains with [#15](https://github.com/redact-secret/redact-secret-reversible/issues/15). The concrete choices and evidence are under *Resolved choices* below.
 
 ## Context
 
 A core typed placeholder such as `<SSN_1>` is display-only. The reversible product issues its own unpredictable mapping identity, but a model can copy a valid issued token into a different sentence or field. A literal token-like string can also occur in source text. The [beta.8 verification](../research/verification-2026-09-27.md) produced two indistinguishable occurrences when a literal already matched the formatter's output. A random token prevents guessing; it does not prove the provenance of a particular occurrence.
 
-## Proposed decision
+## Decision
 
 - Issue tokens only inside an explicit session. Bind every entry to its issuing session and source, original range, safe finding metadata, and the application's eligible action. Visible type is descriptive, not authority. Use cryptographic randomness and collision checks; exact token grammar and entropy are to be fixed by a measured implementation decision.
 - The default restore surface accepts an application-designated structured output location, a declared sink, and an application-owned release policy. The library verifies exact issued identity, current validity, the expected source/session, destination/path, and use budget before returning any plaintext. On a server, the application also supplies server-verified principal/tenant and a current authorization decision. Browser-local policy is not server authentication.
@@ -33,3 +36,17 @@ OWASP recommends denying access by default and checking permissions at every acc
 ## Verification before acceptance
 
 Test literal collisions, copied/reordered/duplicated valid tokens, forged and cross-session tokens, wrong source/sink/path, policy changes, and all-or-nothing rejection without plaintext in errors. Run the corpus in each supported runtime. See [security research](../research/security-foundations-2026-09-27.md).
+
+## Resolved choices (alpha.1)
+
+- **Grammar and entropy.** `<rsv_` + 26 lowercase RFC 4648 base32 characters + `>` (32 characters). 128 bits come from `crypto.getRandomValues`; the final character carries padding bits. The token names no type. Type is returned beside it as descriptive metadata and is never consulted for lookup or authorization. A collision with a live or staged token is regenerated up to four times, then the capture fails with `TOKEN_GENERATION_FAILED`. A random-source failure fails the same way. Neither commits anything.
+- **Repeated values.** Every occurrence gets its own token, including identical values in one input. There is no deduplication within or across captures.
+- **Literal collisions.** Capture fails with `TOKEN_LITERAL_IN_INPUT` when the input contains the case-insensitive marker `rsv_` anywhere. This covers a verbatim earlier token, a forged one, and a near miss, so a token in redacted output is always one this capture issued. After redaction the vault verifies that each staged token occurs exactly once and that the output holds no other marker.
+- **Altered tokens.** At restore, a field in which the count of `rsv_` markers differs from the count of exact-grammar tokens is denied with `malformed-token`. Case changes, truncation, and inserted whitespace therefore fail closed instead of passing through as text.
+- **Source and path binding.** Each capture carries application grants: `{ sink, paths[] }` pairs, which are required and non-empty. A restore names one sink and a map of path → text. Every token occurrence must belong to this vault, be unexpired, and be granted for that sink and that exact path. A token in a field without a grant is denied (`sink-or-path`). Fields without tokens pass through unchanged.
+- **Copies, duplicates, reordering.** Every occurrence consumes one use from the entry's budget (`maxUses`, default 1, capped by `maxUsesPerEntry`). A duplicate beyond budget, whether in one field or across fields, is denied (`budget`). Reordering within a granted field is allowed; that is the documented residual risk.
+- **Cross-session.** Lookup is confined to the vault instance's private map. Another vault's token is `unknown-token`.
+
+## Evidence
+
+The [conformance corpus](../../conformance/v1/corpus.json) cases `literal.*`, `token.*`, `capture.repeated-values.*`, and `preflight.all-or-nothing`, plus runtime checks `random-source-failure-and-collision` and `tokens-unpredictable-and-unique-at-volume`, pass on Node.js (addon and WASM fallback) and in Chromium, Firefox, and WebKit. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).
