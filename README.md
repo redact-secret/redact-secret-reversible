@@ -17,6 +17,18 @@ The core detects and redacts without storing matched plaintext. This repository 
 
 Dependency direction is one way: this repository may consume the core's documented public API; the core and adapters must not depend on this repository. A separate release cadence and an explicitly tested core compatibility range will apply when a package exists. See [Architecture](ARCHITECTURE.md) and [boundary decision](docs/decisions/2026-09-27-separate-reversible-boundary.md).
 
+## Packages and distribution
+
+The agreed JavaScript package names describe two different responsibilities:
+
+| Package | Proposed responsibility | Intended runtimes |
+| --- | --- | --- |
+| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle | Browser, Node.js, and qualified edge runtimes |
+| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths | Qualified server runtimes |
+| `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
+
+A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
+
 ## Typed placeholders are independent
 
 The core already offers a typed formatter using safe finding metadata, such as `<JWT_1>`. If a future PII detector reports type `ssn`, a typed display label such as `<SSN_1>` remains a core formatting concern. Such a label does **not** imply that the original value was retained or can be restored.
@@ -29,7 +41,8 @@ A reversible token will need a session-scoped, collision-resistant identity and 
 - A token alone grants no restore authority. The application supplies identity, tenant, purpose, destination, and authorization policy at the restore boundary.
 - Core `block` findings cannot become restorable entries. Other actions require an explicit eligibility decision.
 - Expired, revoked, unknown, cross-session, or cross-tenant lookups fail without exposing plaintext in errors, logs, traces, or diagnostics.
-- A short-lived, server-side in-memory store is the proposed first implementation; applications may later supply their own vault or storage system under the same contract.
+- A short-lived in-memory vault is the proposed portable default in both browser and server environments. Browser memory belongs to the page's trust boundary; it does not enforce multi-user server authorization.
+- External stores are opt-in. Persistent mappings require an independently qualified encryption, key management, isolation, expiry, and atomicity contract.
 - No library can guarantee that a managed-runtime string has been wiped from every memory copy.
 - Model output, tool arguments, and visible placeholder text cannot authorize their own restoration.
 
@@ -37,7 +50,7 @@ These are design requirements, not claims of current implementation. The [securi
 
 ## Proposed delivery
 
-Start with a Node.js package after a threat model and testable contract are agreed. Python, Rust, browser, and CLI support are separate decisions; a common security contract does not require simultaneous releases or a second detector implementation. No package name, API signature, TTL default, token syntax, or release date is committed here.
+Define shared security and conformance contracts first. Qualify `@redact-secret/vault` for browser and Node.js memory use, then qualify server authorization, including Python as an early target. Rust and Go support follow available core integration and measured demand; do not reimplement detectors here. Each language/runtime is supported only after its own threat model and tests. The names above are selected, but exact API signatures, package versions, TTL defaults, token syntax, store implementations, and release dates remain open.
 
 ## Documents
 
