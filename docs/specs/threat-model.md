@@ -54,7 +54,7 @@ This document names the assets, attackers, data flows, trust boundary, residual 
 
 - **Assets added:** principal, tenant, purpose, and policy revision.
 - **Attackers added:** a different authenticated user, a cross-tenant request, a stale grant after revocation.
-- **Required controls:** server-resolved identity, fresh authorization per restore, a decision tuple of principal, tenant, source/session, entry, policy revision, purpose, sink, and path, and multi-process consistency. The alpha vault provides none of these ([#15](https://github.com/redact-secret/redact-secret-reversible/issues/15)–[#18](https://github.com/redact-secret/redact-secret-reversible/issues/18)).
+- **Required controls:** server-resolved identity, fresh authorization per restore, a decision tuple of principal, tenant, source/session, entry, policy revision, purpose, sink, and path, and multi-process consistency. The alpha vault provides none of these. The exact decision tuple, denial vocabulary, and audit event shape are now decided as a contract — not yet an implementation — in the [server authority interface](../decisions/2026-09-27-define-server-authority-interface.md) ([#15](https://github.com/redact-secret/redact-secret-reversible/issues/15)), which `vault-server` ([#16](https://github.com/redact-secret/redact-secret-reversible/issues/16)), the Python integration ([#17](https://github.com/redact-secret/redact-secret-reversible/issues/17)), and cross-language conformance documentation ([#18](https://github.com/redact-secret/redact-secret-reversible/issues/18)) build against.
 
 ### Persistent mappings — proposed, not supported
 
