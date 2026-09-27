@@ -21,7 +21,7 @@ export const TOKEN_PATTERN = /<rsv_[a-z2-7]{26}>/g;
  */
 export const MARKER_PATTERN = /r\p{Cf}*s\p{Cf}*v\p{Cf}*_/giu;
 
-export type RandomFill = (bytes: Uint8Array) => void;
+export type RandomFill = (bytes: Uint8Array<ArrayBuffer>) => void;
 
 export function resolveRandomFill(): RandomFill | undefined {
   const cryptoObject = (globalThis as { crypto?: Crypto }).crypto;
