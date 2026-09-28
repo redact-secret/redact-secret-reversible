@@ -1,16 +1,16 @@
-# Redact Secret Reversible
+# Redact Secret Vault
 
-Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret).
+Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret). This repository was formerly `redact-secret/redact-secret-reversible`.
 
-**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, with an optional, separately qualified dedicated-Worker mode ([worker qualification record](docs/research/qualification-worker-mode.md), [#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)); Worker mode is not an implicit upgrade over main-thread use, and the two modes' guarantees are documented separately. [`@redact-secret/vault-server`](packages/vault-server/README.md) adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). Persistent stores and streaming remain design work; nothing here claims them.
+**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, with an optional, separately qualified dedicated-Worker mode ([worker qualification record](docs/research/qualification-worker-mode.md), [#14](https://github.com/redact-secret/redact-secret-vault/issues/14)); Worker mode is not an implicit upgrade over main-thread use, and the two modes' guarantees are documented separately. [`@redact-secret/vault-server`](packages/vault-server/README.md) adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). Persistent stores and streaming remain design work; nothing here claims them.
 
 | Release | Core | State |
 | --- | --- | --- |
-| `@redact-secret/vault@0.1.0-alpha.1` | `@redact-secret/core@0.1.0-beta.9` exactly | Published (npm `alpha` tag). No PII support. [Qualification record](docs/research/qualification-0.1.0-alpha.1.md) |
-| `@redact-secret/vault@0.1.0-alpha.2`, `@redact-secret/vault-server@0.1.0-alpha.2` | `@redact-secret/core@0.1.0-beta.10` exactly | Release candidate on `main`, **not yet published** ([#44](https://github.com/redact-secret/redact-secret-reversible/issues/44)). Adds opt-in PII activation and retention ([decision record](docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)), Worker protocol v2, and a breaking initialization change; see the [changelog](CHANGELOG.md). Qualified with PII off and on in Node.js, three browser engines on the main thread and in a dedicated Worker, and the Python bridge ([beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md)) |
+| `@redact-secret/vault@0.1.0-alpha.1` | `@redact-secret/core@0.1.0-beta.9` exactly | Published 2026-09-27, manually, without provenance. No PII support. [Qualification record](docs/research/qualification-0.1.0-alpha.1.md) |
+| `@redact-secret/vault@0.1.0-alpha.2`, `@redact-secret/vault-server@0.1.0-alpha.2` | `@redact-secret/core@0.1.0-beta.10` exactly | Published 2026-09-28 (npm `alpha` tag; [GitHub pre-release](https://github.com/redact-secret/redact-secret-vault/releases/tag/v0.1.0-alpha.2)). `@redact-secret/vault` was published by the release workflow with npm provenance; `@redact-secret/vault-server` (its first publish) was published manually, without provenance. Adds opt-in PII activation and retention ([decision record](docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)), Worker protocol v2, and a breaking initialization change; see the [changelog](CHANGELOG.md). Qualified with PII off and on in Node.js, three browser engines on the main thread and in a dedicated Worker, and the Python bridge ([beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md)) |
 | `redact-secret-vault-server` (Python) `0.1.0a2` | `@redact-secret/core@0.1.0-beta.10` through the bridge | Not published to any index; install from this repository |
 
-`@redact-secret/vault-server` has never been published; its first published version will be `0.1.0-alpha.2`. Install exact versions rather than a dist-tag: `@alpha` resolves to `0.1.0-alpha.1`, which peers core beta.9 and conflicts with core beta.10.
+Install exact versions rather than a dist-tag. `@alpha` resolves to `0.1.0-alpha.2` for both packages, but npm's `latest` tag is a prerelease on both: `0.1.0-alpha.1` for `@redact-secret/vault` (which peers core beta.9 and conflicts with core beta.10) and `0.1.0-alpha.2` for `@redact-secret/vault-server` (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -19,7 +19,7 @@ The core detects and redacts without storing matched plaintext. This repository 
 | Repository | Owns | Must not own |
 | --- | --- | --- |
 | [redact-secret](https://github.com/redact-secret/redact-secret) | Detection, overlap resolution, policy, redaction, safe finding metadata, and placeholder formatting | Restoration storage, restore authorization, or a dependency on this repository |
-| **redact-secret-reversible** | Opt-in mapping lifecycle, opaque identifiers, restoration checks, and storage/authorization extension points | Detection rules, PII classification, or changes to core policy |
+| **redact-secret-vault** | Opt-in mapping lifecycle, opaque identifiers, restoration checks, and storage/authorization extension points | Detection rules, PII classification, or changes to core policy |
 | [redact-secret-adapters](https://github.com/redact-secret/redact-secret-adapters) | Host integrations for logs, traces, AI context, and MCP | Restoration or emitting mapped plaintext to observability |
 | [redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks) | Detection and support evidence | Treating restoration success as detection accuracy |
 
@@ -31,8 +31,8 @@ The agreed JavaScript package names describe two different responsibilities:
 
 | Package | Responsibility | Version on `main` | Runtimes |
 | --- | --- | --- | --- |
-| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | `0.1.0-alpha.2` (candidate; `0.1.0-alpha.1` published) | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
-| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | `0.1.0-alpha.2` (candidate; never published) | Tested: Node.js 20/22/24. Not yet: persistent backends |
+| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | `0.1.0-alpha.2` (published) | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
+| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | `0.1.0-alpha.2` (published; first release) | Tested: Node.js 20/22/24. Not yet: persistent backends |
 | `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [contract](docs/decisions/2026-09-27-define-persistent-store-contract.md) only) | None | Backend-specific server environments |
 | `redact-secret-vault-server` (Python, [packages/vault-server-py](packages/vault-server-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0a2` (unpublished) | Python 3.10+ server processes with a `node` executable available |
 
@@ -77,7 +77,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](docs/research/qualification-0.1.0-alpha.1.md): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
-- [Core beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md): PII-off and PII-on matrix for the 0.1.0-alpha.2 candidate.
+- [Core beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md): PII-off and PII-on matrix for 0.1.0-alpha.2, including the registry verification of the published package.
 - [Changelog](CHANGELOG.md): release notes, including the 0.1.0-alpha.2 breaking changes and migration.
 - [Worker-mode qualification record](docs/research/qualification-worker-mode.md): tested evidence for the optional dedicated-Worker mode, including its hostile-main-thread and CSP negative-control evidence.
 - [Conformance corpus](conformance/README.md): language-neutral adversarial cases.
@@ -90,4 +90,4 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Issue roadmap](docs/plans/issue-roadmap.md): registered epics, child issues, dependencies, and acceptance gates.
 - [Alpha.1 orchestrator prompt](docs/plans/alpha1-orchestrator-prompt.md): end-to-end implementation, PR, merge, and release instructions.
 
-Report security concerns privately through this repository's [security advisories](https://github.com/redact-secret/redact-secret-reversible/security/advisories/new) (see [SECURITY.md](SECURITY.md)). Never submit live credentials in a public issue or fixture.
+Report security concerns privately through this repository's [security advisories](https://github.com/redact-secret/redact-secret-vault/security/advisories/new) (see [SECURITY.md](SECURITY.md)). Never submit live credentials in a public issue or fixture.

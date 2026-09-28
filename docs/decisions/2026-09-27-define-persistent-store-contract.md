@@ -7,7 +7,7 @@ decided_at: 2026-09-27
 ---
 # Define the persistent store, encryption, and key ownership contract
 
-> **Accepted 2026-09-27** for the interface contract only ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)). No `@redact-secret/store-*` package, backend, or vendor selection exists yet. [#20](https://github.com/redact-secret/redact-secret-reversible/issues/20) selects and adversarially qualifies one concrete backend against this contract; it must pass its own conformance and qualification gates before claiming support, exactly as [#16](https://github.com/redact-secret/redact-secret-reversible/issues/16) and [#17](https://github.com/redact-secret/redact-secret-reversible/issues/17) must against the [server authority interface](2026-09-27-define-server-authority-interface.md).
+> **Accepted 2026-09-27** for the interface contract only ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)). No `@redact-secret/store-*` package, backend, or vendor selection exists yet. [#20](https://github.com/redact-secret/redact-secret-vault/issues/20) selects and adversarially qualifies one concrete backend against this contract; it must pass its own conformance and qualification gates before claiming support, exactly as [#16](https://github.com/redact-secret/redact-secret-vault/issues/16) and [#17](https://github.com/redact-secret/redact-secret-vault/issues/17) must against the [server authority interface](2026-09-27-define-server-authority-interface.md).
 
 ## Context
 

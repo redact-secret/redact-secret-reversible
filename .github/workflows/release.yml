@@ -1,8 +1,9 @@
 name: release
 
-# Publishes @redact-secret/vault to npm. Triggered by pushing a `v<version>`
-# tag (RELEASING.md step 3) or manually via workflow_dispatch (e.g. to retry
-# after a transient failure — the publish job is idempotent, see below).
+# Publishes @redact-secret/vault, then @redact-secret/vault-server, to npm.
+# Triggered by pushing a `v<version>` tag (RELEASING.md step 3) or manually via
+# workflow_dispatch (e.g. to retry after a transient failure — the publish job
+# is idempotent per package, see below).
 on:
   push:
     tags:
@@ -52,6 +53,19 @@ jobs:
           path: .qualification/reports/
           if-no-files-found: error
 
+  vault-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run test:vault-server
+
   browser:
     runs-on: ubuntu-latest
     steps:
@@ -75,12 +89,14 @@ jobs:
   # Publishes with npm trusted publishing (OIDC): no long-lived npm token, an
   # `id-token: write` grant scoped to this job only, and `--provenance` for a
   # signed build provenance attestation. Requires a trusted publisher
-  # configured for @redact-secret/vault on npmjs.com pointing at this
-  # workflow (manual npmjs.com step — see RELEASING.md and issue #24). Until
-  # that is configured, this job fails with an auth error; it does not fall
-  # back to a token.
+  # configured on npmjs.com pointing at this workflow for EACH package
+  # (@redact-secret/vault and @redact-secret/vault-server; manual npmjs.com
+  # steps — see RELEASING.md, issues #24 and #55). Until that is configured,
+  # the affected package's publish step fails with an auth error; it does not
+  # fall back to a token. The vault is published before the vault-server,
+  # which depends on it at an exact version.
   publish:
-    needs: [boundaries, node, browser]
+    needs: [boundaries, vault-server, node, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -102,6 +118,7 @@ jobs:
       - name: Ensure npm supports trusted publishing
         run: npm install -g npm@12.1.0
       - run: npm run build -w @redact-secret/vault
+      - run: npm run build -w @redact-secret/vault-server
 
       - name: Resolve version and dist-tag
         id: pkg
@@ -142,3 +159,58 @@ jobs:
         env:
           DIST_TAG: ${{ steps.pkg.outputs.dist_tag }}
         run: npm publish -w @redact-secret/vault --provenance --tag "$DIST_TAG"
+
+      # @redact-secret/vault-server: the same non-latest dist-tag guard and
+      # already-published guard as the vault above. Runs after the vault
+      # publish so the exact @redact-secret/vault version it depends on is on
+      # the registry first; the guard refuses to publish otherwise.
+      - name: Resolve vault-server version and dist-tag
+        id: server_pkg
+        run: |
+          set -eu
+          VERSION=$(node -p "require('./packages/vault-server/package.json').version")
+          DIST_TAG=$(node -p "require('./packages/vault-server/package.json').publishConfig.tag")
+          VAULT_DEP=$(node -p "require('./packages/vault-server/package.json').dependencies['@redact-secret/vault']")
+          if [ "$DIST_TAG" = "latest" ]; then
+            echo "::error::vault-server publishConfig.tag is 'latest' — this workflow only publishes explicit, non-latest dist-tags. See RELEASING.md's note on the latest dist-tag." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "vault_dep=$VAULT_DEP" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this vault-server version is already published
+        id: server_guard
+        env:
+          PKG_VERSION: ${{ steps.server_pkg.outputs.version }}
+          VAULT_DEP: ${{ steps.server_pkg.outputs.vault_dep }}
+        run: |
+          set -eu
+          SPEC="@redact-secret/vault-server@${PKG_VERSION}"
+          if npm view "$SPEC" version >/dev/null 2>&1; then
+            echo "$SPEC is already on the registry; skipping publish." >&2
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A version published seconds ago (the vault step above) can 404 on
+          # the registry for a minute or two while npm processes it, so this
+          # dependency check retries (20 attempts, 15s apart, ~5 minutes)
+          # before failing. The already-published check above stays a single
+          # check.
+          ATTEMPT=1
+          until npm view "@redact-secret/vault@${VAULT_DEP}" version --prefer-online >/dev/null 2>&1; do
+            if [ "$ATTEMPT" -ge 20 ]; then
+              echo "::error::$SPEC depends on @redact-secret/vault@${VAULT_DEP}, which is not on the registry after $ATTEMPT attempts." >&2
+              exit 1
+            fi
+            echo "@redact-secret/vault@${VAULT_DEP} not visible on the registry yet (attempt $ATTEMPT/20); retrying in 15s." >&2
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 15
+          done
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: npm publish --provenance (vault-server)
+        if: steps.server_guard.outputs.publish == 'true'
+        env:
+          DIST_TAG: ${{ steps.server_pkg.outputs.dist_tag }}
+        run: npm publish -w @redact-secret/vault-server --provenance --tag "$DIST_TAG"

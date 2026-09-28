@@ -8,7 +8,7 @@ decided_at: 2026-09-27
 ---
 # Bind issued tokens to approved output locations
 
-> **Accepted 2026-09-27** for the in-memory `@redact-secret/vault` ([#7](https://github.com/redact-secret/redact-secret-reversible/issues/7)). Server principal/tenant binding remains with [#15](https://github.com/redact-secret/redact-secret-reversible/issues/15). The concrete choices and evidence are under *Resolved choices* below.
+> **Accepted 2026-09-27** for the in-memory `@redact-secret/vault` ([#7](https://github.com/redact-secret/redact-secret-vault/issues/7)). Server principal/tenant binding remains with [#15](https://github.com/redact-secret/redact-secret-vault/issues/15). The concrete choices and evidence are under *Resolved choices* below.
 
 ## Context
 

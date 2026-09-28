@@ -2,7 +2,7 @@
 
 ## Status and intent
 
-This is the design contract for an optional restoration product. Its in-memory vault is implemented as `@redact-secret/vault` (published `0.1.0-alpha.1`; `0.1.0-alpha.2` candidate on `main`) and single-process, in-memory server authority as `@redact-secret/vault-server` (`0.1.0-alpha.2` candidate, never published); persistence is not implemented. It records where plaintext is permitted, which repository owns each behavior, and what must be verified before publishing. Concrete interfaces and storage backends remain open.
+This is the design contract for an optional restoration product. Its in-memory vault is implemented as `@redact-secret/vault` (published `0.1.0-alpha.1` and `0.1.0-alpha.2`) and single-process, in-memory server authority as `@redact-secret/vault-server` (published `0.1.0-alpha.2`, its first release); persistence is not implemented. It records where plaintext is permitted, which repository owns each behavior, and what must be verified before publishing. Concrete interfaces and storage backends remain open.
 
 ## Package and language boundaries
 

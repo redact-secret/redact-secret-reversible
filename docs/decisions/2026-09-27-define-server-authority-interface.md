@@ -7,7 +7,7 @@ decided_at: 2026-09-27
 ---
 # Define the server authority interface and reference policy examples
 
-> **Accepted 2026-09-27** for the interface contract only ([#15](https://github.com/redact-secret/redact-secret-reversible/issues/15)). No implementation exists yet. `@redact-secret/vault-server` ([#16](https://github.com/redact-secret/redact-secret-reversible/issues/16)), the Python server integration ([#17](https://github.com/redact-secret/redact-secret-reversible/issues/17)), and the persistent-store contract ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)) build against this contract and must each pass their own conformance and qualification gates before claiming support.
+> **Accepted 2026-09-27** for the interface contract only ([#15](https://github.com/redact-secret/redact-secret-vault/issues/15)). No implementation exists yet. `@redact-secret/vault-server` ([#16](https://github.com/redact-secret/redact-secret-vault/issues/16)), the Python server integration ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)), and the persistent-store contract ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) build against this contract and must each pass their own conformance and qualification gates before claiming support.
 
 ## Context
 

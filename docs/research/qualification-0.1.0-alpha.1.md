@@ -1,7 +1,7 @@
 # Qualification record: @redact-secret/vault 0.1.0-alpha.1
 
 **Status:** executed evidence, 2026-09-27. Supersedes the [beta.8 proof of concept](verification-2026-09-27.md) as current compatibility evidence; that record remains as history.
-**Issues:** [#8](https://github.com/redact-secret/redact-secret-reversible/issues/8) (real-browser core integration), [#12](https://github.com/redact-secret/redact-secret-reversible/issues/12)/[#13](https://github.com/redact-secret/redact-secret-reversible/issues/13) (conformance on Node and browser), [#22](https://github.com/redact-secret/redact-secret-reversible/issues/22) (compatibility matrix).
+**Issues:** [#8](https://github.com/redact-secret/redact-secret-vault/issues/8) (real-browser core integration), [#12](https://github.com/redact-secret/redact-secret-vault/issues/12)/[#13](https://github.com/redact-secret/redact-secret-vault/issues/13) (conformance on Node and browser), [#22](https://github.com/redact-secret/redact-secret-vault/issues/22) (compatibility matrix).
 
 ## Pinned core artifact
 
@@ -24,7 +24,7 @@ All values are synthetic (for example `ghp_SYNTHETICxREVOKEDxTESTx0000000000000`
 
 ## Results
 
-CI run [36319904811](https://github.com/redact-secret/redact-secret-reversible/actions/runs/36319904811) on commit `7bd9b9b5ff5c1a3126406b9e7639ca2f02b34982`. Reports are uploaded as run artifacts.
+CI run [36319904811](https://github.com/redact-secret/redact-secret-vault/actions/runs/36319904811) on commit `7bd9b9b5ff5c1a3126406b9e7639ca2f02b34982`. Reports are uploaded as run artifacts.
 
 | Runtime | Platform | Core artifact | Result | Reuse of findings for a 2nd `redact` |
 | --- | --- | --- | --- | --- |

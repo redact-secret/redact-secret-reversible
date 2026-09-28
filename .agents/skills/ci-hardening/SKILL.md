@@ -10,7 +10,7 @@ Find ways CI or release automation could be abused. Propose patches; apply only 
 ## Run
 
 - `uvx zizmor --format plain .github/workflows/` (or `pipx run zizmor`). Record the zizmor version.
-- `scorecard --repo=github.com/redact-secret/redact-secret-reversible --format json`. This needs `GITHUB_AUTH_TOKEN`; skip it and say so if the token is unavailable.
+- `scorecard --repo=github.com/redact-secret/redact-secret-vault --format json`. This needs `GITHUB_AUTH_TOKEN`; skip it and say so if the token is unavailable.
 - Read every workflow yourself as well. The tools miss repo-specific intent.
 
 ## Checks
