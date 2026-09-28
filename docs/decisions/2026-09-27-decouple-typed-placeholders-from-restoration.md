@@ -23,6 +23,10 @@ The core already supports default `<SECRET_1>` and typed formatting (for example
 - Changes to display format cannot silently change authorization or mapping lookup. Token syntax and escaping need dedicated tests.
 - An application may use core typed placeholders without installing this package. Installing this package does not make pre-existing core placeholders restorable.
 
+## Note, 2026-09-28: real PII types (core 0.1.0-beta.10)
+
+This note adds context; the decision above is unchanged. The hypothetical `ssn` type now exists: core `0.1.0-beta.10` reports opt-in PII findings with `pii_`-prefixed types such as `pii_global_email` and `pii_jurisdiction_us_ssn`, and its `typedPlaceholderFormatter` renders them as labels like `<PII_JURISDICTION_US_SSN_1>`. The decision holds as written. Such a label, or an application's own `<SSN_1>`, is display text. It grants nothing and does not imply retention. The vault still hardcodes no PII category: it retains a PII value only when the application lists its exact type in `CaptureOptions.pii.retain`, and restoring it still takes an issued `<rsv_…>` token plus a sink/path grant. See [decision-pii-retention-and-activation-ownership](2026-09-27-decide-pii-retention-and-activation-ownership.md) and [#44](https://github.com/redact-secret/redact-secret-reversible/issues/44).
+
 ## Open questions
 
 Choose an issued-token grammar or a separate structured handle, collision behavior when literal tokens appear in input/output, and whether to include a human-readable type label at all.

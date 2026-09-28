@@ -3,19 +3,21 @@
 **Alpha.** An opt-in, bounded, in-memory vault for [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core). It replaces detected secrets with random tokens before text leaves your code, for example to an LLM. Later it puts the original values back, but only into fields your application names in advance.
 
 ```bash
-npm install @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
 ```
+
+Install exact versions. Until `0.1.0-alpha.2` is published, the npm `alpha` tag points at `0.1.0-alpha.1`, which peers `@redact-secret/core@0.1.0-beta.9` and conflicts with beta.10. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-reversible/blob/main/CHANGELOG.md).
 
 ## Supported, and not
 
-| Runtime | Status in 0.1.0-alpha.1 |
+| Runtime | Status in 0.1.0-alpha.2 |
 | --- | --- |
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
-| Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-0.1.0-alpha.1.md)) |
+| Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [alpha.1 qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-0.1.0-alpha.1.md); PII off and on in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)) |
 | Optional dedicated-Worker mode (`@redact-secret/vault/worker`), same three browser engines, CSP allowing `'wasm-unsafe-eval'` and `worker-src` | **Qualified, opt-in, separately from main-thread mode** — see [Worker mode](#worker-mode) and the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) |
-| `@redact-secret/core` | `0.1.0-beta.10` exactly (peer dependency; `0.1.0-alpha.1` pinned `0.1.0-beta.9`) |
+| `@redact-secret/core` | `0.1.0-beta.10` exactly (peer dependency; `0.1.0-alpha.1` pinned `0.1.0-beta.9`, and without PII support) |
 | `SharedWorker`, a Service Worker, or Node.js `worker_threads` | **Not supported** |
-| Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants ([#15](https://github.com/redact-secret/redact-secret-reversible/issues/15)) |
+| Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants. Use [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-reversible/blob/main/packages/vault-server/README.md) for principal and tenant authorization |
 | Persistence, Python, streaming, free-text `restore(text)` | **Not supported** |
 
 ## Usage
@@ -75,7 +77,7 @@ try {
 
 - **Code in your page or process.** Same-page scripts, XSS, compromised dependencies, and extensions can read the input before capture, call `restore`, or read its result. The vault shares their trust boundary.
 - **Relocation within a grant.** A model can move a valid token within a granted field, or into another path you granted for the same capture. Grant the narrowest paths. Keep `maxUses: 1`.
-- **Other users.** A vault shared across users or tenants will restore one user's value into another's granted field if you list both captures. Use one vault per user task. Server authorization is future work.
+- **Other users.** A vault shared across users or tenants will restore one user's value into another's granted field if you list both captures. Use one vault per user task, or [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-reversible/blob/main/packages/vault-server/README.md) for principal and tenant checks.
 - **Denial reasons.** `reason` tells your code which check failed, and so whether a token is live. Do not forward it to the model or to end users.
 - **Inspection tools.** Browser DevTools and debuggers can display private fields; `console.log(vault)` in a DevTools session can show retained values.
 - **Undetected secrets.** The core does not detect every secret. Treat `text` as "known findings removed", not "safe to send".
