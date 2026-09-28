@@ -102,7 +102,7 @@ Exceptions thrown by either hook never change an operation's outcome.
 
 `server.piiActivation → string | null`. The wrapped vault's observed core PII activation identity. It is `null` on a core without PII support.
 
-`server.capture(input, options) → Promise<CaptureResult>`. Options extend `@redact-secret/vault`'s `CaptureOptions` with a required `issuedTenant`. The PII retention allowlist `pii: { retain }` is forwarded as given. Result is the vault's own unmodified `CaptureResult`.
+`server.capture(input, options) → Promise<CaptureResult>`. Options extend `@redact-secret/vault`'s `CaptureOptions` with a required `issuedTenant`. The PII retention allowlist `pii: { retain }` is forwarded as given. Result is the vault's own unmodified `CaptureResult`. A vault capture failure rejects with `VAULT_FAILURE` carrying the vault's `vaultCode` and, for `CORE_FAILURE`, the core's `coreCode`: for example `INVALID_PLACEHOLDER` for a `displayFormatter` label that reproduces a finding's matched text, or `FINDING_LIMIT_EXCEEDED` when findings (PII included) exceed `limits.maxFindings`.
 
 `server.restore({ context, tenant?, sink, purpose, sessionId?, captures, fields, requestId? }) → Promise<{ fields, restored, principalId, tenant }>`. Throws `VaultServerError` with code `RESTORE_DENIED` and one of the reasons above, or `INVALID_ARGUMENT` for a structurally malformed request (checked before principal resolution, and never audited as a security decision).
 

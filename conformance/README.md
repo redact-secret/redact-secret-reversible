@@ -2,7 +2,7 @@
 
 Language-neutral cases that any reversible-restoration implementation in this repository must pass for each runtime it claims ([#10](https://github.com/redact-secret/redact-secret-reversible/issues/10)). The corpus is versioned separately from detection benchmarks: it measures vault behavior, not detection accuracy.
 
-- `v1/corpus.json`: version 1.2.0, written against `@redact-secret/core@0.1.0-beta.10` (full profile). Version 1.2.0 adds the PII cases (`pii.*`) and the `IBAN` fixture ([#42](https://github.com/redact-secret/redact-secret-reversible/issues/42)). Earlier versions targeted `0.1.0-beta.9`. Every non-PII case gives the same finding types on beta.9 and on beta.10, with PII off or on; see the [beta.10 qualification record](../docs/research/qualification-core-0.1.0-beta.10.md).
+- `v1/corpus.json`: version 1.3.0, written against `@redact-secret/core@0.1.0-beta.10` (full profile). Version 1.2.0 added the PII cases (`pii.*`) and the `IBAN` fixture ([#42](https://github.com/redact-secret/redact-secret-reversible/issues/42)). Version 1.3.0 adds the `PHONE` fixture and two default-confidence `warn` PII cases ([#43](https://github.com/redact-secret/redact-secret-reversible/issues/43)). Earlier versions targeted `0.1.0-beta.9`. Every non-PII case gives the same finding types on beta.9 and on beta.10, with PII off or on; see the [beta.10 qualification record](../docs/research/qualification-core-0.1.0-beta.10.md).
 - Runners:
   - [`packages/vault/test/suite.js`](../packages/vault/test/suite.js) interprets the corpus in Node.js and in browsers, and adds runtime checks that need code (callback re-entrancy, RNG failure, getters, microtask ordering). Its host runners (`qualification/*.mjs`) run it twice, once in a realm initialized with PII off and once with PII on (`["pii"]`).
   - [`packages/vault-server-py/tests/conformance_runtime.py`](../packages/vault-server-py/tests/conformance_runtime.py) interprets the same corpus in Python against `redact_secret_vault_server.InMemoryVaultServer`, adapting the vault-level `releasePolicy` spec to the S1 `ServerReleasePolicy` contract under one fixed synthetic principal/tenant/purpose. Three case IDs' expected denial reasons are deliberately overridden where the S1 contract diverges from the vault-level one by design (documented in that file); see [docs/research/python-server-integration-2026-09-27.md](../docs/research/python-server-integration-2026-09-27.md). It replays every case in a PII-off and a PII-on lane.
@@ -25,7 +25,7 @@ Templates: `{NAME}` is a fixture; `{cN.i}` is token `i` of capture `cN`; `{cN.te
 
 Every run also asserts that no fixture value or issued token appears in any error (message, stack, JSON, own properties), audit event, or console output.
 
-Case-level fields (1.2.0):
+Case-level fields (since 1.2.0):
 
 | Field | Meaning |
 | --- | --- |
@@ -36,10 +36,10 @@ A Python-specific adapter rule: the bridge observes activation on its first core
 
 ## PII cases
 
-All values are synthetic. `IBAN` is the widely published documentation-example IBAN. It is not an account. Beta.10 detects it as `pii_global_iban` (High, `redact`) only next to a field label, so inputs write `iban {IBAN}`. Documentation-range emails, test card numbers, and `555` phone numbers are treated as synthetic by the core and not detected, so they are not used. No synthetic input found yields a Medium or Low (default `warn`) PII finding. The `warn` and `block` cases therefore assign the action with `options.policy`, and a default-confidence `warn` case is left to [#43](https://github.com/redact-secret/redact-secret-reversible/issues/43).
+All values are synthetic. `IBAN` is the widely published documentation-example IBAN. It is not an account. Beta.10 detects it as `pii_global_iban` (High, `redact`) only next to a field label, so inputs write `iban {IBAN}`. Documentation-range emails, test card numbers, and `555-01xx` phone numbers are treated as synthetic by the core and not detected, so they are not used. `PHONE` (`555-2345`) is the core's own conformance value for a Medium-confidence phone finding: a seven-digit local number with no area code. After a label (`telephone={PHONE}`) beta.10 detects it as `pii_global_phone` (Medium, default action `warn`) with no policy. The `pii.action.default-warn-*` cases use it. The other `warn` and `block` cases assign the action to the IBAN with `options.policy`.
 
 - Retention: `pii.retention.default-not-retained`, `pii.retention.allowlist-restores`, `pii.retention.allowlist-is-exact-and-eligible-narrows`.
-- Actions: `pii.action.warn-rejected-by-default`, `pii.action.warn-pass-through-is-visible`, `pii.action.block-rejects`.
+- Actions: `pii.action.warn-rejected-by-default`, `pii.action.warn-pass-through-is-visible`, `pii.action.block-rejects`, `pii.action.default-warn-rejected-by-default`, `pii.action.default-warn-pass-through-is-visible` (a warn-level type listed in `pii.retain` is still passed through, not retained).
 - Activation: `pii.activation.retention-unavailable-when-off`, `pii.activation.conflict-when-off` and `pii.activation.conflict-when-on` (shared realm), `pii.activation.equivalent-selection-is-idempotent`, `pii.activation.expectation-mismatch`.
 
 Initialization order, `NOT_INITIALIZED`, and any other case that needs an *uninitialized* realm cannot run in a corpus replayed in one pre-initialized realm. Those are the per-realm scenarios in [`packages/vault/test/pii-scenarios.js`](../packages/vault/test/pii-scenarios.js) and `qualification/worker.mjs`.

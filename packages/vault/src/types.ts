@@ -19,7 +19,12 @@ export interface VaultLimits {
   readonly vaultTtlMs: number;
   /** UTF-8 bytes of one capture input (also passed to the core). */
   readonly maxInputBytes: number;
-  /** Findings in one capture input (also passed to the core). */
+  /**
+   * Findings in one capture input, passed to the core as its limit. Every
+   * finding counts, including PII findings that are not retained or are
+   * passed through. Exceeding it fails `CORE_FAILURE` with
+   * `coreCode: "FINDING_LIMIT_EXCEEDED"`.
+   */
   readonly maxFindings: number;
   /** Fields in one restore request. */
   readonly maxRestoreFields: number;
@@ -156,7 +161,19 @@ export interface CaptureOptions {
    * `PII_UNAVAILABLE`.
    */
   readonly pii?: PiiRetention;
-  /** Display placeholder for ineligible findings. Default `<SECRET_n>`. */
+  /**
+   * Display placeholder for ineligible findings. Default `<SECRET_n>`.
+   *
+   * The label is checked by the vault and by the core, and any rejection
+   * fails the whole capture with nothing committed and a value-free error:
+   * a label containing the token marker, or a formatter that throws, is
+   * `CORE_FAILURE` / `coreCode: "PLACEHOLDER_FAILURE"`. The core (beta.10)
+   * also rejects, as `CORE_FAILURE` / `coreCode: "INVALID_PLACEHOLDER"`, an
+   * empty label or one that reproduces the matched text of any finding in the
+   * input, including a sibling `warn` or `allow` finding left as plaintext
+   * under `unredacted: "pass-through"`. Use fixed labels that cannot look like
+   * input.
+   */
   readonly displayFormatter?: PlaceholderFormatter;
 }
 

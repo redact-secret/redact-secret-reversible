@@ -560,3 +560,47 @@ def test_real_core_retention_default_and_allowlist(pii_core_script):
         assert restored.fields["body"] == text
 
     asyncio.run(run())
+
+
+# The core's own Medium-confidence phone conformance value (#43): a
+# seven-digit local number with no area code, detected as pii_global_phone
+# (Medium, default action warn) only after a label such as "telephone=".
+LOCAL_PHONE = "555-2345"
+
+
+def test_real_core_default_confidence_warn_pii_is_gated_by_unredacted(pii_core_script):
+    server = InMemoryVaultServer(core_client=_pii_bridge(pii_core_script, pii=["pii"]))
+    text = f"telephone={LOCAL_PHONE} token {GH}"
+    with pytest.raises(VaultServerError) as excinfo:
+        server.capture(text, CaptureOptions(issued_tenant=TENANT, release=RELEASE))
+    assert excinfo.value.code == VaultServerErrorCode.UNREDACTED_FINDINGS
+    assert LOCAL_PHONE not in str(excinfo.value) and GH not in str(excinfo.value)
+    assert server.stats().entries == 0
+    passed = server.capture(
+        text,
+        CaptureOptions(
+            issued_tenant=TENANT,
+            release=RELEASE,
+            unredacted="pass-through",
+            pii=PiiRetention(retain=("pii_global_phone",)),
+        ),
+    )
+    assert passed.passed_through == 1
+    assert passed.passed_through_types == ("pii_global_phone",)
+    assert [t.type for t in passed.tokens] == ["github_token"]
+    assert f"telephone={LOCAL_PHONE}" in passed.text and GH not in passed.text
+
+
+def test_real_core_pii_findings_count_toward_max_findings(pii_core_script):
+    server = InMemoryVaultServer(core_client=_pii_bridge(pii_core_script, pii=["pii"]), limits={"max_findings": 2})
+    two = f"iban {DOC_IBAN}; iban {DOC_IBAN}"
+    retain = PiiRetention(retain=("pii_global_iban",))
+    kept = server.capture(two, CaptureOptions(issued_tenant=TENANT, release=RELEASE, pii=retain))
+    assert len(kept.tokens) == 2
+    before = server.stats()
+    with pytest.raises(VaultServerError) as excinfo:
+        server.capture(f"{two}; iban {DOC_IBAN}", CaptureOptions(issued_tenant=TENANT, release=RELEASE, pii=retain))
+    assert excinfo.value.code == VaultServerErrorCode.CORE_FAILURE
+    assert excinfo.value.core_code == "FINDING_LIMIT_EXCEEDED"
+    assert DOC_IBAN not in str(excinfo.value)
+    assert server.stats() == before

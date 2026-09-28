@@ -1,6 +1,6 @@
 {
   "corpus": "redact-secret-reversible/conformance",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "coreCompatibility": "@redact-secret/core 0.1.0-beta.10 (full profile); PII cases need PII activation with selection [\"pii\"]",
   "notes": [
     "Every value below is synthetic and unmistakably fake. None is a live credential.",
@@ -12,7 +12,8 @@
     "piiActivation on a case (\"on\" or \"off\") names the core PII activation the case needs: \"on\" means selectors=pii:global (selection [\"pii\"]), \"off\" means selectors=off. A runner whose runtime has a different activation reports the case as skipped, never as passed. Cases without it run under any activation.",
     "requiresSharedRealm marks a case that needs one realm-global, one-shot core activation shared by every vault in the process (JavaScript). A runner whose core boundary starts a fresh core per call (the Python bridge) reports it as skipped with that reason.",
     "The vault step's pii and expectPiiActivation are forwarded verbatim to the implementation's activation options; expect on a vault step names the error that creating it (or, for the Python bridge, its first core call) must raise.",
-    "IBAN is the widely published documentation-example IBAN; it is not an account. The core detects it as pii_global_iban (High, redact) only next to a field label, so inputs write \"iban {IBAN}\". pii_global_iban warn and block come from an explicit policy: no synthetic input found yields a Medium or Low (default warn) PII finding on beta.10."
+    "IBAN is the widely published documentation-example IBAN; it is not an account. The core detects it as pii_global_iban (High, redact) only next to a field label, so inputs write \"iban {IBAN}\". pii_global_iban warn and block come from an explicit policy.",
+    "PHONE is the core's own conformance value for a Medium-confidence phone finding: a seven-digit local number with no area code, not a subscriber line. After a label (\"telephone={PHONE}\") beta.10 detects it as pii_global_phone (Medium, default action warn), with no policy."
   ],
   "fixtures": {
     "GH": "ghp_SYNTHETICxREVOKEDxTESTx0000000000000",
@@ -23,7 +24,8 @@
     "SHORT_VALUE": "abcd1234",
     "ACCENT_VALUE": "SYNTHÉTIQUE_révoqué_ÆØÅ",
     "EMOJI_VALUE": "🔑SYNTHETIC🔑VALUE",
-    "IBAN": "DE89 3704 0044 0532 0130 00"
+    "IBAN": "DE89 3704 0044 0532 0130 00",
+    "PHONE": "555-2345"
   },
   "cases": [
     {
@@ -2661,6 +2663,90 @@
           "expect": {
             "entries": 0,
             "captures": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.action.default-warn-rejected-by-default",
+      "covers": [
+        "PII-2"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "telephone={PHONE} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "error": "UNREDACTED_FINDINGS"
+          }
+        },
+        {
+          "op": "stats",
+          "expect": {
+            "entries": 0,
+            "captures": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.action.default-warn-pass-through-is-visible",
+      "covers": [
+        "PII-2"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "telephone={PHONE} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_phone"
+              ]
+            },
+            "unredacted": "pass-through"
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "passedThrough": 1,
+            "passedThroughTypes": [
+              "pii_global_phone"
+            ],
+            "textIncludes": [
+              "telephone={PHONE}"
+            ],
+            "textExcludes": [
+              "{GH}"
+            ]
           }
         }
       ]
