@@ -3,7 +3,7 @@
 **Alpha.** An opt-in, bounded, in-memory vault for [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core). It replaces detected secrets with random tokens before text leaves your code, for example to an LLM. Later it puts the original values back, but only into fields your application names in advance.
 
 ```bash
-npm install @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.9
+npm install @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.10
 ```
 
 ## Supported, and not
@@ -13,7 +13,7 @@ npm install @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.9
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
 | Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-0.1.0-alpha.1.md)) |
 | Optional dedicated-Worker mode (`@redact-secret/vault/worker`), same three browser engines, CSP allowing `'wasm-unsafe-eval'` and `worker-src` | **Qualified, opt-in, separately from main-thread mode** — see [Worker mode](#worker-mode) and the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) |
-| `@redact-secret/core` | `0.1.0-beta.9` exactly (peer dependency) |
+| `@redact-secret/core` | `0.1.0-beta.10` exactly (peer dependency; `0.1.0-alpha.1` pinned `0.1.0-beta.9`) |
 | `SharedWorker`, a Service Worker, or Node.js `worker_threads` | **Not supported** |
 | Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants ([#15](https://github.com/redact-secret/redact-secret-reversible/issues/15)) |
 | Persistence, Python, streaming, free-text `restore(text)` | **Not supported** |
@@ -24,7 +24,11 @@ npm install @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.9
 import { createVault, VaultError } from "@redact-secret/vault";
 
 // One vault per user task or session. Nothing is retained until you call capture.
-const vault = await createVault({ limits: { entryTtlMs: 5 * 60_000 } });
+// The core must be initialized first: `pii: []` has the vault initialize it with
+// PII detection off. Or await the core's own `initialize(...)` and omit `pii`.
+// Without either, createVault() fails with CORE_FAILURE / NOT_INITIALIZED.
+// See "PII findings" below.
+const vault = await createVault({ pii: [], limits: { entryTtlMs: 5 * 60_000 } });
 
 try {
   const userText = "Please rotate ghp_SYNTHETICxREVOKEDxTESTx0000000000000 today";
@@ -99,7 +103,7 @@ await vault.dispose();
 ```ts
 // vault-worker.js — runs inside the dedicated Worker
 import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
-startVaultWorkerHost();
+startVaultWorkerHost({ pii: [] }); // PII off in this Worker realm; see PII findings
 ```
 
 What changes from main-thread mode:
@@ -118,13 +122,13 @@ If a capture fails with `UNREDACTED_FINDINGS`, the input contains values the cor
 
 ## PII findings
 
-The pinned core (`0.1.0-beta.9`) has no PII detection. A later core adds opt-in PII detection, whose finding types start with `pii_`. The vault detects that support at runtime, never by version. The rules below are implemented and tested against a local build of the `0.1.0-beta.10` candidate, which is not on npm. See the [decision record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
+The pinned core (`0.1.0-beta.10`) adds opt-in PII detection, whose finding types start with `pii_`. The vault detects that support at runtime, never by version, so a core without it (`0.1.0-beta.9`) gets the fail-closed rules below. See the [decision record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
 
 - **Your application owns PII activation.** In the core, PII activation applies to the whole process or page and can be set only once. The vault never chooses a selection for you. Pass `createVault({ pii: [...] })` and the vault forwards your selectors to the core's `initialize({ pii })` as given. `pii: []` means PII off. Omit `pii` and the vault adopts whatever your application already set with the core's own `initialize`, and calls no initializer itself. If nothing initialized the core, `createVault()` fails with `CORE_FAILURE` / `coreCode: "NOT_INITIALIZED"` rather than silently locking PII off. Fix it with `createVault({ pii: [] })`, or by awaiting the core's `initialize(...)` first. A different selection than the one already active fails with `CORE_FAILURE` / `coreCode: "PII_ACTIVATION_CONFLICT"`, and the active selection is left unchanged.
 - **Observed activation.** `vault.piiActivation` is the core's canonical activation identity, or `null` on a core without PII support. Pass `expectPiiActivation` to require an exact identity. Any difference fails with `PII_ACTIVATION_MISMATCH`.
 - **PII is never retained by default.** A `redact` finding whose type starts `pii_` is replaced by a display placeholder that cannot be restored, and counted in `unrestorable`. To retain a type, name it exactly in `capture(input, { pii: { retain: ["pii_global_iban"] } })`. `eligible` is consulted only for allowlisted PII types. It can narrow the allowlist but cannot widen it, so an allow-all `eligible` retains no PII. Retained PII uses the same grants, `maxUses`, TTLs, and limits as any other entry.
 - **Warn-level PII still fails the capture.** Medium- and Low-confidence PII defaults to the core's `warn` action, so such a capture fails with `UNREDACTED_FINDINGS` unless you map those types to `redact` with a core `policy` or choose `unredacted: "pass-through"`.
-- **Fail closed on the pinned core.** With a core that lacks PII support, a non-empty `pii`, any `expectPiiActivation`, or a capture's `pii` option fails with `PII_UNAVAILABLE` before the core is called. `pii: []` is accepted and equals omission. A capture's `pii` option also fails `PII_UNAVAILABLE` when the observed activation has `selectors=off`.
+- **Fail closed without PII support.** With a core that lacks PII support, a non-empty `pii`, any `expectPiiActivation`, or a capture's `pii` option fails with `PII_UNAVAILABLE` before the core is called. `pii: []` is accepted and equals omission. A capture's `pii` option also fails `PII_UNAVAILABLE` when the observed activation has `selectors=off`.
 
 **In Worker mode** ([#39](https://github.com/redact-secret/redact-secret-reversible/issues/39)) the Worker is its own realm with its own core, so the Worker script owns its activation, not the page:
 

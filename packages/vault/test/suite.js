@@ -262,7 +262,7 @@ const runtimeChecks = {
   },
 
   // ADR 2026-09-27 PII retention and activation ownership, §4: on a core
-  // without a PII surface (the pinned beta.9) every PII option fails closed
+  // without a PII surface (a beta.9 core) every PII option fails closed
   // before the core is called, `pii: []` equals omission, and the observed
   // activation is null. On a PII-capable core the host runner owns
   // activation, so only the identity type is checked here.

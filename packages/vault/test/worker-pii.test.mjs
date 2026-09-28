@@ -10,7 +10,7 @@
 //   ./fake-core-register.mjs` resolves `@redact-secret/core` to a fake core
 //   (PII-capable, or beta.9-shaped with FAKE_CORE_PII=0), so the public
 //   `@redact-secret/vault/worker` and `/worker/host` entries run unchanged
-//   while the pinned beta.9 is installed. The same scenarios against a real
+//   while a beta.9 core is installed. The same scenarios against a real
 //   core live in worker-pii-core.test.mjs.
 //
 // All data is synthetic: FAKEPII-… markers and a revoked-looking token shape.

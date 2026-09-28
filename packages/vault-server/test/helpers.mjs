@@ -53,6 +53,8 @@ export async function openServer(overrides = {}) {
     revocationMemoryMs: overrides.revocationMemoryMs,
     resolverTimeoutMs: overrides.resolverTimeoutMs,
     policyTimeoutMs: overrides.policyTimeoutMs,
+    // Core beta.10+ requires an initialized core: PII off, as these tests assume.
+    pii: overrides.pii ?? [],
   });
   return { server, clock };
 }

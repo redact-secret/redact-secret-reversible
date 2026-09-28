@@ -99,9 +99,10 @@ asyncio.run(main())
 
 ## PII selection and retention
 
-**Status: implemented, unreleased.** PII detection needs the
-`@redact-secret/core@0.1.0-beta.10` candidate, which is not on npm. This
-repository still pins `0.1.0-beta.9`, which has no PII support. The rules are
+**Status: implemented, unreleased.** PII detection needs
+`@redact-secret/core@0.1.0-beta.10`, which this repository pins
+(`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
+fail-closed rules below. The rules are
 the [PII retention and activation decision record](../../docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)
 (§1 and §3 "Python bridge"), the same ones `@redact-secret/vault` follows.
 
@@ -127,7 +128,7 @@ the [PII retention and activation decision record](../../docs/decisions/2026-09-
   reported no active PII detection, each raise `PII_UNAVAILABLE`.
 
 ```python
-bridge = NodeCoreBridge(pii=["pii"], expected_core_version=None)  # beta.10 candidate
+bridge = NodeCoreBridge(pii=["pii"])  # the pinned beta.10
 options = CaptureOptions(
     issued_tenant="tenant-acme-synthetic",
     release=(CaptureGrant(sink="reply", paths=("body",)),),
@@ -146,10 +147,11 @@ pip install -e ".[test]"
 pytest
 ```
 
-`tests/test_pii_bridge.py` includes four cases that need a PII-capable core.
-They skip with a reason on the pinned beta.9. To run them, point
-`VAULT_SERVER_PY_PII_CORE_NODE_MODULES` at a `node_modules` directory that holds
-a local beta.10 build.
+`tests/test_pii_bridge.py` includes four cases that need a PII-capable core;
+they run against the pinned beta.10. `VAULT_SERVER_PY_PII_CORE_NODE_MODULES`
+points them at another `node_modules` (for example a local core build). Four
+further cases need a core without PII support (beta.9) and skip with a reason;
+the fake-core cases in the same file cover those rules.
 
 `tests/test_conformance.py` runs the shared language-neutral corpus
 (`conformance/v1/corpus.json`) against this package; `tests/test_server_authority.py`

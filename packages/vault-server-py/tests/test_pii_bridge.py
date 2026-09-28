@@ -9,13 +9,14 @@ docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md,
 2. The real ``core_bridge.mjs`` against a fake ``@redact-secret/core``
    module, with and without a ``piiActivation`` export: the bridge's own
    initialize/PII_UNAVAILABLE logic and finding projection.
-3. The real bridge against the installed core when it has no PII surface
-   (the pinned ``0.1.0-beta.9``): ``null`` identity and fail-closed options.
-4. The real bridge against a PII-capable core (the ``0.1.0-beta.10``
-   candidate). Skipped with a reason unless such a core is resolvable.
+3. The real bridge against an installed core with no PII surface (beta.9):
+   ``null`` identity and fail-closed options. Skipped on the pinned
+   ``0.1.0-beta.10``; layer 2 covers the same rules with a beta.9-shaped fake.
+4. The real bridge against a PII-capable core (the pinned ``0.1.0-beta.10``).
+   Skipped with a reason unless such a core is resolvable.
 
 Data is synthetic: repository ``*-synthetic*`` literals, and for layer 4 the
-widely published documentation-example IBAN, which the beta.10 candidate
+widely published documentation-example IBAN, which beta.10
 detects as ``pii_global_iban`` (High, ``redact``).
 """
 
@@ -272,7 +273,7 @@ needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is re
 
 _FAKE_CORE_WITH_PII = """
 let selection;
-export const VERSION = "0.1.0-beta.9";
+export const VERSION = "__PINNED_CORE_VERSION__";
 export function artifact() { return { kind: "fake" }; }
 export async function initialize(...args) {
   if (args.length !== 1 || !Array.isArray(args[0]?.pii)) throw Object.assign(new Error("x"), { code: "FAKE_BAD_INIT" });
@@ -289,7 +290,7 @@ export function scan(input) {
 """
 
 _FAKE_CORE_WITHOUT_PII = """
-export const VERSION = "0.1.0-beta.9";
+export const VERSION = "__PINNED_CORE_VERSION__";
 export function artifact() { return { kind: "fake" }; }
 export async function initialize(...args) {
   if (args.length !== 0) throw Object.assign(new Error("x"), { code: "FAKE_UNEXPECTED_ARGS" });
@@ -308,7 +309,8 @@ def _fake_core_bridge(tmp_path: Path, source: str, **kwargs) -> NodeCoreBridge:
     (package / "package.json").write_text(
         json.dumps({"name": "@redact-secret/core", "type": "module", "exports": "./index.js"})
     )
-    (package / "index.js").write_text(source)
+    # The bridge checks the core version, so the fake reports the pinned one.
+    (package / "index.js").write_text(source.replace("__PINNED_CORE_VERSION__", PINNED_CORE_VERSION))
     script = tmp_path / "core_bridge.mjs"
     shutil.copyfile(DEFAULT_BRIDGE_SCRIPT, script)
     return NodeCoreBridge(script=script, **kwargs)
@@ -411,7 +413,10 @@ _INSTALLED_HAS_PII = _core_has_pii_surface(DEFAULT_BRIDGE_SCRIPT.parent)
 
 needs_beta9_core = pytest.mark.skipif(
     _INSTALLED_HAS_PII is not False,
-    reason="needs node and an installed @redact-secret/core without piiActivation (the pinned 0.1.0-beta.9)",
+    reason=(
+        "needs node and an installed @redact-secret/core without piiActivation (beta.9); "
+        "the fake-core tests above cover these rules"
+    ),
 )
 
 
@@ -472,7 +477,7 @@ def pii_core_script(tmp_path_factory) -> Path:
         has_pii = _INSTALLED_HAS_PII
     if not has_pii:
         pytest.skip(
-            "installed @redact-secret/core has no piiActivation (PII needs the 0.1.0-beta.10 candidate); "
+            "installed @redact-secret/core has no piiActivation (PII needs 0.1.0-beta.10); "
             "set VAULT_SERVER_PY_PII_CORE_NODE_MODULES to a node_modules holding it"
         )
     return script
