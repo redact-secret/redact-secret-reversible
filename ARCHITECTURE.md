@@ -8,7 +8,7 @@ This is the design contract for an optional restoration product. Its in-memory v
 
 `@redact-secret/vault` is the proposed portable in-memory session primitive for browser, Node.js, and separately qualified edge runtimes. `@redact-secret/vault-server` adds server authority for principals, tenants, sources, destinations, paths, and usage budgets; it can still use memory. `@redact-secret/store-*` packages are optional persistence implementations, not a third execution profile. An application may also provide its own store when it satisfies the same contract.
 
-The server security specification and adversarial conformance cases belong to this repository, independently of language. JavaScript uses the npm names above. Python, Rust, and Go need their own native distribution or a separately qualified service boundary; no JavaScript dependency is imposed on them. See [package decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
+The server security specification and adversarial conformance cases belong to this repository, independently of language. JavaScript uses the npm names above. Python has one distribution, `redact-secret-vault` ([packages/vault-py](packages/vault-py/README.md), unpublished, research-grade), which implements the same server-authority contract as `@redact-secret/vault-server`, not the `@redact-secret/vault` API; Python has no separate authority-free portable vault, so its name carries no `-server` suffix. Python, Rust, and Go need their own native distribution or a separately qualified service boundary; no JavaScript dependency is imposed on them. See [package decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
 
 ## Trust boundaries
 

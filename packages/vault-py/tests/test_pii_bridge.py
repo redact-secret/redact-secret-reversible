@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from redact_secret_vault_server import (
+from redact_secret_vault import (
     CaptureGrant,
     CaptureOptions,
     InMemoryVaultServer,
@@ -43,9 +43,9 @@ from redact_secret_vault_server import (
     VaultServerError,
     VaultServerErrorCode,
 )
-from redact_secret_vault_server import core_client as core_client_module
-from redact_secret_vault_server.core_client import DEFAULT_BRIDGE_SCRIPT, PINNED_CORE_VERSION
-from redact_secret_vault_server.pii import is_pii_active
+from redact_secret_vault import core_client as core_client_module
+from redact_secret_vault.core_client import DEFAULT_BRIDGE_SCRIPT, PINNED_CORE_VERSION
+from redact_secret_vault.pii import is_pii_active
 
 ACTIVE = "credentials=full;selectors=pii:global;families=pii:global:iban;vocabulary=pii-context/v1"
 OTHER = "credentials=full;selectors=pii:global;families=pii:global:email;vocabulary=pii-context/v1"

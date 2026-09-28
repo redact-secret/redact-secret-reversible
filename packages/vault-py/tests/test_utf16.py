@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from redact_secret_vault_server.utf16 import build_unit_offsets, utf16_length, utf16_slice
+from redact_secret_vault.utf16 import build_unit_offsets, utf16_length, utf16_slice
 
 
 def test_bmp_only_offsets_match_python_indices():

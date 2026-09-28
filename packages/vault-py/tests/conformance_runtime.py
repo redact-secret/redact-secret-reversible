@@ -41,7 +41,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from redact_secret_vault_server import (
+from redact_secret_vault import (
     CaptureGrant,
     CaptureOptions,
     InMemoryVaultServer,

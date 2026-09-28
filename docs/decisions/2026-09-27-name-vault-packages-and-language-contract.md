@@ -50,3 +50,14 @@ This describes conceptual dependencies. It does not require Python, Rust, or Go 
 ## Consequences and open questions
 
 Browser and server security claims must be documented separately. The intended early work is the portable JavaScript vault and server authorization in JavaScript and Python; sequencing depends on core API and conformance readiness. Rust and Go require their own integration decisions. No store backend, exact language distribution names beyond npm, token syntax, default TTL, or release schedule is fixed here. Before publishing, settle the token collision rules, exact public core dependency, store atomicity, usage budgets, and adversarial conformance corpus.
+
+## Note (2026-09-28): Python distribution name
+
+Recorded for [#56](https://github.com/redact-secret/redact-secret-vault/issues/56). This note fills a name the decision above left open; it does not change the decision.
+
+The Python distribution is `redact-secret-vault` (import package `redact_secret_vault`, directory `packages/vault-py`). It was developed as `redact-secret-vault-server` / `redact_secret_vault_server` in `packages/vault-server-py` and renamed before any PyPI upload, so no published name is abandoned.
+
+- Python has one distribution. There is no authority-free portable vault in Python for a `-server` suffix to be distinguished from, so the suffix adds length without information.
+- The decision above fixes only the npm names and explicitly leaves exact language distribution names beyond npm open.
+- The Python package implements the same server-authority contract ([S1](2026-09-27-define-server-authority-interface.md)) as the JavaScript `@redact-secret/vault-server`, not the JavaScript `@redact-secret/vault` API. Its README states this in its first paragraph so the shorter name is not read as API parity with `@redact-secret/vault`.
+- If Python later gains an authority-free portable vault, that needs its own naming decision; this note does not reserve a name for it.

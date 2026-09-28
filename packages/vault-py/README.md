@@ -1,9 +1,16 @@
-# redact-secret-vault-server (Python)
+# redact-secret-vault (Python)
 
-**Status: alpha / research-grade.** Native Python implementation of the S1
-server authority contract
-([decision record](../../docs/decisions/2026-09-27-define-server-authority-interface.md)):
-trusted principal/tenant resolution, a source→sink/path/purpose decision
+**Status: alpha / research-grade.** Native Python implementation of the same
+S1 server-authority contract as the JavaScript
+[`@redact-secret/vault-server`](../vault-server/README.md)
+([decision record](../../docs/decisions/2026-09-27-define-server-authority-interface.md)).
+It does **not** implement the JavaScript `@redact-secret/vault` API: Python has
+no authority-free portable vault, so this single distribution is named
+`redact-secret-vault` without a `-server` suffix (see the
+[naming decision's 2026-09-28 note](../../docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md)).
+The distribution was called `redact-secret-vault-server` (module
+`redact_secret_vault_server`) before its first publish; that name was never on
+PyPI. It provides trusted principal/tenant resolution, a source→sink/path/purpose decision
 tuple, fail-closed policy evaluation, an extended denial vocabulary, and
 audit events with no field capable of carrying a restored value. Storage is
 in-memory only, matching `@redact-secret/vault`'s threat boundary — nothing
@@ -14,9 +21,9 @@ This package does not implement secret detection. `@redact-secret/core` has
 no published Python distribution (verified against the
 `redact-secret/redact-secret` GitHub organization on 2026-09-27: only
 `packages/javascript` exists there). Capture therefore uses a **qualified
-service boundary**: [`NodeCoreBridge`](src/redact_secret_vault_server/core_client.py)
+service boundary**: [`NodeCoreBridge`](src/redact_secret_vault/core_client.py)
 shells out to a small Node.js script
-([`boundary/core_bridge.mjs`](src/redact_secret_vault_server/boundary/core_bridge.mjs))
+([`boundary/core_bridge.mjs`](src/redact_secret_vault/boundary/core_bridge.mjs))
 that calls only the core's public `scan` API and returns its safe finding
 metadata (never a matched value). See
 [docs/research/python-server-integration-2026-09-27.md](../../docs/research/python-server-integration-2026-09-27.md)
@@ -34,7 +41,7 @@ implementation" means here.
 ## Install (from this repository)
 
 ```bash
-cd packages/vault-server-py
+cd packages/vault-py
 pip install -e ".[test]"
 ```
 
@@ -43,7 +50,7 @@ pip install -e ".[test]"
 ```python
 import asyncio
 
-from redact_secret_vault_server import (
+from redact_secret_vault import (
     CaptureGrant,
     CaptureOptions,
     InMemoryVaultServer,
@@ -64,7 +71,7 @@ def resolve_principal(context):
 def same_tenant_only(decision_input):
     if decision_input.tenant == decision_input.source.issued_tenant:
         return PolicyDecision(allow=True)
-    from redact_secret_vault_server import ServerDenialReason
+    from redact_secret_vault import ServerDenialReason
 
     return PolicyDecision(allow=False, reason=ServerDenialReason.TENANT_MISMATCH)
 
