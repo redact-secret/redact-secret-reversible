@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Python distribution renamed ([#56](https://github.com/redact-secret/redact-secret-vault/issues/56)) before its first publish: `redact-secret-vault-server` → `redact-secret-vault`, import package `redact_secret_vault_server` → `redact_secret_vault`, directory `packages/vault-server-py` → `packages/vault-py`. The old name was never uploaded to PyPI. Version stays `0.1.0a2`; no behavior changed. Code importing `redact_secret_vault_server` must switch to `redact_secret_vault`. The rationale is a dated note on the [naming decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md); intended PyPI trusted publishing is documented in [RELEASING.md](RELEASING.md#python-not-yet-published), with no publish workflow yet.
 - Release automation ([#55](https://github.com/redact-secret/redact-secret-vault/issues/55)): `release.yml` now tests and publishes `@redact-secret/vault-server` after `@redact-secret/vault` from the same tag, through npm trusted publishing with `--provenance`, with the same already-published and non-`latest` dist-tag guards. No package code changed.
 
 ## @redact-secret/vault 0.1.0-alpha.2, @redact-secret/vault-server 0.1.0-alpha.2, redact-secret-vault-server 0.1.0a2 (Python)

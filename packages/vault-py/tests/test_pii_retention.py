@@ -18,7 +18,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from redact_secret_vault_server import (
+from redact_secret_vault import (
     CaptureGrant,
     CaptureOptions,
     CoreFinding,
@@ -31,7 +31,7 @@ from redact_secret_vault_server import (
     VaultServerError,
     VaultServerErrorCode,
 )
-from redact_secret_vault_server.pii import is_pii_active, resolve_pii_retention
+from redact_secret_vault.pii import is_pii_active, resolve_pii_retention
 
 TENANT = "tenant-acme-synthetic"
 SINK = "reply-sink-synthetic"

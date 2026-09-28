@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from redact_secret_vault_server.token import (
+from redact_secret_vault.token import (
     TOKEN_PATTERN,
     count_markers,
     find_tokens,

@@ -1,4 +1,4 @@
-"""``redact_secret_vault_server``: a native Python server authority layer for
+"""``redact_secret_vault``: a native Python server authority layer for
 redact-secret-reversible.
 
 Implements the S1 contract
@@ -8,7 +8,7 @@ evaluation, the extended denial vocabulary, and an audit event shape with no
 field capable of carrying a restored value. Storage is in-memory only.
 
 Capture depends on a qualified service boundary
-(:mod:`redact_secret_vault_server.core_client`) to the JavaScript-only
+(:mod:`redact_secret_vault.core_client`) to the JavaScript-only
 ``@redact-secret/core`` package, because no native Python distribution of the
 core exists (see docs/research/python-server-integration-2026-09-27.md). This
 package never reimplements secret detection.

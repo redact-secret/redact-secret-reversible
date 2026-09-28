@@ -38,3 +38,20 @@ The registry auto-assigns `latest` to a package's first published version, and n
 - `@redact-secret/vault-server`: `latest` and `alpha` → `0.1.0-alpha.2`.
 
 `latest` moves with the first stable publish (the first `x.y.z` version with no `-alpha`/`-beta` suffix), but only if that release is published with the `latest` tag. This workflow always publishes with each package's `publishConfig.tag` (currently `alpha`) and errors out rather than publish if that is ever `latest` (see `release.yml`'s "Resolve version and dist-tag" steps). So cutting the first stable release means changing `publishConfig.tag` from `alpha` to `latest` in each package's `package.json` (step 2, before tagging) and deliberately relaxing that guard in the same reviewed change; otherwise the stable version would publish under the `alpha` tag and `latest` would stay pinned to the last prerelease.
+
+## Python (not yet published)
+
+`redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) has never been uploaded to PyPI or any other index; it installs only from this repository. **No publish workflow exists for it yet.** `release.yml` publishes only the npm packages and never builds or uploads a Python distribution. It was named `redact-secret-vault-server` until [#56](https://github.com/redact-secret/redact-secret-vault/issues/56); that name was never published.
+
+The intended setup is PyPI trusted publishing (OIDC), mirroring the npm packages, so no PyPI API token is ever stored in the repository. Because the project does not exist on PyPI yet, it has to start from a **pending publisher**, which PyPI turns into a normal trusted publisher on the first successful upload. This is manual, on pypi.org, and has not been done:
+
+- On pypi.org, open Account settings → Publishing → "Add a new pending publisher" → GitHub, with:
+  - PyPI project name: `redact-secret-vault`
+  - Owner: `redact-secret`
+  - Repository name: `redact-secret-vault`
+  - Workflow name: the future Python publish workflow's file name (for example `release-python.yml`; it must match the file that is eventually added)
+  - Environment name: `pypi`
+- Create a GitHub environment named `pypi` in the repository settings, restricted to release tags, so only a reviewed tag can reach the upload job.
+- A pending publisher does not reserve the name. Anyone can register `redact-secret-vault` on PyPI until the first upload, so the first publish should follow soon after the pending publisher is created.
+
+Adding the workflow is separate, reviewed work. It should build the sdist and wheel, run the Python tests against the built wheel, and upload with `pypa/gh-action-pypi-publish` from a job that alone holds `id-token: write` and runs in the `pypi` environment. Until that lands, the Python version in `pyproject.toml` (`0.1.0a2`) is a repository version only.

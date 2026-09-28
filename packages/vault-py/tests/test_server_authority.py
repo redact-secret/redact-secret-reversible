@@ -23,7 +23,7 @@ import shutil
 
 import pytest
 
-from redact_secret_vault_server import (
+from redact_secret_vault import (
     CaptureGrant,
     CaptureOptions,
     InMemoryVaultServer,
@@ -36,7 +36,7 @@ from redact_secret_vault_server import (
     VaultServerError,
     VaultServerErrorCode,
 )
-from redact_secret_vault_server.policies import (
+from redact_secret_vault.policies import (
     all_of,
     allow_same_tenant_only,
     deny_by_default,

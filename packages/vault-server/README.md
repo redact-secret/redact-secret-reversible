@@ -14,7 +14,7 @@ npm install @redact-secret/vault-server@0.1.0-alpha.2 @redact-secret/vault@0.1.0
 | --- | --- |
 | Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
 | Storage backend | In-memory only. `@redact-secret/store-*` persistent backends are a separate, later track ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) — this package does not implement or claim one |
-| Python | **Not in this package.** A research-grade native Python implementation of the same contract is [`redact-secret-vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
+| Python | **Not in this package.** A research-grade native Python implementation of the same contract is [`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
 | Streaming, arbitrary-text `restore(text)` | **Not supported**, matching `@redact-secret/vault` |
 | Browser | **Not a target.** This package assumes a server trust boundary (`PrincipalResolver` reads request-scoped, already-authenticated context); it is Node.js-only and is never bundled for a browser |
 

@@ -4,6 +4,8 @@
 **Issue:** [#42](https://github.com/redact-secret/redact-secret-vault/issues/42). **Decision:** [PII retention and activation ownership](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
 **Release candidate (added 2026-09-28, [#44](https://github.com/redact-secret/redact-secret-vault/issues/44)):** these packages are now versioned `@redact-secret/vault@0.1.0-alpha.2`, `@redact-secret/vault-server@0.1.0-alpha.2`, and `redact-secret-vault-server` `0.1.0a2`. The bump changed version fields only; the evidence below is unchanged. Published 2026-09-28 ([#55](https://github.com/redact-secret/redact-secret-vault/issues/55)); see [Registry verification](#registry-verification-010-alpha2). The Python package is not published to any index.
 
+**Rename note (added 2026-09-28, [#56](https://github.com/redact-secret/redact-secret-vault/issues/56)):** the Python distribution was later renamed, before any PyPI publish, to `redact-secret-vault` (module `redact_secret_vault`, directory `packages/vault-py`). This record keeps the names and paths as they were when the evidence was gathered; to reproduce the Python lane today, use `packages/vault-py`.
+
 ## Pinned core artifact
 
 | Package | Version | npm integrity |

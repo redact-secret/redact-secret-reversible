@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Qualified service boundary between the Python server authority package
- * (`redact-secret-vault-server`, #17) and the JavaScript-only
+ * (`redact-secret-vault`, #17) and the JavaScript-only
  * `@redact-secret/core` detection engine.
  *
  * No Python core package exists (verified against the `redact-secret/redact-secret`

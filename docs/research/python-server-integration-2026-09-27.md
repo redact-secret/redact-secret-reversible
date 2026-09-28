@@ -24,18 +24,18 @@ Inspected directly against the installed `@redact-secret/core@0.1.0-beta.9` (sam
 
 - **Findings** (`DetectedSecretFinding`/`SecretFinding`, `node_modules/@redact-secret/core/dist/types.d.ts`): `id` (`"finding-1"`, ...), `type` (for example `"github_token"`), `detector`, `confidence` (`"high"|"medium"|"low"`), `obfuscation` (`"none"|"invisible-characters"`), `start`/`end`, and — after policy evaluation — `action`. Never a matched value.
 - **Actions** (`SecretAction`): `"redact" | "block" | "warn" | "allow"`.
-- **Ranges** (`RangeUnit`): `"utf16-code-units"` — half-open `[start, end)` pairs; `input.slice(start, end)` (JS) selects exactly the matched span. Python has no native UTF-16 indexing (`str` indexes by Unicode code point), so this package converts offsets explicitly — see §3 and `src/redact_secret_vault_server/utf16.py`.
+- **Ranges** (`RangeUnit`): `"utf16-code-units"` — half-open `[start, end)` pairs; `input.slice(start, end)` (JS) selects exactly the matched span. Python has no native UTF-16 indexing (`str` indexes by Unicode code point), so this package converts offsets explicitly — see §3 and `src/redact_secret_vault/utf16.py`.
 - **Public functions**: `initialize`, `scan`, `redact`, `scanAndRedact`, `createIncrementalSanitizer`, `defaultPlaceholderFormatter`, `typedPlaceholderFormatter`, `PROFILE`, `RANGE_UNIT`, `VERSION`, `artifact()`.
 
 A native Python distribution, if one is built later, should expose the same finding fields, the same four actions, and the same UTF-16 range convention (or document its own convention explicitly) to stay a drop-in replacement for the boundary this package uses today.
 
 ## 2. Decision: qualified service boundary, not reimplementation
 
-`packages/vault-server-py/src/redact_secret_vault_server/core_client.py` defines `CoreClient` as a `Protocol` with one method, `scan`. `NodeCoreBridge` implements it by shelling out to `boundary/core_bridge.mjs`, a ~50-line Node.js script that imports `@redact-secret/core` and calls only its public `scan` API, returning safe finding metadata as JSON. Detection and policy evaluation happen entirely in the pinned core (Rust, via its Node addon or WASM fallback); this package never parses a secret pattern, never ships a detector table, and never sees a matched value cross the process boundary except as the exact UTF-16 span Python then slices from its own copy of the input text — the same value the caller already gave it.
+`packages/vault-py/src/redact_secret_vault/core_client.py` defines `CoreClient` as a `Protocol` with one method, `scan`. `NodeCoreBridge` implements it by shelling out to `boundary/core_bridge.mjs`, a ~50-line Node.js script that imports `@redact-secret/core` and calls only its public `scan` API, returning safe finding metadata as JSON. Detection and policy evaluation happen entirely in the pinned core (Rust, via its Node addon or WASM fallback); this package never parses a secret pattern, never ships a detector table, and never sees a matched value cross the process boundary except as the exact UTF-16 span Python then slices from its own copy of the input text — the same value the caller already gave it.
 
 This satisfies AGENTS.md/CONVENTIONS.md's "do not reimplement detectors": the boundary is thin, auditable, and calls only the documented public API, matching the one-way dependency direction (`reversible` may consume `core`'s public API; `core` never depends on `reversible`).
 
-**Threat boundary, failure behavior, residual risk** (`NodeCoreBridge`, `packages/vault-server-py/src/redact_secret_vault_server/core_client.py`):
+**Threat boundary, failure behavior, residual risk** (`NodeCoreBridge`, `packages/vault-py/src/redact_secret_vault/core_client.py`):
 
 - **Threat boundary:** same-host, server-side only (not qualified for browser/Worker/CSP contexts — that remains V1-V4's scope). Trusts the local `node` executable and the npm-installed `@redact-secret/core` resolved from this repository's workspace (or a caller-supplied script/executable). The bridge script is invoked with the caller's own text on stdin; it never receives untrusted network input directly, and it never echoes the request text back on any code path.
 - **PII:** the bridge also forwards a PII selection to `initialize({ pii })` and reports the core's activation identity; see §8.
@@ -44,7 +44,7 @@ This satisfies AGENTS.md/CONVENTIONS.md's "do not reimplement detectors": the bo
 
 ## 3. What this package implements
 
-`packages/vault-server-py` (`redact-secret-vault-server` on PyPI naming, module `redact_secret_vault_server`):
+`packages/vault-py` (distribution `redact-secret-vault`, module `redact_secret_vault`; named `redact-secret-vault-server` / `redact_secret_vault_server` in `packages/vault-server-py` when this record was written, renamed before any PyPI publish by [#56](https://github.com/redact-secret/redact-secret-vault/issues/56)):
 
 - **S1 authority contract** (`types.py`, `errors.py`, `policies.py`, `server.py`): `Principal`/`PrincipalResolver`, `RestoreDecisionInput` (the decision tuple), `PolicyDecision`/`ServerReleasePolicy`, `ServerDenialReason` (the vault's eight reasons plus the S1 additions, verbatim string values), `ServerAuditEvent`/`ServerAuditHook`, and the four reference policies (`deny_by_default`, `allow_same_tenant_only`, `purpose_limited`, `all_of`) from the ADR's "Reference policy examples", ported field-for-field to Python (`dataclass`/`enum.Enum`/`typing.Protocol` in place of `interface`/string-literal unions/bare function types).
 - **`InMemoryVaultServer.restore`** implements the ADR's exact nine-step preflight order (principal → marker/grammar+known-entry → source → tenant → expiry → sink/path → purpose → budget → policy), all-or-nothing across every occurrence of every path, exactly as `packages/vault/src/vault.ts:L529-L649` structures the in-memory vault's preflight (see the extensive inline citations in `server.py`).
@@ -64,7 +64,7 @@ Reproduce:
 
 ```bash
 npm ci   # installs @redact-secret/core at the repo root, for the bridge
-cd packages/vault-server-py
+cd packages/vault-py
 pip install -e ".[test,lint]"
 ruff check .
 pytest -q
@@ -111,7 +111,7 @@ Pinned to `@redact-secret/core@0.1.0-beta.9`, identical to the pin in [qualifica
 
 ## 8. PII selection, activation identity, and retention (#40)
 
-**Status:** implemented and tested, unreleased, 2026-09-28. Implements §1 and §3 "Python bridge" of the [PII retention and activation decision record](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md) for [#40](https://github.com/redact-secret/redact-secret-vault/issues/40), with the same rules `@redact-secret/vault` implements for #38 (`packages/vault/src/pii.ts`, ported as `src/redact_secret_vault_server/pii.py`). The pin stays `0.1.0-beta.9`. PII-on behavior was checked against a local build of the `0.1.0-beta.10` candidate, which is not on npm.
+**Status:** implemented and tested, unreleased, 2026-09-28. Implements §1 and §3 "Python bridge" of the [PII retention and activation decision record](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md) for [#40](https://github.com/redact-secret/redact-secret-vault/issues/40), with the same rules `@redact-secret/vault` implements for #38 (`packages/vault/src/pii.ts`, ported as `src/redact_secret_vault/pii.py`). The pin stays `0.1.0-beta.9`. PII-on behavior was checked against a local build of the `0.1.0-beta.10` candidate, which is not on npm.
 
 The issue text asked the bridge to report `"off"` on beta.9. The accepted decision record supersedes that: the bridge reports `piiActivation: null` and does not invent an identity string.
 
