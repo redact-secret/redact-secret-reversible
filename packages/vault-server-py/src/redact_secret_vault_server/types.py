@@ -30,6 +30,7 @@ __all__ = [
     "ServerAuditEvent",
     "ServerAuditHook",
     "CaptureGrant",
+    "PiiRetention",
     "CaptureOptions",
     "IssuedToken",
     "CaptureResult",
@@ -174,6 +175,18 @@ class CaptureGrant:
 
 
 @dataclass(frozen=True, slots=True)
+class PiiRetention:
+    """PII retention opt-in (docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md
+    §1). ``retain`` lists 1 to 64 exact public PII finding types (``pii_``
+    then ``[a-z0-9_-]``, at most 128 characters). No wildcards, prefixes, or
+    selectors. Duplicates are ignored. Unknown but well-formed names are
+    accepted and simply never match: this package does not know the core's
+    inventory."""
+
+    retain: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CaptureOptions:
     issued_tenant: str
     release: tuple[CaptureGrant, ...]
@@ -181,6 +194,10 @@ class CaptureOptions:
     unredacted: str = "reject"  # "reject" | "pass-through"
     policy: Mapping[str, str] | None = None
     eligible: Callable[[Mapping[str, Any]], bool] | None = None
+    # A `redact` finding whose type starts `pii_` is retained only when its
+    # exact type is listed here; `eligible` is then consulted and can only
+    # narrow the list. Omit to retain no PII finding.
+    pii: PiiRetention | None = None
 
 
 @dataclass(frozen=True, slots=True)

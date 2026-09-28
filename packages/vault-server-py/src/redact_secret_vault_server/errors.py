@@ -27,6 +27,9 @@ class VaultServerErrorCode(str, Enum):
     RESTORE_DENIED = "RESTORE_DENIED"
     BUSY = "BUSY"
     DISPOSED = "DISPOSED"
+    # docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md §3.
+    PII_UNAVAILABLE = "PII_UNAVAILABLE"
+    PII_ACTIVATION_MISMATCH = "PII_ACTIVATION_MISMATCH"
 
 
 class ServerDenialReason(str, Enum):
