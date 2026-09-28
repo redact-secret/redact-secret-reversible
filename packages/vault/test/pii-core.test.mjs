@@ -2,8 +2,8 @@
 // (docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md,
 // "Verification before implementation is accepted").
 //
-// Requires a core with a PII surface (beta.10 or later). With the pinned
-// beta.9 every test here is skipped with a stated reason; the same contract
+// Requires a core with a PII surface (beta.10 or later). With a beta.9
+// core every test here is skipped with a stated reason; the same contract
 // is covered against a fake core in pii.test.mjs.
 //
 // PII activation is realm-global and one-shot, so each scenario runs in its

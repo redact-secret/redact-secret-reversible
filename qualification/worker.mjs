@@ -44,12 +44,12 @@ writeFileSync(
 writeFileSync(
   join(dir, "worker-entry.js"),
   `import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
-startVaultWorkerHost();
+startVaultWorkerHost({ pii: [] }); // PII off; core beta.10+ needs a choice or an initialized core
 `,
 );
 // PII activation control (#39): the Worker script, not the page, states a
-// PII selection for its own realm. On a core without a PII surface (the
-// pinned beta.9) this must fail closed with PII_UNAVAILABLE; on a PII-capable
+// PII selection for its own realm. On a core without a PII surface
+// (beta.9) this must fail closed with PII_UNAVAILABLE; on a PII-capable
 // core it must report the activation it observed in the Worker realm.
 writeFileSync(
   join(dir, "worker-pii-entry.js"),

@@ -36,7 +36,7 @@ DEFAULT_BRIDGE_SCRIPT = Path(__file__).parent / "boundary" / "core_bridge.mjs"
 # pin in this repository's root package.json and
 # docs/research/qualification-0.1.0-alpha.1.md. A response reporting a
 # different version is treated as CORE_FAILURE rather than silently trusted.
-PINNED_CORE_VERSION = "0.1.0-beta.9"
+PINNED_CORE_VERSION = "0.1.0-beta.10"
 
 
 @dataclass(frozen=True, slots=True)

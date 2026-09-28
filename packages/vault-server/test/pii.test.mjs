@@ -1,6 +1,6 @@
 // PII options are forwarded verbatim to @redact-secret/vault
 // (docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md §3).
-// These run against the installed core; with the pinned beta.9 they assert
+// These run against the installed core; with a beta.9 core they assert
 // the fail-closed compatibility rules (§4) and skip if the core has a PII
 // surface. PII-on behavior through this package is in pii-core.test.mjs.
 import assert from "node:assert/strict";
@@ -56,6 +56,32 @@ test("beta.9: capture pii retention is forwarded and fails PII_UNAVAILABLE", { s
     vaultFailure("INVALID_ARGUMENT"),
   );
   assert.equal((await server.stats()).entries, 0);
+});
+
+// On a PII-capable core (beta.10+) the same forwarding is checked against a
+// realm the vault locks off with `pii: []` (this file has its own process).
+const SKIP_UNLESS_PII = typeof core.piiActivation === "function"
+  ? false
+  : "installed @redact-secret/core has no PII surface; PII-off activation checks need beta.10+";
+
+test("PII-capable core: pii: [] locks the realm off; malformed options and capture retention are forwarded", { skip: SKIP_UNLESS_PII }, async () => {
+  await assert.rejects(open({ pii: "pii" }), vaultFailure("INVALID_ARGUMENT"));
+  const server = await open({ pii: [] });
+  assert.equal(server.piiActivation, core.piiActivation());
+  const captured = await server.capture(`secret ${SECRET_A}`, { release: [{ sink: "s", paths: ["p"] }], issuedTenant: "tenant-acme-synthetic" });
+  assert.equal(captured.tokens.length, 1);
+  await assert.rejects(
+    server.capture(`secret ${SECRET_A}`, {
+      release: [{ sink: "s", paths: ["p"] }],
+      issuedTenant: "tenant-acme-synthetic",
+      pii: { retain: ["pii_global_iban"] },
+    }),
+    vaultFailure("PII_UNAVAILABLE"),
+  );
+  await assert.rejects(
+    server.capture("x", { release: [{ sink: "s", paths: ["p"] }], issuedTenant: "tenant-acme-synthetic", pii: { retain: [] } }),
+    vaultFailure("INVALID_ARGUMENT"),
+  );
 });
 
 test("coreCode is carried only for VAULT_FAILURE / CORE_FAILURE", () => {

@@ -1,6 +1,6 @@
 // PII-on behavior through @redact-secret/vault-server against the *real*
 // installed core. Requires a core with a PII surface (beta.10 or later);
-// skipped with a stated reason on the pinned beta.9.
+// skipped with a stated reason on a beta.9 core.
 //
 // Node's test runner gives this file its own process, so the application's
 // activation below is the realm's first. Imports are by package name so the

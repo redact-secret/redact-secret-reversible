@@ -5,7 +5,7 @@
 // - a fake core (./fake-core.mjs) injected through the internal `openVault`,
 //   which models both a PII-capable core and a beta.9-shaped one; and
 // - the installed @redact-secret/core through the public `createVault`. With
-//   the pinned beta.9 those tests assert the fail-closed compatibility rules
+//   a beta.9 core those tests assert the fail-closed compatibility rules
 //   (ADR §4); they skip, with a reason, if the installed core has a PII surface.
 //
 // All data is synthetic: FAKEPII-… markers and a revoked-looking token shape.
@@ -378,7 +378,7 @@ test("block still rejects the whole capture for PII", async () => {
   assert.equal(vault.stats().entries, 0);
 });
 
-// --- the installed core (beta.9 in CI) -------------------------------------
+// --- the installed core (beta.10 in CI) -------------------------------------
 
 test("installed core without a PII surface: createVault() and pii: [] observe piiActivation === null", { skip: BETA9_ONLY }, async () => {
   const a = await createVault();

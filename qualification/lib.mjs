@@ -13,7 +13,7 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // satisfy the core's native addon from the repo and mask the WASM fallback).
 export const WORK = process.env.QUALIFICATION_DIR ?? join(tmpdir(), "redact-secret-vault-qualification");
 export const REPORTS = join(ROOT, ".qualification", "reports");
-export const CORE_VERSION = "0.1.0-beta.9";
+export const CORE_VERSION = "0.1.0-beta.10";
 
 // Shared by browser.mjs and worker.mjs (not re-exported from browser.mjs: that
 // module's top level has side effects and launches real browsers on import).

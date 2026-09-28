@@ -38,12 +38,13 @@ document.addEventListener("securitypolicyviolation", (e) => violations.push(e.ef
 
 const mode = new URLSearchParams(location.search).get("mode");
 if (mode === "no-wasm") {
-  vault.createVault().then(
+  vault.createVault({ pii: [] }).then(
     () => { window.__result = { created: true }; },
     (e) => { window.__result = { created: false, code: e.code, coreCode: e.coreCode, violations }; },
   );
 } else {
-  runSuite({ vault, core, corpus }).then(
+  // The application owns PII activation (core beta.10+ requires it before createVault()).
+  core.initialize({ pii: [] }).then(() => runSuite({ vault, core, corpus })).then(
     (report) => { report.cspViolations = violations; window.__result = report; },
     (e) => { window.__result = { fatal: String(e && e.code || "non-vault failure") }; },
   );

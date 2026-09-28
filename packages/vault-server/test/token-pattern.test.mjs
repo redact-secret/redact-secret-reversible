@@ -11,7 +11,7 @@ import { TOKEN_PATTERN, MARKER_PATTERN } from "../dist/token-pattern.js";
 import { SECRET_A } from "./helpers.mjs";
 
 test("a token issued by the real vault matches this package's local grammar exactly", async () => {
-  const vault = await createVault();
+  const vault = await createVault({ pii: [] });
   try {
     const { text, tokens } = vault.capture(`value ${SECRET_A} end`, {
       release: [{ sink: "s", paths: ["p"] }],

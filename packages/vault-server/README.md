@@ -3,7 +3,7 @@
 **Alpha.** Server authority for restoring values captured by [`@redact-secret/vault`](../vault/README.md) across principals, tenants, sources, destinations, and purposes, with an in-memory storage backend. Implements the interface fixed by [the server authority ADR](../../docs/decisions/2026-09-27-define-server-authority-interface.md) (S1, #15): `PrincipalResolver`, `ServerReleasePolicy`, `ServerDenialReason`, and `ServerAuditEvent`.
 
 ```bash
-npm install @redact-secret/vault-server@alpha @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.9
+npm install @redact-secret/vault-server@alpha @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.10
 ```
 
 ## Supported, and not
@@ -31,6 +31,10 @@ const server = await createServerVault({
       ? { allow: true }
       : { allow: false, reason: "policy" },
   onAudit: (event) => auditSink.write(event), // no field can carry a restored value
+  // Core PII activation is the application's: `pii: []` initializes the core with
+  // PII off. Omit it only if your code already awaited the core's `initialize(...)`;
+  // otherwise this fails VAULT_FAILURE / CORE_FAILURE / NOT_INITIALIZED.
+  pii: [],
 });
 
 const captured = await server.capture(userText, {
@@ -118,7 +122,7 @@ Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the sh
 
 ## Core compatibility
 
-This package adds no direct dependency on `@redact-secret/core`; it depends on `@redact-secret/vault@0.1.0-alpha.1`, whose core peer range is pinned exactly to `0.1.0-beta.9`. See the [qualification record](../../docs/research/qualification-0.1.0-alpha.1.md).
+This package adds no direct dependency on `@redact-secret/core`; its `@redact-secret/core` peer is pinned exactly to `0.1.0-beta.10`, the same core `@redact-secret/vault` requires. `0.1.0-alpha.1` pinned `0.1.0-beta.9` (see the [qualification record](../../docs/research/qualification-0.1.0-alpha.1.md)).
 
 ## Security reports
 

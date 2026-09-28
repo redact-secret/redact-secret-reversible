@@ -19,6 +19,8 @@ import * as core from "@redact-secret/core";
 import { readFileSync } from "node:fs";
 import { runSuite } from "./suite.js";
 const corpus = JSON.parse(readFileSync(new URL("./corpus.json", import.meta.url), "utf8"));
+// The application owns PII activation (core beta.10+ requires it before createVault()).
+await core.initialize({ pii: [] });
 const report = await runSuite({ vault, core, corpus });
 process.stdout.write(JSON.stringify(report));
 `,
