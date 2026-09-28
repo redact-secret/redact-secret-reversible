@@ -2,6 +2,7 @@
 
 **Status:** executed evidence, 2026-09-28, for the unreleased packages on `main` (`@redact-secret/vault` and `@redact-secret/vault-server` after [#38](https://github.com/redact-secret/redact-secret-reversible/issues/38)–[#41](https://github.com/redact-secret/redact-secret-reversible/issues/41), and `redact-secret-vault-server` for Python after [#40](https://github.com/redact-secret/redact-secret-reversible/issues/40)). It is additional to the [0.1.0-alpha.1 record](qualification-0.1.0-alpha.1.md) and the [Worker-mode record](qualification-worker-mode.md). Those records describe core `0.1.0-beta.9` and stay as recorded. `@redact-secret/vault@0.1.0-alpha.1` is still the release for beta.9. This record qualifies no published vault version.
 **Issue:** [#42](https://github.com/redact-secret/redact-secret-reversible/issues/42). **Decision:** [PII retention and activation ownership](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
+**Release candidate (added 2026-09-28, [#44](https://github.com/redact-secret/redact-secret-reversible/issues/44)):** these packages are now versioned `@redact-secret/vault@0.1.0-alpha.2`, `@redact-secret/vault-server@0.1.0-alpha.2`, and `redact-secret-vault-server` `0.1.0a2`. The bump changed version fields only; the evidence below is unchanged. Nothing is published until a maintainer approves the release, and the post-publish registry check (RELEASING.md step 5) is still to run.
 
 ## Pinned core artifact
 

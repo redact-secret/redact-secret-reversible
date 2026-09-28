@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/vault",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Opt-in, bounded, in-memory vault that restores values redacted by @redact-secret/core into application-designated fields.",
   "license": "MIT",
   "type": "module",

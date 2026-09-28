@@ -36,7 +36,7 @@ export function run(cmd, args, cwd) {
 /**
  * Builds and packs the vault once; returns the tarball path.
  *
- * Set `VAULT_SPEC` (e.g. `@redact-secret/vault@0.1.0-alpha.1`) to skip the
+ * Set `VAULT_SPEC` (e.g. `@redact-secret/vault@0.1.0-alpha.2`) to skip the
  * local build/pack and return that npm install spec instead, so the
  * qualification runners install the *published registry package* rather than
  * the working tree. This is the post-publish registry verification in

@@ -2,7 +2,15 @@
 
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret).
 
-**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). An optional, separately qualified dedicated-Worker mode is also available ([worker qualification record](docs/research/qualification-worker-mode.md), [#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)); it is not an implicit upgrade over main-thread use, and the two modes' guarantees are documented separately. [`@redact-secret/vault-server`](packages/vault-server/README.md) `0.1.0-alpha.1` adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). On `main`, the unreleased packages pin `@redact-secret/core@0.1.0-beta.10` and add opt-in PII activation and retention ([decision record](docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)). They are qualified against beta.10 with PII off and on in Node.js, three browser engines on the main thread and in a dedicated Worker, and the Python bridge ([beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md), [#42](https://github.com/redact-secret/redact-secret-reversible/issues/42)). No published release includes them yet. Persistent stores and streaming remain design work; nothing here claims them.
+**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, with an optional, separately qualified dedicated-Worker mode ([worker qualification record](docs/research/qualification-worker-mode.md), [#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)); Worker mode is not an implicit upgrade over main-thread use, and the two modes' guarantees are documented separately. [`@redact-secret/vault-server`](packages/vault-server/README.md) adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). Persistent stores and streaming remain design work; nothing here claims them.
+
+| Release | Core | State |
+| --- | --- | --- |
+| `@redact-secret/vault@0.1.0-alpha.1` | `@redact-secret/core@0.1.0-beta.9` exactly | Published (npm `alpha` tag). No PII support. [Qualification record](docs/research/qualification-0.1.0-alpha.1.md) |
+| `@redact-secret/vault@0.1.0-alpha.2`, `@redact-secret/vault-server@0.1.0-alpha.2` | `@redact-secret/core@0.1.0-beta.10` exactly | Release candidate on `main`, **not yet published** ([#44](https://github.com/redact-secret/redact-secret-reversible/issues/44)). Adds opt-in PII activation and retention ([decision record](docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)), Worker protocol v2, and a breaking initialization change; see the [changelog](CHANGELOG.md). Qualified with PII off and on in Node.js, three browser engines on the main thread and in a dedicated Worker, and the Python bridge ([beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md)) |
+| `redact-secret-vault-server` (Python) `0.1.0a2` | `@redact-secret/core@0.1.0-beta.10` through the bridge | Not published to any index; install from this repository |
+
+`@redact-secret/vault-server` has never been published; its first published version will be `0.1.0-alpha.2`. Install exact versions rather than a dist-tag: `@alpha` resolves to `0.1.0-alpha.1`, which peers core beta.9 and conflicts with core beta.10.
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -21,20 +29,28 @@ Dependency direction is one way: this repository may consume the core's document
 
 The agreed JavaScript package names describe two different responsibilities:
 
-| Package | Proposed responsibility | Intended runtimes |
-| --- | --- | --- |
-| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
-| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | Qualified: Node.js 20/22/24. Not yet: persistent backends |
-| `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
-| `redact-secret-vault-server` (Python, [packages/vault-server-py](packages/vault-server-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | Python 3.10+ server processes with a `node` executable available |
+| Package | Responsibility | Version on `main` | Runtimes |
+| --- | --- | --- | --- |
+| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | `0.1.0-alpha.2` (candidate; `0.1.0-alpha.1` published) | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
+| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | `0.1.0-alpha.2` (candidate; never published) | Tested: Node.js 20/22/24. Not yet: persistent backends |
+| `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [contract](docs/decisions/2026-09-27-define-persistent-store-contract.md) only) | None | Backend-specific server environments |
+| `redact-secret-vault-server` (Python, [packages/vault-server-py](packages/vault-server-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0a2` (unpublished) | Python 3.10+ server processes with a `node` executable available |
+
+All packages on `main` pin `@redact-secret/core@0.1.0-beta.10` exactly:
+
+```bash
+# Once 0.1.0-alpha.2 is published (not yet):
+npm install @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault-server@0.1.0-alpha.2 @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
+```
 
 A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
 
 ## Typed placeholders are independent
 
-The core already offers a typed formatter using safe finding metadata, such as `<JWT_1>`. If a future PII detector reports type `ssn`, a typed display label such as `<SSN_1>` remains a core formatting concern. Such a label does **not** imply that the original value was retained or can be restored.
+The core offers a typed formatter using safe finding metadata, such as `<JWT_1>`. Core `0.1.0-beta.10` adds real, opt-in PII finding types, all prefixed `pii_` (for example `pii_global_email`, `pii_global_iban`, `pii_jurisdiction_us_ssn`). A typed display label for one of them, whether the core's `typedPlaceholderFormatter` output (`<PII_JURISDICTION_US_SSN_1>`) or an application label such as `<SSN_1>`, is still a core formatting concern. It grants nothing and does **not** imply that the original value was retained or can be restored.
 
-A reversible token will need a session-scoped, collision-resistant identity and an authorized mapping lookup. Its exact syntax is not yet selected. Restoration must not infer authority from the visible type name or parse a core display placeholder as proof of ownership. See [typed placeholder decision](docs/decisions/2026-09-27-decouple-typed-placeholders-from-restoration.md).
+Restoration needs an issued vault token (`<rsv_…>`, 128 random bits, bound to one vault and capture) plus an application grant for the sink and exact path. A PII value is retained only when the application names its exact type in the capture's PII allowlist (`pii: { retain: [...] }`); every other PII finding is replaced by a display placeholder that cannot be restored. Restoration never infers authority from a visible type name or parses a core display placeholder as proof of ownership. See [typed placeholder decision](docs/decisions/2026-09-27-decouple-typed-placeholders-from-restoration.md) and the [PII retention decision](docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
 
 ## Security direction
 
@@ -61,6 +77,8 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](docs/research/qualification-0.1.0-alpha.1.md): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
+- [Core beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md): PII-off and PII-on matrix for the 0.1.0-alpha.2 candidate.
+- [Changelog](CHANGELOG.md): release notes, including the 0.1.0-alpha.2 breaking changes and migration.
 - [Worker-mode qualification record](docs/research/qualification-worker-mode.md): tested evidence for the optional dedicated-Worker mode, including its hostile-main-thread and CSP negative-control evidence.
 - [Conformance corpus](conformance/README.md): language-neutral adversarial cases.
 - [Security policy](SECURITY.md) and [releasing](RELEASING.md).
