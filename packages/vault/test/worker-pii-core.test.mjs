@@ -175,6 +175,104 @@ test("real core: Worker-mode default-confidence warn PII x unredacted reject / p
   `);
 });
 
+// The Worker script owns a core policy for its captures (#59). PHONE is the
+// Medium / default-warn value above; the policy escalates it to redact.
+test("real core: Worker-script policy escalates default-warn PII to redact; restorable only with pii.retain", { skip: NEEDS_PII }, () => {
+  scenario(`
+    const PHONE = "555-2345";
+    const input = "telephone=" + PHONE + " token " + GH;
+    const policy = { evaluate: (f) => (f.type === "pii_global_phone" ? "redact" : f.confidence === "high" ? "redact" : "warn") };
+    const v = await (await connect({ pii: ["pii"], policy })).vault;
+    // Guard: without a policy the core still rates this input Medium / warn.
+    assert.deepEqual(core.scan(input).map((f) => [f.type, f.confidence, f.action]), [["pii_global_phone", "medium", "warn"], ["github_token", "high", "redact"]]);
+
+    const escalated = await v.capture(input, { release: RELEASE });
+    assert.equal(escalated.passedThrough, 0);
+    assert.equal(escalated.unrestorable, 1);
+    assert.deepEqual(escalated.tokens.map((t) => t.type), ["github_token"]);
+    assert.ok(!escalated.text.includes(PHONE) && !escalated.text.includes(GH), "plaintext left in the text");
+    const restored = await v.restore({ sink: "sink-a", captures: [escalated.captureId], fields: { body: escalated.text } });
+    assert.ok(!restored.fields.body.includes(PHONE), "an unretained PII value restored");
+
+    const kept = await v.capture(input, { release: RELEASE, pii: { retain: ["pii_global_phone"] } });
+    assert.deepEqual(kept.tokens.map((t) => t.type).sort(), ["github_token", "pii_global_phone"]);
+    assert.equal(kept.unrestorable, 0);
+    assert.ok(!kept.text.includes(PHONE));
+    const back = await v.restore({ sink: "sink-a", captures: [kept.captureId], fields: { body: kept.text } });
+    assert.equal(back.fields.body, input);
+
+    // High-confidence PII under the same policy keeps its redact, non-restorable by default.
+    const iban = await v.capture("iban " + IBAN, { release: RELEASE });
+    assert.equal(iban.unrestorable, 1);
+    assert.ok(!iban.text.includes(IBAN));
+  `);
+});
+
+test("real core: without a Worker-script policy, default-warn PII still rejects or passes through", { skip: NEEDS_PII }, () => {
+  scenario(`
+    const PHONE = "555-2345";
+    const v = await (await connect({ pii: ["pii"] })).vault;
+    const input = "telephone=" + PHONE;
+    await rejectsWith(v.capture(input, { release: RELEASE }), "UNREDACTED_FINDINGS");
+    const passed = await v.capture(input, { release: RELEASE, unredacted: "pass-through" });
+    assert.deepEqual(passed.passedThroughTypes, ["pii_global_phone"]);
+    assert.ok(passed.text.includes(PHONE));
+  `);
+});
+
+test("real core: a Worker-script policy returning block rejects with BLOCKED_FINDING, nothing committed", { skip: NEEDS_PII }, () => {
+  scenario(`
+    const PHONE = "555-2345";
+    const policy = { evaluate: (f) => (f.type === "pii_global_phone" ? "block" : "redact") };
+    const v = await (await connect({ pii: ["pii"], policy })).vault;
+    await rejectsWith(v.capture("telephone=" + PHONE + " token " + GH, { release: RELEASE, unredacted: "pass-through" }), "BLOCKED_FINDING");
+    assert.equal((await v.stats()).entries, 0);
+  `);
+});
+
+test("real core: a throwing or invalid-action Worker-script policy fails the capture exactly as on the main thread", { skip: NEEDS_PII }, () => {
+  scenario(`
+    const PHONE = "555-2345";
+    const { createVault } = await import("@redact-secret/vault");
+    const main = await createVault({ pii: ["pii"] });
+    const cases = [
+      ["throws", { evaluate() { throw new Error("policy failure " + PHONE); } }, "POLICY_FAILURE"],
+      ["invalid", { evaluate: () => "escalate" }, "INVALID_POLICY_ACTION"],
+    ];
+    for (const [name, policy, coreCode] of cases) {
+      let expected;
+      try { main.capture("telephone=" + PHONE, { release: RELEASE, policy }); } catch (e) { expected = { code: e.code, coreCode: e.coreCode }; }
+      assert.deepEqual(expected, { code: "CORE_FAILURE", coreCode }, name + " (main thread)");
+      const v = await (await connect({ policy })).vault;
+      const before = await v.stats();
+      let got;
+      try { await v.capture("telephone=" + PHONE + " token " + GH, { release: RELEASE }); } catch (e) {
+        assert.ok(e instanceof VaultError, name);
+        got = { code: e.code, coreCode: e.coreCode };
+        assert.ok(!String(e.message).includes(PHONE) && !JSON.stringify(e).includes(PHONE), name + ": value in error");
+      }
+      assert.deepEqual(got, expected, name + " (Worker)");
+      assert.deepEqual(await v.stats(), before, name + ": the failed capture committed something");
+    }
+  `);
+});
+
+test("real core: an invalid Worker-script policy is vault-init-failed INVALID_ARGUMENT and leaves the realm uninitialized", { skip: NEEDS_PII }, () => {
+  scenario(`
+    const { port, scope } = channel();
+    const handshake = nextHandshake(port);
+    await startVaultWorkerHost({ pii: ["pii"], policy: { evaluate: "redact" }, target: scope });
+    assert.deepEqual(await handshake, { kind: "vault-init-failed", v: 2, code: "INVALID_ARGUMENT" });
+    let code;
+    try { core.piiActivation(); } catch (e) { code = e.code; }
+    assert.equal(code, "NOT_INITIALIZED", "an invalid policy still activated the core");
+    const ready = channel();
+    const message = nextHandshake(ready.port);
+    await startVaultWorkerHost({ pii: ["pii"], policy: { evaluate: () => "redact" }, target: ready.scope });
+    assert.deepEqual(Object.keys(await message).sort(), ["kind", "piiActivation", "v"]);
+  `);
+});
+
 test("real core: a hostile page cannot change the Worker realm's activation", { skip: NEEDS_PII }, () => {
   scenario(`
     const { vault, port } = await connect({ pii: ["pii"] });
