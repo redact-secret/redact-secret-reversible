@@ -1,4 +1,4 @@
-import type { AuditHook, CaptureOptions, CaptureResult, VaultLimits } from "@redact-secret/vault";
+import type { AuditHook, CaptureOptions, CaptureResult, VaultLimits, VaultOptions } from "@redact-secret/vault";
 import type { DenialReason, VaultErrorCode } from "@redact-secret/vault";
 
 import type { ServerVaultErrorCode } from "./errors.js";
@@ -180,6 +180,12 @@ export interface ServerVaultStats {
 }
 
 export interface ServerVault<Context = unknown> {
+  /**
+   * The wrapped vault's `piiActivation`: the core's canonical PII activation
+   * identity observed at creation, or `null` when the installed core has no
+   * PII surface (beta.9).
+   */
+  readonly piiActivation: string | null;
   capture(input: string, options: ServerCaptureOptions): Promise<CaptureResult>;
   restore(request: ServerRestoreRequest<Context>): Promise<ServerRestoreResult>;
   /** Removes every entry of one capture and tombstones it so a later restore reports "revoked". */
@@ -221,6 +227,16 @@ export interface ServerVaultOptions<Context = unknown> {
   readonly resolverTimeoutMs?: number;
   /** Deadline for one `ServerReleasePolicy` call. Default 5000. Exceeding it denies "policy-evaluation-error". */
   readonly policyTimeoutMs?: number;
+  /**
+   * Forwarded verbatim to `@redact-secret/vault`'s `createVault({ pii })`:
+   * core PII selectors, `[]` for explicit "PII off", omitted to adopt the
+   * activation the application already established. This package adds no
+   * activation behavior of its own. See
+   * docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md §3.
+   */
+  readonly pii?: VaultOptions["pii"];
+  /** Forwarded verbatim to `createVault({ expectPiiActivation })`. */
+  readonly expectPiiActivation?: VaultOptions["expectPiiActivation"];
 }
 
 export type { DenialReason, VaultErrorCode } from "@redact-secret/vault";

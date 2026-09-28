@@ -20,7 +20,9 @@ export type VaultErrorCode =
   | "BUSY"
   | "DISPOSED"
   | "WORKER_PROTOCOL_VIOLATION"
-  | "WORKER_UNAVAILABLE";
+  | "WORKER_UNAVAILABLE"
+  | "PII_UNAVAILABLE"
+  | "PII_ACTIVATION_MISMATCH";
 
 const MESSAGES: Readonly<Record<VaultErrorCode, string>> = Object.freeze({
   INVALID_ARGUMENT: "The vault operation received an invalid argument.",
@@ -39,6 +41,9 @@ const MESSAGES: Readonly<Record<VaultErrorCode, string>> = Object.freeze({
   WORKER_PROTOCOL_VIOLATION:
     "A Worker-mode message did not match the validated protocol and was rejected.",
   WORKER_UNAVAILABLE: "The vault Worker did not respond, errored, or was terminated.",
+  PII_UNAVAILABLE:
+    "PII options were supplied, but the redaction core has no PII support or PII detection is not active.",
+  PII_ACTIVATION_MISMATCH: "The redaction core's PII activation differs from the expected activation.",
 });
 
 /** Every fixed error code, derived from {@link MESSAGES} so the two cannot drift. */

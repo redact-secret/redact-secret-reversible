@@ -32,15 +32,26 @@ export class VaultServerError extends Error {
   readonly reason: ServerDenialReason | undefined;
   /** Set only for `VAULT_FAILURE`: the wrapped `@redact-secret/vault` error's own fixed code. */
   readonly vaultCode: VaultErrorCode | undefined;
+  /**
+   * Set only for `VAULT_FAILURE` whose `vaultCode` is `CORE_FAILURE`: the
+   * core's own fixed error code (for example `PII_ACTIVATION_CONFLICT` or
+   * `NOT_INITIALIZED`), passed through from the wrapped `VaultError`.
+   */
+  readonly coreCode: string | undefined;
 
   constructor(
     code: ServerVaultErrorCode,
-    detail: { reason?: ServerDenialReason | undefined; vaultCode?: VaultErrorCode | undefined } = {},
+    detail: {
+      reason?: ServerDenialReason | undefined;
+      vaultCode?: VaultErrorCode | undefined;
+      coreCode?: string | undefined;
+    } = {},
   ) {
     super(MESSAGES[code]);
     this.name = "VaultServerError";
     this.code = code;
     this.reason = detail.reason;
     this.vaultCode = detail.vaultCode;
+    this.coreCode = code === "VAULT_FAILURE" && detail.vaultCode === "CORE_FAILURE" ? detail.coreCode : undefined;
   }
 }

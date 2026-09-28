@@ -66,6 +66,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      # Unit tests: PII retention/activation contract against a fake core,
+      # beta.9 fail-closed checks against the pinned core; real-core PII-on
+      # tests skip (with a stated reason) until the core has a PII surface.
+      - run: npm run test:vault
       - run: npm run qualify:node
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()

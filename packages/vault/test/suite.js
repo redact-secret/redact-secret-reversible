@@ -261,13 +261,45 @@ const runtimeChecks = {
     assert(!("restore" in V) && !("restoreText" in V), "a module-level restore shortcut exists");
   },
 
+  // ADR 2026-09-27 PII retention and activation ownership, §4: on a core
+  // without a PII surface (the pinned beta.9) every PII option fails closed
+  // before the core is called, `pii: []` equals omission, and the observed
+  // activation is null. On a PII-capable core the host runner owns
+  // activation, so only the identity type is checked here.
+  async "pii-options-fail-closed-without-pii-surface"(V, C, F, observed) {
+    if (typeof C.piiActivation === "function") {
+      const vault = await V.createVault();
+      assert(typeof vault.piiActivation === "string", "a PII-capable core must report an identity");
+      vault.dispose();
+      return;
+    }
+    const plain = await V.createVault();
+    const empty = await V.createVault({ pii: [] });
+    assert(plain.piiActivation === null && empty.piiActivation === null, "piiActivation must be null without a PII surface");
+    assert(plain.capture(F.GH, { release: RELEASE }).tokens.length === empty.capture(F.GH, { release: RELEASE }).tokens.length, "pii: [] must equal omission");
+    for (const options of [{ pii: ["pii"] }, { expectPiiActivation: "credentials=full;selectors=off" }]) {
+      let error;
+      try {
+        await V.createVault(options);
+      } catch (thrown) {
+        error = thrown;
+        observed.errors.push(thrown);
+      }
+      assert(error instanceof V.VaultError && error.code === "PII_UNAVAILABLE", `expected PII_UNAVAILABLE, got ${error?.code}`);
+    }
+    expectVaultError(V, observed, () => plain.capture(F.GH, { release: RELEASE, pii: { retain: ["pii_global_iban"] } }), "PII_UNAVAILABLE");
+    expectVaultError(V, observed, () => plain.capture(F.GH, { release: RELEASE, pii: { retain: [] } }), "INVALID_ARGUMENT");
+    plain.dispose();
+    empty.dispose();
+  },
+
   async "vault-exposes-no-bulk-export"(V, C, F) {
     const vault = await V.createVault();
     vault.capture(`${F.GH}`, { release: RELEASE });
     const surface = new Set();
     for (let o = vault; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) Object.getOwnPropertyNames(o).forEach((n) => surface.add(n));
     surface.delete("constructor");
-    assert(JSON.stringify([...surface].sort()) === JSON.stringify(["capture", "dispose", "restore", "revoke", "stats"]), `unexpected vault surface ${[...surface]}`);
+    assert(JSON.stringify([...surface].sort()) === JSON.stringify(["capture", "dispose", "piiActivation", "restore", "revoke", "stats"]), `unexpected vault surface ${[...surface]}`);
     const serialized = JSON.stringify(vault) + String(vault) + JSON.stringify(vault.stats());
     assert(!serialized.includes(F.GH), "serializing the vault exposed a value");
     vault.dispose();

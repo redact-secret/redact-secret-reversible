@@ -12,6 +12,7 @@
     "qualify:browser": "node qualification/browser.mjs",
     "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs",
+    "test:vault": "npm run build -w @redact-secret/vault && npm run test -w @redact-secret/vault",
     "test:vault-server": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server && npm run test -w @redact-secret/vault-server"
   },
   "devDependencies": {

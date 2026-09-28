@@ -1,17 +1,20 @@
-import {
-  defaultPlaceholderFormatter,
-  initialize,
-  redact,
-  scan,
-} from "@redact-secret/core";
 import type {
   PlaceholderContext,
   PlaceholderFormatter,
   SecretFinding,
 } from "@redact-secret/core";
 
+import { activateCore, installedCore } from "./core-module.js";
+import type { CoreModule } from "./core-module.js";
 import { coreCodeOf, VaultError } from "./errors.js";
 import type { DenialReason, VaultErrorCode } from "./errors.js";
+import {
+  isPiiActive,
+  isPiiFindingType,
+  resolveExpectedPiiActivation,
+  resolvePiiRetention,
+  resolvePiiSelection,
+} from "./pii.js";
 import {
   countMatches,
   MARKER_PATTERN,
@@ -169,11 +172,29 @@ function monotonicEpochClock(): () => number {
 /**
  * Opens an explicit, bounded, in-memory vault session.
  *
- * Importing this package creates nothing; only this call does. It awaits the
- * core's `initialize()` and captures the platform CSPRNG, failing with
- * `UNSUPPORTED_RUNTIME` when `crypto.getRandomValues` is unavailable.
+ * Importing this package creates nothing; only this call does. It captures
+ * the platform CSPRNG, failing with `UNSUPPORTED_RUNTIME` when
+ * `crypto.getRandomValues` is unavailable, then establishes the core:
+ *
+ * - On a core without a PII surface (beta.9) it awaits `initialize()`; any
+ *   PII option fails `PII_UNAVAILABLE` first (`pii: []` equals omission).
+ * - On a core with a PII surface it forwards `options.pii` to
+ *   `initialize({ pii })` when supplied, and otherwise adopts the activation
+ *   the application already established without calling any initializer.
+ *
+ * See docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md §3.
  */
 export async function createVault(options: VaultOptions = {}): Promise<Vault> {
+  return openVault(installedCore, options);
+}
+
+/**
+ * `createVault` against an explicit core module. Internal: not exported from
+ * the package entry point. It exists so tests can exercise the PII
+ * activation contract against a fake core without replacing the installed
+ * `@redact-secret/core`.
+ */
+export async function openVault(core: CoreModule, options: VaultOptions = {}): Promise<Vault> {
   if (typeof options !== "object" || options === null) throw new VaultError("INVALID_ARGUMENT");
   const limits = resolveLimits(options.limits);
   const releasePolicy: ReleasePolicy | undefined = options.releasePolicy;
@@ -190,11 +211,11 @@ export async function createVault(options: VaultOptions = {}): Promise<Vault> {
   const fill = resolveRandomFill();
   if (fill === undefined) throw new VaultError("UNSUPPORTED_RUNTIME");
 
-  try {
-    await initialize();
-  } catch (thrown) {
-    throw new VaultError("CORE_FAILURE", { coreCode: coreCodeOf(thrown) });
-  }
+  // ADR §3 step 1: shape only. The core owns selector grammar.
+  const selection = resolvePiiSelection(options.pii);
+  const expected = resolveExpectedPiiActivation(options.expectPiiActivation);
+  // Steps 2 to 6: forward the application's selection or adopt; observe once.
+  const piiActivation = await activateCore(core, selection, expected);
 
   let latest = Number.NEGATIVE_INFINITY;
   const now = (): number => {
@@ -212,10 +233,22 @@ export async function createVault(options: VaultOptions = {}): Promise<Vault> {
     return latest;
   };
 
-  return new InMemoryVault(limits, fill, now, releasePolicy, onAudit, now() + limits.vaultTtlMs);
+  return new InMemoryVault(
+    core,
+    piiActivation,
+    limits,
+    fill,
+    now,
+    releasePolicy,
+    onAudit,
+    now() + limits.vaultTtlMs,
+  );
 }
 
 class InMemoryVault implements Vault {
+  readonly piiActivation: string | null;
+  readonly #core: CoreModule;
+  readonly #piiActive: boolean;
   readonly #limits: VaultLimits;
   readonly #fill: RandomFill;
   readonly #now: () => number;
@@ -229,6 +262,8 @@ class InMemoryVault implements Vault {
   #busy = false;
 
   constructor(
+    core: CoreModule,
+    piiActivation: string | null,
     limits: VaultLimits,
     fill: RandomFill,
     now: () => number,
@@ -236,6 +271,10 @@ class InMemoryVault implements Vault {
     onAudit: AuditHook | undefined,
     expiresAt: number,
   ) {
+    this.#core = core;
+    this.piiActivation = piiActivation;
+    this.#piiActive = isPiiActive(piiActivation);
+    Object.defineProperty(this, "piiActivation", { value: piiActivation, writable: false, enumerable: true, configurable: false });
     this.#limits = limits;
     this.#fill = fill;
     this.#now = now;
@@ -354,11 +393,16 @@ class InMemoryVault implements Vault {
     const mode = options.unredacted ?? "reject";
     if (mode !== "reject" && mode !== "pass-through") throw new VaultError("INVALID_ARGUMENT");
     const eligible = options.eligible;
-    const display: PlaceholderFormatter = options.displayFormatter ?? defaultPlaceholderFormatter;
+    const display: PlaceholderFormatter =
+      options.displayFormatter ?? this.#core.defaultPlaceholderFormatter;
     if (eligible !== undefined && typeof eligible !== "function") {
       throw new VaultError("INVALID_ARGUMENT");
     }
     if (typeof display !== "function") throw new VaultError("INVALID_ARGUMENT");
+    // PII retention allowlist (ADR §1): validated before the core runs, and
+    // refused outright when the core cannot produce PII findings at all.
+    const piiRetain = resolvePiiRetention(options.pii);
+    if (piiRetain !== undefined && !this.#piiActive) throw new VaultError("PII_UNAVAILABLE");
 
     if (utf8Length(input) > this.#limits.maxInputBytes) throw new VaultError("LIMIT_EXCEEDED");
     // A token-like literal in the input would be indistinguishable from an
@@ -378,7 +422,7 @@ class InMemoryVault implements Vault {
 
     let findings: readonly SecretFinding[];
     try {
-      findings = scan(input, {
+      findings = this.#core.scan(input, {
         ...(options.policy === undefined ? {} : { policy: options.policy }),
         ...(options.ruleset === undefined ? {} : { ruleset: options.ruleset }),
         limits: coreLimits,
@@ -415,7 +459,12 @@ class InMemoryVault implements Vault {
           break;
         case "redact": {
           let keep = true;
-          if (eligible !== undefined) {
+          if (isPiiFindingType(finding.type) && (piiRetain === undefined || !piiRetain.has(finding.type))) {
+            // A PII finding outside the exact-type allowlist is never
+            // retained, and `eligible` is not consulted: it may narrow the
+            // allowlist, never widen it.
+            keep = false;
+          } else if (eligible !== undefined) {
             try {
               keep = eligible(finding) === true;
             } catch {
@@ -474,7 +523,7 @@ class InMemoryVault implements Vault {
 
     let text: string;
     try {
-      text = redact(input, findings, { placeholderFormatter: formatter, limits: coreLimits });
+      text = this.#core.redact(input, findings, { placeholderFormatter: formatter, limits: coreLimits });
     } catch (thrown) {
       if (thrown instanceof VaultError) throw thrown;
       throw new VaultError("CORE_FAILURE", { coreCode: coreCodeOf(thrown) });
