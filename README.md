@@ -2,7 +2,7 @@
 
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret).
 
-**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). [`@redact-secret/vault-server`](packages/vault-server/README.md) `0.1.0-alpha.1` adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). Worker mode, persistent stores, and streaming remain design work; nothing here claims them.
+**Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) `0.1.0-alpha.1` provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, qualified against `@redact-secret/core@0.1.0-beta.9` ([qualification record](docs/research/qualification-0.1.0-alpha.1.md)). An optional, separately qualified dedicated-Worker mode is also available ([worker qualification record](docs/research/qualification-worker-mode.md), [#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)); it is not an implicit upgrade over main-thread use, and the two modes' guarantees are documented separately. [`@redact-secret/vault-server`](packages/vault-server/README.md) `0.1.0-alpha.1` adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault-server` (Python)](packages/vault-server-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1), passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). Persistent stores and streaming remain design work; nothing here claims them.
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -23,8 +23,8 @@ The agreed JavaScript package names describe two different responsibilities:
 
 | Package | Proposed responsibility | Intended runtimes |
 | --- | --- | --- |
-| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | Qualified: Node.js 20/22/24 and browser main thread. Not yet: Worker, edge |
-| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | Qualified: Node.js 20/22/24. Not yet: persistent backends, Python |
+| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
+| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | Qualified: Node.js 20/22/24. Not yet: persistent backends |
 | `@redact-secret/store-*` | Optional persistent backend implementations | Backend-specific server environments |
 | `redact-secret-vault-server` (Python, [packages/vault-server-py](packages/vault-server-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | Python 3.10+ server processes with a `node` executable available |
 
@@ -61,6 +61,7 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](docs/research/qualification-0.1.0-alpha.1.md): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
+- [Worker-mode qualification record](docs/research/qualification-worker-mode.md): tested evidence for the optional dedicated-Worker mode, including its hostile-main-thread and CSP negative-control evidence.
 - [Conformance corpus](conformance/README.md): language-neutral adversarial cases.
 - [Security policy](SECURITY.md) and [releasing](RELEASING.md).
 - [Core integration research](docs/research/core-integration.md): public API facts and proof-of-concept questions.

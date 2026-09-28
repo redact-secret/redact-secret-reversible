@@ -18,7 +18,9 @@ export type VaultErrorCode =
   | "INVARIANT_VIOLATION"
   | "RESTORE_DENIED"
   | "BUSY"
-  | "DISPOSED";
+  | "DISPOSED"
+  | "WORKER_PROTOCOL_VIOLATION"
+  | "WORKER_UNAVAILABLE";
 
 const MESSAGES: Readonly<Record<VaultErrorCode, string>> = Object.freeze({
   INVALID_ARGUMENT: "The vault operation received an invalid argument.",
@@ -34,7 +36,15 @@ const MESSAGES: Readonly<Record<VaultErrorCode, string>> = Object.freeze({
   RESTORE_DENIED: "The restore request was denied.",
   BUSY: "The vault is already running an operation.",
   DISPOSED: "The vault has been disposed or has expired.",
+  WORKER_PROTOCOL_VIOLATION:
+    "A Worker-mode message did not match the validated protocol and was rejected.",
+  WORKER_UNAVAILABLE: "The vault Worker did not respond, errored, or was terminated.",
 });
+
+/** Every fixed error code, derived from {@link MESSAGES} so the two cannot drift. */
+export const VAULT_ERROR_CODES: readonly VaultErrorCode[] = Object.freeze(
+  Object.keys(MESSAGES) as VaultErrorCode[],
+);
 
 /**
  * Why a restore was denied. Carried on {@link VaultError.reason} and on audit

@@ -10,6 +10,7 @@
     "typecheck": "npm run typecheck -w @redact-secret/vault && npm run build -w @redact-secret/vault && npm run typecheck -w @redact-secret/vault-server",
     "qualify:node": "node qualification/node.mjs",
     "qualify:browser": "node qualification/browser.mjs",
+    "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs",
     "test:vault-server": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server && npm run test -w @redact-secret/vault-server"
   },

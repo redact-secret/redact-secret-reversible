@@ -15,6 +15,20 @@ export const WORK = process.env.QUALIFICATION_DIR ?? join(tmpdir(), "redact-secr
 export const REPORTS = join(ROOT, ".qualification", "reports");
 export const CORE_VERSION = "0.1.0-beta.9";
 
+// Shared by browser.mjs and worker.mjs (not re-exported from browser.mjs: that
+// module's top level has side effects and launches real browsers on import).
+export const STRICT_CSP = [
+  "default-src 'none'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "connect-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "require-trusted-types-for 'script'",
+  "trusted-types 'none'",
+].join("; ");
+
 export function run(cmd, args, cwd) {
   return execFileSync(cmd, args, { cwd, stdio: ["ignore", "pipe", "inherit"], encoding: "utf8" });
 }
@@ -57,6 +71,7 @@ export function makeConsumer(name, tarball, { omitOptional = false, extraDeps = 
     }
   }
   cpSync(join(ROOT, "packages/vault/test/suite.js"), join(dir, "suite.js"));
+  cpSync(join(ROOT, "packages/vault/test/worker-suite.js"), join(dir, "worker-suite.js"));
   cpSync(join(ROOT, "conformance/v1/corpus.json"), join(dir, "corpus.json"));
   return dir;
 }

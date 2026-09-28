@@ -1,6 +1,6 @@
 # Browser in-memory vault security specification
 
-**Status:** implemented for the browser main thread by `@redact-secret/vault@0.1.0-alpha.1` (see the [threat model](threat-model.md) and [qualification record](../research/qualification-0.1.0-alpha.1.md)); the dedicated Worker requirements in section 5 remain proposed and unsupported.
+**Status:** implemented for the browser main thread by `@redact-secret/vault@0.1.0-alpha.1` (see the [threat model](threat-model.md) and [qualification record](../research/qualification-0.1.0-alpha.1.md)); the dedicated-Worker requirements in section 5 are implemented and qualified as of the follow-up release documented in the [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md) and [worker qualification record](../research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)). `SharedWorker`, a Service Worker, and Node.js `worker_threads` remain unsupported.
 **Scope:** `@redact-secret/vault` in a browser page or a dedicated Web Worker. This specification does not define server authorization or persistent storage.
 
 This document defines the security contract to validate before browser support is claimed. The [architecture](../../ARCHITECTURE.md) and [restore authority decision](../decisions/2026-09-27-restore-authority-and-lifecycle.md) define the repository-wide boundary. The core remains independent and does not retain original values.
@@ -71,12 +71,14 @@ The choices above are **not** interchangeable upgrades. Moving to a server chang
 
 ### 5. Optional Worker isolation
 
+**Implemented and qualified** (`@redact-secret/vault/worker` + `@redact-secret/vault/worker/host`; see the [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md)). Unlike sections 1–4, which describe the main-thread contract already shipped in 0.1.0-alpha.1, this section described proposed requirements for a not-yet-implemented mode when originally written; every MUST below is now verified by `qualification/worker.mjs` and `packages/vault/test/worker-suite.js`, not merely proposed.
+
 A dedicated Worker MAY hold the mapping and perform matching/restore operations behind a small message protocol. Its benefit is reducing direct access to the mapping from ordinary main-thread application code. It does not make the page a trusted caller.
 
-- Validate message shape, operation, size, session state, and allowed paths inside the Worker. Do not expose `dump`, `listSecrets`, or unrestricted export operations.
-- Keep original input and restored values out of Worker messages except where the chosen workflow necessarily transfers them. A Worker cannot protect plaintext that was already handled or can later be observed by compromised main-thread code.
-- Terminate the Worker on explicit disposal where the Worker is owned by that vault session. Worker lifecycle and failure behavior must be tested separately.
-- Worker script delivery and CSP are application/deployment concerns. A fallback to main-thread memory MUST be explicit and accurately documented; do not claim Worker isolation when it is unavailable.
+- Validate message shape, operation, size, session state, and allowed paths inside the Worker. Do not expose `dump`, `listSecrets`, or unrestricted export operations. — Done: `worker-protocol.ts`'s `parseRequest` accepts only the five existing `Vault` operations with an exact key set each; the Worker host independently re-validates every incoming message rather than trusting the main-thread client's own pre-send validation.
+- Keep original input and restored values out of Worker messages except where the chosen workflow necessarily transfers them. A Worker cannot protect plaintext that was already handled or can later be observed by compromised main-thread code. — Documented as the guarantee boundary in the threat model's Worker row: Worker mode narrows direct mapping access, it does not authenticate the caller.
+- Terminate the Worker on explicit disposal where the Worker is owned by that vault session. Worker lifecycle and failure behavior must be tested separately. — Done: `WorkerVault.dispose()` disposes the Worker-held vault; `WorkerVault.terminate()` calls `Worker.terminate()` and fails every pending/future call explicitly. Covered by the qualification suite's dispose/terminate paths.
+- Worker script delivery and CSP are application/deployment concerns. A fallback to main-thread memory MUST be explicit and accurately documented; do not claim Worker isolation when it is unavailable. — Done: `createWorkerVault` never falls back to an in-process vault; Worker creation, initialization, and every call reject explicitly (`WORKER_PROTOCOL_VIOLATION`, `WORKER_UNAVAILABLE`, or the Worker's own reported failure code) instead. Verified negative controls: `worker-src 'none'` (Worker cannot be created at all) and a CSP without `'wasm-unsafe-eval'` inside the Worker (WebAssembly cannot compile).
 
 ## Application integration requirements
 
@@ -100,9 +102,9 @@ The browser qualification suite MUST include at least:
 5. Expiry while timers are suspended, abort/dispose, page reload, Worker termination, and concurrent restore/revoke.
 6. Limits on bytes, entries, message size, and replacement count; oversized and malformed inputs.
 7. No plaintext in error strings, audit payloads, telemetry hooks, snapshots, or fixture output.
-8. A same-page hostile-script test demonstrating the **limit** of Worker isolation, so documentation does not claim XSS resistance it cannot provide.
+8. A same-page hostile-script test demonstrating the **limit** of Worker isolation, so documentation does not claim XSS resistance it cannot provide. — Satisfied by `packages/vault/test/worker-suite.js`'s hostile-message cases: they bypass the safe client wrapper and talk to the Worker directly, showing both that out-of-protocol requests are rejected explicitly and that in-protocol requests (which a compromised page can also send) still succeed.
 
-Browser and Worker modes require separate runtime evidence. Passing this suite is a prerequisite to marking the relevant mode supported; it is not a proof of safety against compromised page code.
+Browser and Worker modes require separate runtime evidence. Passing this suite is a prerequisite to marking the relevant mode supported; it is not a proof of safety against compromised page code. Worker-mode evidence: `qualification/worker.mjs`, reproduced with `npm run qualify:worker`; results in the [worker qualification record](../research/qualification-worker-mode.md).
 
 ## References
 

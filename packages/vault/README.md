@@ -12,8 +12,9 @@ npm install @redact-secret/vault@alpha @redact-secret/core@0.1.0-beta.9
 | --- | --- |
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
 | Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-0.1.0-alpha.1.md)) |
+| Optional dedicated-Worker mode (`@redact-secret/vault/worker`), same three browser engines, CSP allowing `'wasm-unsafe-eval'` and `worker-src` | **Qualified, opt-in, separately from main-thread mode** — see [Worker mode](#worker-mode) and the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) |
 | `@redact-secret/core` | `0.1.0-beta.9` exactly (peer dependency) |
-| Dedicated Web Worker mode | **Not supported** ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) |
+| `SharedWorker`, a Service Worker, or Node.js `worker_threads` | **Not supported** |
 | Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants ([#15](https://github.com/redact-secret/redact-secret-reversible/issues/15)) |
 | Persistence, Python, streaming, free-text `restore(text)` | **Not supported** |
 
@@ -79,6 +80,36 @@ try {
 
 See the [threat model](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/specs/threat-model.md) for each mode's boundary and alternatives.
 
+## Worker mode
+
+**Main-thread and Worker guarantees are different. Do not conflate them.** Worker mode is optional, opted into explicitly, and never an implicit upgrade over main-thread use — importing `"@redact-secret/vault"` alone never gains Worker capability.
+
+```ts
+// main thread
+import { createWorkerVault, VaultError } from "@redact-secret/vault/worker";
+
+const worker = new Worker(new URL("./vault-worker.js", import.meta.url), { type: "module" });
+const vault = await createWorkerVault(worker); // rejects explicitly; never falls back to a main-thread vault
+
+const captured = await vault.capture(userText, { release: [{ sink: "draft-reply", paths: ["body"] }] });
+// ... same flow as the main-thread example above, but every call returns a Promise ...
+await vault.dispose();
+```
+
+```ts
+// vault-worker.js — runs inside the dedicated Worker
+import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+startVaultWorkerHost();
+```
+
+What changes from main-thread mode:
+
+- **Where the mapping lives.** The vault instance and every retained entry live in a closure private to the Worker's own module scope, not reachable by direct main-thread object access. The only interface is a validated message protocol: an out-of-protocol request (unrecognized operation, wrong shape, an unexpected key, a `__proto__`-bearing payload) is rejected explicitly (`WORKER_PROTOCOL_VIOLATION`), never silently ignored or coerced.
+- **What it does not add.** A dedicated Worker is not an authentication boundary. Code that already has a reference to the `Worker` (for example a compromised same-page script) can still call `capture`/`restore` through the same protocol a legitimate caller uses, and can still observe whatever that protocol legitimately returns. Worker mode narrows *accidental* main-thread reach to the mapping; it does not defend against a main thread that is already compromised. See the [Worker-mode ADR](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md)'s guarantee boundary.
+- **The API shape.** `WorkerVault` mirrors `capture`/`restore`/`revoke`/`stats`/`dispose`, but every call returns a `Promise` — it is a message round trip, not an in-process call. `createWorkerVault(worker, { timeoutMs? })` never falls back to a main-thread vault: if the Worker fails to start, errors, or does not answer in time, the promise rejects with a fixed `VaultError`. Call `vault.terminate()` to stop the underlying Worker immediately.
+- **Capture options.** `policy`, `eligible`, and `displayFormatter` are functions and cannot cross the message boundary (and running main-thread-supplied code inside the Worker would defeat the isolation this mode exists to provide). Worker-mode `capture` accepts only `release`, `maxUses`, `unredacted`, and `ruleset`; passing one of the unsupported options throws `INVALID_ARGUMENT` synchronously, before anything is sent.
+- **CSP.** The Worker's own script response needs the same `'wasm-unsafe-eval'` the main thread needs (it is not inherited from the page), plus a `worker-src` directive that allows creating it, plus — under `require-trusted-types-for 'script'` — a Trusted Types policy for the `new Worker(url)` sink. See the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) for the exact policy used in qualification.
+
 ## Multi-turn conversations
 
 Capture only the new user turn. Earlier turns are already redacted, so send the stored redacted history plus the new capture's `text`, and do not re-capture history: tokens in the input are refused (`TOKEN_LITERAL_IN_INPUT`), so nothing restored is scanned twice. At restore time, list the captures of this conversation in `captures`. Do not restore history in order to re-capture it.
@@ -95,7 +126,15 @@ If a capture fails with `UNREDACTED_FINDINGS`, the input contains values the cor
 
 `vault.revoke(captureId) → number`, `vault.dispose()`, `vault.stats()`.
 
-Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED_FINDING`, `UNREDACTED_FINDINGS`, `TOKEN_LITERAL_IN_INPUT`, `LIMIT_EXCEEDED`, `TOKEN_GENERATION_FAILED`, `INVARIANT_VIOLATION`, `RESTORE_DENIED`, `BUSY`, `DISPOSED`.
+Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED_FINDING`, `UNREDACTED_FINDINGS`, `TOKEN_LITERAL_IN_INPUT`, `LIMIT_EXCEEDED`, `TOKEN_GENERATION_FAILED`, `INVARIANT_VIOLATION`, `RESTORE_DENIED`, `BUSY`, `DISPOSED`. Worker mode ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) also uses `WORKER_PROTOCOL_VIOLATION` (a message did not match the validated protocol) and `WORKER_UNAVAILABLE` (the Worker did not respond, errored, or was terminated).
+
+### Worker mode API
+
+`createWorkerVault(worker, options?) → Promise<WorkerVault>` from `"@redact-secret/vault/worker"`. `worker` is a `Worker` (or a `MessagePort`); `options.timeoutMs` (default 15000) bounds the initial handshake and each call. Never falls back to a main-thread vault: rejects with a `VaultError` if the Worker fails to start, errors, or times out.
+
+`startVaultWorkerHost(options?) → Promise<void>` from `"@redact-secret/vault/worker/host"`, run inside the Worker. `options` extends `VaultOptions` (`limits`, `releasePolicy`, `onAudit`, `now`) plus an optional `target` (defaults to the Worker's own global scope; overridable for tests).
+
+`WorkerVault`: `capture(input, options) → Promise<CaptureResult>` (`options` is `release`, `maxUses`, `unredacted`, `ruleset` only — no `policy`, `eligible`, or `displayFormatter`), `restore(request) → Promise<RestoreResult>`, `revoke(captureId) → Promise<number>`, `stats() → Promise<VaultStats>`, `dispose() → Promise<void>`, and `terminate()` (synchronous; stops the Worker immediately).
 
 ## Security reports
 
