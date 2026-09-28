@@ -1,7 +1,7 @@
 # Threat model: reversible restoration modes
 
 **Status:** current for `@redact-secret/vault@0.1.0-alpha.1` browser main-thread and Node.js in-memory use, its optional dedicated-Worker mode ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14), a later, separately qualified release; see the [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md)), and for `@redact-secret/vault-server@0.1.0-alpha.1`'s single-process, in-memory server authority mode; **proposed** for multi-process/persistent server authority and persistent-store modes, which have no implementation or support claim.
-**Issue:** [#6](https://github.com/redact-secret/redact-secret-reversible/issues/6). **Core compatibility:** `@redact-secret/core` `0.1.0-beta.9` exactly (see [qualification record](../research/qualification-0.1.0-alpha.1.md)).
+**Issue:** [#6](https://github.com/redact-secret/redact-secret-reversible/issues/6). **Core compatibility:** `@redact-secret/core` `0.1.0-beta.9` exactly (see [qualification record](../research/qualification-0.1.0-alpha.1.md)). Opt-in PII detection in the `0.1.0-beta.10` candidate is decided as a contract only ([#45](https://github.com/redact-secret/redact-secret-reversible/issues/45)); see [PII findings](#pii-findings-core-beta10--contract-decided-not-implemented).
 
 This document names the assets, attackers, data flows, trust boundary, residual risk, and alternative for each mode. It complements the [browser in-memory specification](in-memory-security.md) and the [architecture](../../ARCHITECTURE.md). A mode is supported only when its row below says **qualified** and its runtime passes the [conformance corpus](../../conformance/README.md).
 
@@ -75,6 +75,33 @@ This row is tested by this package's own adversarial suite (`packages/vault-serv
 - **Attackers added:** database disclosure, record substitution, key compromise, stale backups, replica lag.
 - **Required controls:** authenticated encryption bound to tenant, session, and entry metadata; consumer-owned keys; logical expiry and revocation at use time; a backend-specific linearization proof; deletion and backup policy. The exact store interface, AEAD/AAD binding, key-injection and rotation shape, deletion/backup guarantees, and fail-closed failure behavior are now decided as a contract — not yet an implementation — in the [persistent store contract](../decisions/2026-09-27-define-persistent-store-contract.md) ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)), which a concrete qualified backend ([#20](https://github.com/redact-secret/redact-secret-reversible/issues/20)) builds against. The alpha vault never persists anything.
 
+### PII findings (core beta.10) — contract decided, not implemented
+
+This section is **proposed**. Core `0.1.0-beta.10` is a candidate. The vault is pinned to beta.9, which has no PII surface. The contract is [decision-pii-retention-and-activation-ownership](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md) ([#45](https://github.com/redact-secret/redact-secret-reversible/issues/45)). Implementation is tracked in [#38](https://github.com/redact-secret/redact-secret-reversible/issues/38), [#39](https://github.com/redact-secret/redact-secret-reversible/issues/39), and [#40](https://github.com/redact-secret/redact-secret-reversible/issues/40).
+
+- **Assets added:**
+  - Personal data in retained entries, when the application opts in: payment card numbers, national identifiers, bank account numbers, contact data.
+  - The realm's PII activation identity.
+  - PII type labels (`pii_…`) in `tokens[].type`, `passedThroughTypes`, and core display placeholders.
+- **Attackers added:**
+  - A careless integrator whose generic `eligible` callback allows everything.
+  - Any other component in the same realm that initializes the core first with a different PII selection.
+  - A hostile page script trying to choose the Worker realm's selection.
+  - A core swapped under the Python bridge.
+- **Protects against:**
+  - Implicit PII retention. `pii_` findings are retained only when their exact type is in `CaptureOptions.pii.retain`. A generic `eligible` can narrow that allowlist but never widen it.
+  - The vault fixing the realm's PII selection. It forwards only an application-supplied `pii` and otherwise adopts the existing activation or fails `NOT_INITIALIZED`.
+  - Scanning under a different selection than stated. Conflicts fail `CORE_FAILURE`/`PII_ACTIVATION_CONFLICT`, and `expectPiiActivation` mismatches fail `PII_ACTIVATION_MISMATCH`.
+  - Silent warn-level PII plaintext. The default is `unredacted: "reject"`.
+  - PII options silently ignored on a core without PII support, or with PII off. These fail `PII_UNAVAILABLE`.
+  - Page-chosen Worker activation. No request message carries selectors.
+- **Does not protect against:**
+  - PII the core does not detect. PII is off by default, and detection is incomplete by design.
+  - The consequences of an application deliberately allowlisting PAN- or SSN-class types.
+  - Another in-realm component that needs a different PII selection. Only one selection can exist per realm.
+  - The category disclosure carried by PII type labels.
+  - Plaintext PII that an application passes through with `"pass-through"`.
+
 ## Residual risks accepted for alpha.1
 
 | Risk | Why accepted | Mitigation available to the application |
@@ -88,3 +115,14 @@ This row is tested by this package's own adversarial suite (`packages/vault-serv
 | Token altered with a homoglyph so the marker disappears | Destroying the marker also destroys the token; nothing is restored | None needed: that text stays as ordinary text |
 | Private fields visible to debuggers and DevTools | Runtime inspection is outside the page API | Do not inspect vaults in shared sessions |
 | Same-page script compromise | Outside any in-page control | Strict CSP, Trusted Types, fewer third-party scripts, or a server/origin alternative |
+
+### Residual risks for PII findings (proposed, core beta.10; see [decision-pii-retention-and-activation-ownership](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md))
+
+| Risk | Why accepted | Mitigation available to the application |
+| --- | --- | --- |
+| **Regulatory exposure from retained PAN, SSN, or IBAN-class values.** An application that puts payment-card or national-identifier types (e.g. `pii_jurisdiction_us_ssn`) in `pii.retain` makes the vault's process memory (and, later, any persistent store) hold cardholder data or national identifiers. That may bring the process into PCI DSS or national-ID/data-protection scope. | Retention is the application's explicit, per-type opt-in. The vault cannot know the application's legal basis. Nothing is retained by default. | Do not allowlist payment-card or national-ID types. Where unavoidable, restrict to server authority mode with the narrowest grants, `maxUses: 1`, and short TTLs. Revoke on task end. Assess compliance scope before enabling. Treat the vault as in scope wherever such a type is retained. |
+| **Realm-global, one-shot activation.** One PII selection exists per process or JavaScript realm. The first initializer fixes it for every library in the realm. | This is the core's contract. The vault avoids *being* that first initializer unless asked. | Initialize the core once at application start with the selection the whole realm needs. Pass `expectPiiActivation` to detect drift. Use a separate realm (a dedicated Worker or a separate process) for a workflow that needs a different selection. |
+| **Order-dependent startup failure.** On beta.10, `createVault()` with no `pii` fails `CORE_FAILURE`/`NOT_INITIALIZED` if the application has not initialized the core yet. | Silently locking PII off would be worse and order-dependent. | Await the core's `initialize(...)` first, or pass `pii: []` for credentials-only. |
+| **Warn-level PII rejected or passed through.** Medium- and Low-confidence PII defaults to `warn`. Captures containing it reject under the default. Under `"pass-through"`, the plaintext PII is sent. | The vault does not reinterpret core actions. | Map chosen PII types to `redact` with a core `policy`. Inspect `passedThroughTypes`. Choose pass-through per named boundary only. In Worker mode, no in-protocol policy exists yet. |
+| **PII type labels as metadata.** `pii_…` types appear in `tokens[].type`, in `passedThroughTypes`, and possibly in core display placeholders sent to the model. They reveal the *category* of data present, never the value. | Type labels are descriptive and grant nothing. They help the application make release decisions. | Do not log or forward type lists beyond need. Use a neutral `displayFormatter` where the category itself is sensitive. |
+| **Allowlisted type renamed or split by a future core.** An exact-type allowlist stops matching after a core rename. | This fails closed: the finding is then not retained, only replaced. | Re-review `pii.retain` whenever the core's PII vocabulary version changes (visible in the activation identity). |
