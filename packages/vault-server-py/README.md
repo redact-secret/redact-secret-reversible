@@ -97,12 +97,59 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## PII selection and retention
+
+**Status: implemented, unreleased.** PII detection needs the
+`@redact-secret/core@0.1.0-beta.10` candidate, which is not on npm. This
+repository still pins `0.1.0-beta.9`, which has no PII support. The rules are
+the [PII retention and activation decision record](../../docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)
+(§1 and §3 "Python bridge"), the same ones `@redact-secret/vault` follows.
+
+- **Selection.** `NodeCoreBridge(pii=[...])` forwards the selectors verbatim
+  to the core's `initialize({ pii })` in each bridge process. Each scan runs in
+  a fresh Node.js process, so this list is the only selection. Omitting it
+  (the default `()`) means PII off. The core judges selector grammar; its
+  rejections surface as `CORE_FAILURE` with `core_code` (for example
+  `PII_SELECTOR_INVALID`).
+- **Identity.** Each scan reports the core's `piiActivation()` identity as
+  `CoreScanOutcome.pii_activation`, or `None` when the core has no PII support.
+  The bridge pins the identity from its first successful scan and raises
+  `PII_ACTIVATION_MISMATCH` if a later scan differs. Pass
+  `expected_pii_activation=` to compare against a fixed identity instead.
+- **Retention.** A `redact` finding whose type starts with `pii_` is never
+  retained unless its exact type is listed in
+  `CaptureOptions(pii=PiiRetention(retain=("pii_global_iban", ...)))`. An
+  `eligible` callback is not called for unlisted PII types and can only narrow
+  the list. Unretained PII is replaced by a non-restorable placeholder and
+  counted in `unrestorable`.
+- **Fail closed.** A non-empty `pii` selection or an `expected_pii_activation`
+  on a core without PII support, and a capture's `pii` retention when the scan
+  reported no active PII detection, each raise `PII_UNAVAILABLE`.
+
+```python
+bridge = NodeCoreBridge(pii=["pii"], expected_core_version=None)  # beta.10 candidate
+options = CaptureOptions(
+    issued_tenant="tenant-acme-synthetic",
+    release=(CaptureGrant(sink="reply", paths=("body",)),),
+    pii=PiiRetention(retain=("pii_global_iban",)),
+)
+```
+
+With PII on, Medium- and Low-confidence PII findings default to `warn`, so a
+capture containing them fails with `UNREDACTED_FINDINGS` unless the caller
+passes a `policy` that maps them or `unredacted="pass-through"`.
+
 ## Tests
 
 ```bash
 pip install -e ".[test]"
 pytest
 ```
+
+`tests/test_pii_bridge.py` includes four cases that need a PII-capable core.
+They skip with a reason on the pinned beta.9. To run them, point
+`VAULT_SERVER_PY_PII_CORE_NODE_MODULES` at a `node_modules` directory that holds
+a local beta.10 build.
 
 `tests/test_conformance.py` runs the shared language-neutral corpus
 (`conformance/v1/corpus.json`) against this package; `tests/test_server_authority.py`

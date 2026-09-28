@@ -31,6 +31,7 @@ from typing import Any, NoReturn
 
 from .core_client import CoreClient, CoreFinding
 from .errors import ServerDenialReason, VaultServerError, VaultServerErrorCode
+from .pii import is_pii_active, is_pii_finding_type, resolve_pii_retention
 from .token import TOKEN_PATTERN, count_markers, find_tokens, has_marker, new_capture_id, new_token
 from .types import (
     CaptureOptions,
@@ -349,6 +350,12 @@ class InMemoryVaultServer:
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
         if options.unredacted not in ("reject", "pass-through"):
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+        if options.eligible is not None and not callable(options.eligible):
+            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+        # PII retention allowlist (PII ADR §1), validated before the core
+        # runs. Whether PII detection is active is checked right after the
+        # scan, against the identity that scan's own core realm reported.
+        pii_retain = resolve_pii_retention(options.pii)
 
         if _utf8_length(input_text) > self._limits["max_input_bytes"]:
             raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
@@ -365,6 +372,13 @@ class InMemoryVaultServer:
                 "maxFindings": self._limits["max_findings"],
             },
         )
+        # A capture that configures PII retention on a core that cannot
+        # produce PII findings (no PII surface, or `selectors=off`) would let
+        # the application believe PII is handled while it passes through as
+        # undetected plaintext (PII ADR §1). Refused before any finding is
+        # gated or staged.
+        if pii_retain is not None and not is_pii_active(outcome.pii_activation):
+            raise VaultServerError(VaultServerErrorCode.PII_UNAVAILABLE)
         findings = outcome.findings
 
         offsets = build_unit_offsets(input_text)
@@ -386,7 +400,12 @@ class InMemoryVaultServer:
                 passed_types.add(finding.type)
             elif finding.action == "redact":
                 keep = True
-                if options.eligible is not None:
+                if is_pii_finding_type(finding.type) and (pii_retain is None or finding.type not in pii_retain):
+                    # A PII finding outside the exact-type allowlist is never
+                    # retained, and `eligible` is not consulted: it may
+                    # narrow the allowlist, never widen it.
+                    keep = False
+                elif options.eligible is not None:
                     try:
                         keep = (
                             options.eligible(
