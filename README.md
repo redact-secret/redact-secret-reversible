@@ -11,7 +11,7 @@ Optional, policy-gated restoration of values redacted by [Redact Secret](https:/
 | `@redact-secret/vault@0.1.0-alpha.3`, `@redact-secret/vault-server@0.1.0-alpha.3` | `@redact-secret/core@0.1.0-beta.10` exactly | Released 2026-09-28 from `release.yml` with npm provenance for both packages (npm `alpha` tag). Adds a Worker-script-owned core `policy` for Worker mode ([#59](https://github.com/redact-secret/redact-secret-vault/issues/59)); no breaking change from `0.1.0-alpha.2`. See the [changelog](CHANGELOG.md) |
 | `redact-secret-vault` (Python) `0.1.0a2` | `@redact-secret/core@0.1.0-beta.10` through the bridge | Not published to any index; install from this repository |
 
-Install exact versions rather than a dist-tag. `@alpha` resolves to `0.1.0-alpha.3` for both packages, but npm's `latest` tag is a prerelease on both: `0.1.0-alpha.1` for `@redact-secret/vault` (which peers core beta.9 and conflicts with core beta.10) and `0.1.0-alpha.2` for `@redact-secret/vault-server` (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
+npm's `latest` and `alpha` tags both point at `0.1.0-alpha.3` for both packages, so a bare install gets the current release. Exact versions are still recommended while the packages are alpha, because each release pins an exact core version (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
