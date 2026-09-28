@@ -1,5 +1,5 @@
 {
-  "name": "redact-secret-reversible",
+  "name": "redact-secret-vault",
   "private": true,
   "type": "module",
   "workspaces": [

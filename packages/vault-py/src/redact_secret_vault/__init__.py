@@ -1,5 +1,5 @@
 """``redact_secret_vault``: a native Python server authority layer for
-redact-secret-reversible.
+redact-secret-vault.
 
 Implements the S1 contract
 (docs/decisions/2026-09-27-define-server-authority-interface.md) idiomatically
