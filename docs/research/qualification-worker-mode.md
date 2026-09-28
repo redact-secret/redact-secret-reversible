@@ -34,6 +34,31 @@ The main-thread suite (`qualification/browser.mjs`) and the Node.js suite (`qual
 
 Firefox and WebKit do not implement Trusted Types; the `trusted-types default` directive is simply unsupported and ignored there, which is the documented, spec-correct behavior for an unsupported CSP directive — it is not a gap this qualification papers over, since the `worker-src`/WASM-CSP controls that matter for the failure-mode claim are standard CSP, supported everywhere tested.
 
+## Protocol v2: PII activation and retention (#39)
+
+**Status:** executed evidence, 2026-09-28, still against the pinned `0.1.0-beta.9`. The table above is the #14 run and is left as recorded.
+
+[#39](https://github.com/redact-secret/redact-secret-reversible/issues/39) implements §3 "Worker mode" of the [PII retention and activation ADR](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md):
+
+- `PROTOCOL_VERSION` is `2`. A version-1 request is answered with `WORKER_PROTOCOL_VIOLATION`, and a version-1 or incomplete `vault-ready` makes `createWorkerVault` reject with `WORKER_PROTOCOL_VIOLATION` instead of waiting for the timeout. Unknown keys are still rejected everywhere.
+- `vault-ready` carries `piiActivation: string | null`, the identity the Worker realm's vault observed. `vault-init-failed` still carries only `code` and `coreCode`.
+- `startVaultWorkerHost({ pii, expectPiiActivation })` has the main-thread `createVault` semantics inside the Worker realm, adoption included. No request carries selectors, so the page cannot choose or change the Worker's activation.
+- `createWorkerVault(worker, { expectPiiActivation })` compares the ready identity byte-for-byte and rejects with `PII_ACTIVATION_MISMATCH`. `WorkerVault.piiActivation` exposes it.
+- Capture options gain `pii: { retain }`. The client validates it under ADR §1 before sending (`INVALID_ARGUMENT`). The host validates it again on its own, accepts only the key `retain`, and rebuilds a fresh `{ retain }` object. Malformed retention sent straight to the Worker is a `WORKER_PROTOCOL_VIOLATION`.
+
+What `qualify:worker` adds (the existing hostile cases now send `v: 2`, so they still test the shape they name rather than the version check):
+
+- Suite cases (11 → 16): a version-1 request is rejected; the ready identity agrees with the page core's PII surface (`null` on beta.9); invalid `pii` retention throws synchronously and sends nothing; capture retention fails closed with `PII_UNAVAILABLE` when PII is not active; and five selector-smuggling messages (a `pii` or `expectPiiActivation` key on a request, a selector array or `selectors` key in `options.pii`, and an `initialize` op) are rejected while the Worker keeps serving.
+- Runner controls (4 → 6): a second Worker entry calls `startVaultWorkerHost({ pii: ["pii"] })`. It must fail closed with `PII_UNAVAILABLE` on a core without a PII surface, and report an active identity on a PII-capable core. A page passing an impossible `expectPiiActivation` must be rejected with `PII_ACTIVATION_MISMATCH`.
+
+| Runtime | Result |
+| --- | --- |
+| Chromium 153.0.8010.12 (Playwright), darwin-arm64 local | 22/22 |
+| Firefox 155.0 (Playwright), darwin-arm64 local | 22/22 |
+| WebKit 26.6 (Playwright), darwin-arm64 local | 22/22 |
+
+Protocol and activation cases that do not need a browser are in `packages/vault/test/worker-pii.test.mjs` (fake core, one Node.js process per Worker realm) and `worker-pii-core.test.mjs` (real installed core; PII-on cases skip with a stated reason on beta.9). Against a local build of the `0.1.0-beta.10` candidate, which is not on npm, the six PII-on cases of `worker-pii-core.test.mjs` pass. **Browser qualification of Worker mode against beta.10 itself is [#42](https://github.com/redact-secret/redact-secret-reversible/issues/42).** Note for #42: on a PII-capable core the default Worker entry (`startVaultWorkerHost()` with no `pii`) fails with `CORE_FAILURE`/`NOT_INITIALIZED` by design, so the runner needs `pii: []` or a Worker script that initializes the core first.
+
 ## What this does and does not establish
 
 - **Establishes:** for the exact versions above, Worker mode's message protocol rejects every tested out-of-protocol request explicitly without disrupting legitimate use; a compromised main thread cannot reach the Worker-held mapping other than through that protocol; Worker creation and Worker-internal vault initialization each fail closed, with no main-thread fallback, when their respective CSP requirement is not met; and none of this changes what the main-thread and Node.js modes already established.

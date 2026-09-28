@@ -17,9 +17,14 @@
  *   a security boundary — see docs/specs/in-memory-security.md section 5);
  *   it cannot make the Worker execute an operation outside that protocol,
  *   and every malformed or adversarial message is rejected explicitly.
+ * - Protocol v2 (#39): a version-1 request is rejected, the ready message's
+ *   PII activation identity is exposed, PII retention is validated before
+ *   send and fails closed without active PII, and no request can carry a
+ *   PII selection. `corePii` says whether the page's core module has a PII
+ *   surface (`piiActivation`).
  */
 
-export async function runWorkerSuite({ workerVault, worker, fixtures }) {
+export async function runWorkerSuite({ workerVault, worker, fixtures, corePii = false }) {
   const results = [];
   const record = async (id, body) => {
     try {
@@ -98,7 +103,7 @@ export async function runWorkerSuite({ workerVault, worker, fixtures }) {
   results.push(
     await record("hostile:no-dump-or-export-operation-exists", async () => {
       for (const op of ["dump", "listSecrets", "export", "entries", "getMapping"]) {
-        const reply = await rawRequest(worker, { kind: "vault-request", v: 1, id: `hostile-op-${op}`, op });
+        const reply = await rawRequest(worker, { kind: "vault-request", v: 2, id: `hostile-op-${op}`, op });
         assert(reply.ok === false, `${op} was not rejected`);
         assert(reply.error.code === "WORKER_PROTOCOL_VIOLATION", `${op} gave ${reply.error && reply.error.code}, not WORKER_PROTOCOL_VIOLATION`);
       }
@@ -107,14 +112,14 @@ export async function runWorkerSuite({ workerVault, worker, fixtures }) {
 
   results.push(
     await record("hostile:unrecognized-kind-rejected", async () => {
-      const reply = await rawRequest(worker, { kind: "vault-dump-request", v: 1, id: "hostile-kind" });
+      const reply = await rawRequest(worker, { kind: "vault-dump-request", v: 2, id: "hostile-kind" });
       assert(reply.ok === false && reply.error.code === "WORKER_PROTOCOL_VIOLATION", "wrong kind was not rejected");
     }),
   );
 
   results.push(
     await record("hostile:extra-unexpected-key-rejected", async () => {
-      const reply = await rawRequest(worker, { kind: "vault-request", v: 1, id: "hostile-extra", op: "stats", debug: true });
+      const reply = await rawRequest(worker, { kind: "vault-request", v: 2, id: "hostile-extra", op: "stats", debug: true });
       assert(reply.ok === false && reply.error.code === "WORKER_PROTOCOL_VIOLATION", "an unexpected extra key was accepted");
     }),
   );
@@ -122,7 +127,7 @@ export async function runWorkerSuite({ workerVault, worker, fixtures }) {
   results.push(
     await record("hostile:prototype-pollution-shaped-payload-rejected", async () => {
       const payload = JSON.parse(
-        `{"kind":"vault-request","v":1,"id":"hostile-proto","op":"capture","input":"x","options":{"release":[],"__proto__":{"polluted":true}}}`,
+        `{"kind":"vault-request","v":2,"id":"hostile-proto","op":"capture","input":"x","options":{"release":[],"__proto__":{"polluted":true}}}`,
       );
       const reply = await rawRequest(worker, payload);
       assert(reply.ok === false && reply.error.code === "WORKER_PROTOCOL_VIOLATION", "a __proto__-bearing payload was accepted");
@@ -157,7 +162,7 @@ export async function runWorkerSuite({ workerVault, worker, fixtures }) {
     await record("leakage:no-plaintext-in-hostile-protocol-error-replies", async () => {
       const reply = await rawRequest(worker, {
         kind: "vault-request",
-        v: 1,
+        v: 2,
         id: "hostile-leak",
         op: "capture",
         input: fixtures.JWT,
@@ -166,6 +171,79 @@ export async function runWorkerSuite({ workerVault, worker, fixtures }) {
       const haystack = JSON.stringify(reply);
       assert(!haystack.includes(fixtures.JWT), "a fixture value leaked into a protocol-violation reply");
       assert(reply.ok === false, "a malformed capture options object was accepted");
+    }),
+  );
+
+  // --- Protocol v2: PII activation and retention (#39) ---------------------
+
+  results.push(
+    await record("protocol:v1-request-rejected", async () => {
+      const reply = await rawRequest(worker, { kind: "vault-request", v: 1, id: "hostile-v1", op: "stats" });
+      assert(reply.ok === false && reply.error.code === "WORKER_PROTOCOL_VIOLATION", "a version-1 request was accepted");
+    }),
+  );
+
+  results.push(
+    await record("parity:ready-reports-worker-pii-activation", async () => {
+      const identity = workerVault.piiActivation;
+      assert(identity === null || typeof identity === "string", "piiActivation is neither null nor a string");
+      // The page's own core namespace tells us whether this core has a PII surface.
+      assert((identity === null) === !corePii, `piiActivation ${identity === null ? "null" : "set"} disagrees with the core's PII surface`);
+    }),
+  );
+
+  results.push(
+    await record("protocol:invalid-pii-retention-rejected-before-send", async () => {
+      let sawMessage = false;
+      const onMessage = () => {
+        sawMessage = true;
+      };
+      worker.addEventListener("message", onMessage);
+      try {
+        for (const pii of [["pii"], { retain: [] }, { retain: ["global_iban"] }, { retain: ["pii_global_iban"], selectors: ["pii"] }]) {
+          let code;
+          try {
+            workerVault.capture("x", { release: RELEASE, pii });
+          } catch (error) {
+            code = error && error.code;
+          }
+          assert(code === "INVALID_ARGUMENT", `expected synchronous INVALID_ARGUMENT, got ${code}`);
+        }
+        await settle();
+        assert(!sawMessage, "a message reached the worker despite an invalid pii option");
+      } finally {
+        worker.removeEventListener("message", onMessage);
+      }
+    }),
+  );
+
+  results.push(
+    await record("parity:pii-retention-fails-closed-without-active-pii", async () => {
+      const identity = workerVault.piiActivation;
+      const active = identity !== null && !/(^|;)selectors=off(;|$)/.test(identity);
+      if (active) return; // this Worker entry never activates PII; the pii-select control covers activation
+      await expectWorkerError(
+        () => workerVault.capture(fixtures.GH, { release: RELEASE, pii: { retain: ["pii_global_iban"] } }),
+        "PII_UNAVAILABLE",
+      );
+    }),
+  );
+
+  results.push(
+    await record("hostile:page-cannot-send-pii-selectors", async () => {
+      const smuggled = [
+        { kind: "vault-request", v: 2, id: "hostile-pii-1", op: "stats", pii: ["pii"] },
+        { kind: "vault-request", v: 2, id: "hostile-pii-2", op: "capture", input: "x", options: { release: RELEASE, pii: ["pii"] } },
+        { kind: "vault-request", v: 2, id: "hostile-pii-3", op: "capture", input: "x", options: { release: RELEASE, pii: { retain: ["pii_global_iban"], selectors: ["pii"] } } },
+        { kind: "vault-request", v: 2, id: "hostile-pii-4", op: "capture", input: "x", options: { release: RELEASE }, expectPiiActivation: "credentials=full;selectors=off" },
+        { kind: "vault-request", v: 2, id: "hostile-pii-5", op: "initialize", pii: ["pii"] },
+      ];
+      for (const message of smuggled) {
+        const reply = await rawRequest(worker, message);
+        assert(reply.ok === false && reply.error.code === "WORKER_PROTOCOL_VIOLATION", `${message.id} was not rejected`);
+      }
+      const stats = await workerVault.stats();
+      assert(stats.disposed === false, "the worker stopped serving after selector-smuggling attempts");
     }),
   );
 

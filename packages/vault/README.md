@@ -107,7 +107,7 @@ What changes from main-thread mode:
 - **Where the mapping lives.** The vault instance and every retained entry live in a closure private to the Worker's own module scope, not reachable by direct main-thread object access. The only interface is a validated message protocol: an out-of-protocol request (unrecognized operation, wrong shape, an unexpected key, a `__proto__`-bearing payload) is rejected explicitly (`WORKER_PROTOCOL_VIOLATION`), never silently ignored or coerced.
 - **What it does not add.** A dedicated Worker is not an authentication boundary. Code that already has a reference to the `Worker` (for example a compromised same-page script) can still call `capture`/`restore` through the same protocol a legitimate caller uses, and can still observe whatever that protocol legitimately returns. Worker mode narrows *accidental* main-thread reach to the mapping; it does not defend against a main thread that is already compromised. See the [Worker-mode ADR](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md)'s guarantee boundary.
 - **The API shape.** `WorkerVault` mirrors `capture`/`restore`/`revoke`/`stats`/`dispose`, but every call returns a `Promise` — it is a message round trip, not an in-process call. `createWorkerVault(worker, { timeoutMs? })` never falls back to a main-thread vault: if the Worker fails to start, errors, or does not answer in time, the promise rejects with a fixed `VaultError`. Call `vault.terminate()` to stop the underlying Worker immediately.
-- **Capture options.** `policy`, `eligible`, and `displayFormatter` are functions and cannot cross the message boundary (and running main-thread-supplied code inside the Worker would defeat the isolation this mode exists to provide). Worker-mode `capture` accepts only `release`, `maxUses`, `unredacted`, and `ruleset`; passing one of the unsupported options throws `INVALID_ARGUMENT` synchronously, before anything is sent.
+- **Capture options.** `policy`, `eligible`, and `displayFormatter` are functions and cannot cross the message boundary (and running main-thread-supplied code inside the Worker would defeat the isolation this mode exists to provide). Worker-mode `capture` accepts only `release`, `maxUses`, `unredacted`, `ruleset`, and the PII retention allowlist `pii` (see [PII findings](#pii-findings)); passing one of the unsupported options throws `INVALID_ARGUMENT` synchronously, before anything is sent.
 - **CSP.** The Worker's own script response needs the same `'wasm-unsafe-eval'` the main thread needs (it is not inherited from the page), plus a `worker-src` directive that allows creating it, plus — under `require-trusted-types-for 'script'` — a Trusted Types policy for the `new Worker(url)` sink. See the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) for the exact policy used in qualification.
 
 ## Multi-turn conversations
@@ -126,7 +126,19 @@ The pinned core (`0.1.0-beta.9`) has no PII detection. A later core adds opt-in 
 - **Warn-level PII still fails the capture.** Medium- and Low-confidence PII defaults to the core's `warn` action, so such a capture fails with `UNREDACTED_FINDINGS` unless you map those types to `redact` with a core `policy` or choose `unredacted: "pass-through"`.
 - **Fail closed on the pinned core.** With a core that lacks PII support, a non-empty `pii`, any `expectPiiActivation`, or a capture's `pii` option fails with `PII_UNAVAILABLE` before the core is called. `pii: []` is accepted and equals omission. A capture's `pii` option also fails `PII_UNAVAILABLE` when the observed activation has `selectors=off`.
 
-Worker mode does not accept PII options yet ([#39](https://github.com/redact-secret/redact-secret-reversible/issues/39)).
+**In Worker mode** ([#39](https://github.com/redact-secret/redact-secret-reversible/issues/39)) the Worker is its own realm with its own core, so the Worker script owns its activation, not the page:
+
+- `startVaultWorkerHost({ pii, expectPiiActivation })` behaves exactly like `createVault` inside the Worker realm, including adoption when the Worker script awaited the core's `initialize(...)` itself. A conflict surfaces as `createWorkerVault` rejecting with `CORE_FAILURE` / `coreCode: "PII_ACTIVATION_CONFLICT"`.
+- The page cannot choose or change the Worker's selection. No message the page can send carries selectors; a request that tries is rejected with `WORKER_PROTOCOL_VIOLATION`.
+- `workerVault.piiActivation` is the identity the Worker observed (`null` without PII support). `createWorkerVault(worker, { expectPiiActivation })` compares it byte-for-byte and rejects with `PII_ACTIVATION_MISMATCH` on any difference, including `null`. It returns no vault then; terminate the Worker yourself.
+- `workerVault.capture(input, { pii: { retain: [...] } })` takes the same retention allowlist as the main thread. The client validates it before sending (`INVALID_ARGUMENT`), and the Worker validates it again on its own.
+- Worker mode has no `policy` or `eligible`, so a Worker capture containing warn-level PII can only reject (`UNREDACTED_FINDINGS`) or use `unredacted: "pass-through"`.
+
+```ts
+// vault-worker.js — PII on for this Worker realm only
+import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+startVaultWorkerHost({ pii: ["pii"] });
+```
 
 ## API
 
@@ -144,11 +156,11 @@ Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED
 
 ### Worker mode API
 
-`createWorkerVault(worker, options?) → Promise<WorkerVault>` from `"@redact-secret/vault/worker"`. `worker` is a `Worker` (or a `MessagePort`); `options.timeoutMs` (default 15000) bounds the initial handshake and each call. Never falls back to a main-thread vault: rejects with a `VaultError` if the Worker fails to start, errors, or times out.
+`createWorkerVault(worker, options?) → Promise<WorkerVault>` from `"@redact-secret/vault/worker"`. `worker` is a `Worker` (or a `MessagePort`); `options.timeoutMs` (default 15000) bounds the initial handshake and each call; `options.expectPiiActivation` (1 to 512 characters) must equal the Worker's reported identity, or the promise rejects with `PII_ACTIVATION_MISMATCH`. Never falls back to a main-thread vault: rejects with a `VaultError` if the Worker fails to start, errors, or times out, and with `WORKER_PROTOCOL_VIOLATION` if the Worker speaks another protocol version. `VaultError` is exported from this entry too.
 
-`startVaultWorkerHost(options?) → Promise<void>` from `"@redact-secret/vault/worker/host"`, run inside the Worker. `options` extends `VaultOptions` (`limits`, `releasePolicy`, `onAudit`, `now`) plus an optional `target` (defaults to the Worker's own global scope; overridable for tests).
+`startVaultWorkerHost(options?) → Promise<void>` from `"@redact-secret/vault/worker/host"`, run inside the Worker. `options` extends `VaultOptions` (`limits`, `releasePolicy`, `onAudit`, `now`, `pii`, `expectPiiActivation`) plus an optional `target` (defaults to the Worker's own global scope; overridable for tests).
 
-`WorkerVault`: `capture(input, options) → Promise<CaptureResult>` (`options` is `release`, `maxUses`, `unredacted`, `ruleset` only — no `policy`, `eligible`, or `displayFormatter`), `restore(request) → Promise<RestoreResult>`, `revoke(captureId) → Promise<number>`, `stats() → Promise<VaultStats>`, `dispose() → Promise<void>`, and `terminate()` (synchronous; stops the Worker immediately).
+`WorkerVault`: `piiActivation` (`string | null`, read-only), `capture(input, options) → Promise<CaptureResult>` (`options` is `release`, `maxUses`, `unredacted`, `ruleset`, `pii` only — no `policy`, `eligible`, or `displayFormatter`), `restore(request) → Promise<RestoreResult>`, `revoke(captureId) → Promise<number>`, `stats() → Promise<VaultStats>`, `dispose() → Promise<void>`, and `terminate()` (synchronous; stops the Worker immediately).
 
 ## Security reports
 

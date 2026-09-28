@@ -15,7 +15,7 @@
 import { VaultError, type VaultErrorCode } from "./errors.js";
 import { createVault } from "./vault.js";
 import type { Vault, VaultOptions } from "./types.js";
-import { parseRequest, type VaultWorkerRequest, type VaultWorkerResponse } from "./worker-protocol.js";
+import { parseRequest, PROTOCOL_VERSION, type VaultWorkerRequest, type VaultWorkerResponse } from "./worker-protocol.js";
 
 /** The minimal surface this module needs from a Worker global scope or a `MessagePort`. */
 export interface VaultWorkerTarget {
@@ -23,6 +23,15 @@ export interface VaultWorkerTarget {
   addEventListener(type: "message", listener: (event: { readonly data: unknown }) => void): void;
 }
 
+/**
+ * `VaultOptions`, including `pii` and `expectPiiActivation`, with exactly the
+ * main-thread `createVault` semantics inside this Worker realm
+ * (docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md
+ * §3 "Worker mode"): the selection is forwarded only when the Worker script
+ * passes one; otherwise the vault adopts the activation the Worker script
+ * established itself. The page cannot set either option: no request message
+ * carries them.
+ */
 export interface VaultWorkerHostOptions extends VaultOptions {
   /** Message target. Defaults to `globalThis`, which is the Worker's own scope inside a real dedicated Worker. Overridable for tests. */
   readonly target?: VaultWorkerTarget;
@@ -68,12 +77,18 @@ export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {})
     vault = await createVault(vaultOptions);
   } catch (thrown) {
     const { code, coreCode } = errorCode(thrown);
-    const failed: VaultWorkerResponse = { kind: "vault-init-failed", v: 1, code, ...(coreCode === undefined ? {} : { coreCode }) };
+    const failed: VaultWorkerResponse = {
+      kind: "vault-init-failed",
+      v: PROTOCOL_VERSION,
+      code,
+      ...(coreCode === undefined ? {} : { coreCode }),
+    };
     target.postMessage(failed);
     return;
   }
 
-  const ready: VaultWorkerResponse = { kind: "vault-ready", v: 1 };
+  // The observed identity only; the vault fixed it at creation and it cannot change.
+  const ready: VaultWorkerResponse = { kind: "vault-ready", v: PROTOCOL_VERSION, piiActivation: vault.piiActivation };
   target.postMessage(ready);
 
   target.addEventListener("message", (event) => {
@@ -85,7 +100,7 @@ export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {})
       if (parsed.id !== undefined) {
         const violation: VaultWorkerResponse = {
           kind: "vault-response",
-          v: 1,
+          v: PROTOCOL_VERSION,
           id: parsed.id,
           op: "unknown",
           ok: false,
@@ -101,7 +116,7 @@ export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {})
       const result = dispatch(vault, request);
       const response: VaultWorkerResponse = {
         kind: "vault-response",
-        v: 1,
+        v: PROTOCOL_VERSION,
         id: request.id,
         op: request.op,
         ok: true,
@@ -112,7 +127,7 @@ export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {})
       const err = thrown instanceof VaultError ? thrown : new VaultError("INVARIANT_VIOLATION");
       const response: VaultWorkerResponse = {
         kind: "vault-response",
-        v: 1,
+        v: PROTOCOL_VERSION,
         id: request.id,
         op: request.op,
         ok: false,

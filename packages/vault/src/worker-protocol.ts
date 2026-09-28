@@ -13,15 +13,23 @@
  * `capture` / `restore` / `revoke` / `stats` / `dispose` surface the
  * in-memory {@link Vault} exposes.
  *
+ * Version 2 (#39, docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md
+ * §3 "Worker mode") adds the Worker realm's observed PII activation identity
+ * to `vault-ready` and the PII retention allowlist (`pii: { retain }`) to
+ * capture options. No request carries PII selectors: the page can neither
+ * choose nor change the Worker realm's activation. A version-1 peer is
+ * rejected, never downgraded to.
+ *
  * This module has no side effects: it never sends or receives a Worker
  * message itself, and never touches `self` or `Worker`. Both the host
  * (worker-host.ts) and the client (worker-client.ts) import it, so their
  * understanding of the protocol cannot drift apart.
  */
 import { VaultError, VAULT_ERROR_CODES, type DenialReason, type VaultErrorCode } from "./errors.js";
+import { MAX_PII_ACTIVATION_LENGTH, resolvePiiRetention } from "./pii.js";
 import type { CaptureOptions, CaptureResult, RestoreRequest, RestoreResult, VaultStats } from "./types.js";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * Capture options a Worker-mode caller may supply. `policy`, `eligible`, and
@@ -32,10 +40,14 @@ export const PROTOCOL_VERSION = 1;
  * request that includes one of them is rejected explicitly and
  * synchronously before anything is sent (see `buildCaptureRequest`); it is
  * never dropped or ignored silently.
+ *
+ * `pii` is the PII retention allowlist (ADR §1): plain, cloneable data naming
+ * exact `pii_` finding types. It is not a selector and has no effect on
+ * which PII the Worker's core detects.
  */
-export type WorkerCaptureOptions = Pick<CaptureOptions, "release" | "maxUses" | "unredacted" | "ruleset">;
+export type WorkerCaptureOptions = Pick<CaptureOptions, "release" | "maxUses" | "unredacted" | "ruleset" | "pii">;
 
-const CAPTURE_OPTION_KEYS = ["release", "maxUses", "unredacted", "ruleset"] as const;
+const CAPTURE_OPTION_KEYS = ["release", "maxUses", "unredacted", "ruleset", "pii"] as const;
 
 export type VaultWorkerOp = "capture" | "restore" | "revoke" | "stats" | "dispose";
 /** `"unknown"` appears only on a response when the host could not determine which op a malformed request named. */
@@ -44,7 +56,7 @@ export type VaultWorkerResponseOp = VaultWorkerOp | "unknown";
 export type VaultWorkerRequest =
   | {
       readonly kind: "vault-request";
-      readonly v: 1;
+      readonly v: 2;
       readonly id: string;
       readonly op: "capture";
       readonly input: string;
@@ -52,20 +64,20 @@ export type VaultWorkerRequest =
     }
   | {
       readonly kind: "vault-request";
-      readonly v: 1;
+      readonly v: 2;
       readonly id: string;
       readonly op: "restore";
       readonly request: RestoreRequest;
     }
   | {
       readonly kind: "vault-request";
-      readonly v: 1;
+      readonly v: 2;
       readonly id: string;
       readonly op: "revoke";
       readonly captureId: string;
     }
-  | { readonly kind: "vault-request"; readonly v: 1; readonly id: string; readonly op: "stats" }
-  | { readonly kind: "vault-request"; readonly v: 1; readonly id: string; readonly op: "dispose" };
+  | { readonly kind: "vault-request"; readonly v: 2; readonly id: string; readonly op: "stats" }
+  | { readonly kind: "vault-request"; readonly v: 2; readonly id: string; readonly op: "dispose" };
 
 export interface VaultWorkerErrorInfo {
   readonly code: VaultErrorCode;
@@ -76,11 +88,20 @@ export interface VaultWorkerErrorInfo {
 export type VaultWorkerResult = CaptureResult | RestoreResult | VaultStats | number | null;
 
 export type VaultWorkerResponse =
-  | { readonly kind: "vault-ready"; readonly v: 1 }
-  | { readonly kind: "vault-init-failed"; readonly v: 1; readonly code: VaultErrorCode; readonly coreCode?: string }
+  | {
+      readonly kind: "vault-ready";
+      readonly v: 2;
+      /**
+       * The core PII activation identity the Worker's vault observed in the
+       * Worker realm, or `null` when that core has no PII surface (beta.9).
+       * Always present in a version-2 ready message.
+       */
+      readonly piiActivation: string | null;
+    }
+  | { readonly kind: "vault-init-failed"; readonly v: 2; readonly code: VaultErrorCode; readonly coreCode?: string }
   | {
       readonly kind: "vault-response";
-      readonly v: 1;
+      readonly v: 2;
       readonly id: string;
       readonly op: VaultWorkerResponseOp;
       readonly ok: true;
@@ -88,7 +109,7 @@ export type VaultWorkerResponse =
     }
   | {
       readonly kind: "vault-response";
-      readonly v: 1;
+      readonly v: 2;
       readonly id: string;
       readonly op: VaultWorkerResponseOp;
       readonly ok: false;
@@ -120,6 +141,11 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 128;
 }
 
+/** Same shape bound `expectPiiActivation` has: a 1 to 512 character string. */
+function isPiiActivationIdentity(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_PII_ACTIVATION_LENGTH;
+}
+
 function isVaultErrorCode(value: unknown): value is VaultErrorCode {
   return typeof value === "string" && ERROR_CODES.has(value);
 }
@@ -138,6 +164,28 @@ function looseId(value: unknown): string | undefined {
   return isNonEmptyString(value.id) ? value.id : undefined;
 }
 
+/**
+ * Host-side capture options check. Only the known keys are accepted. `pii`,
+ * when present, gets ADR §1's validation here, independently of the client:
+ * a plain object with exactly the key `retain`, holding an array of 1 to 64
+ * exact `pii_` types. It is then rebuilt as a fresh `{ retain }` object, so
+ * nothing else the sender attached to it reaches the vault. Returns
+ * `undefined` on any mismatch.
+ */
+function parseCaptureOptions(options: unknown): WorkerCaptureOptions | undefined {
+  if (!isPlainObject(options) || !hasOnlyKeys(options, CAPTURE_OPTION_KEYS)) return undefined;
+  // `pii: undefined` means absent, exactly as on the main thread.
+  if (options.pii === undefined) return options as WorkerCaptureOptions;
+  let retain: ReadonlySet<string> | undefined;
+  try {
+    retain = resolvePiiRetention(options.pii);
+  } catch {
+    return undefined;
+  }
+  if (retain === undefined) return undefined;
+  return { ...(options as WorkerCaptureOptions), pii: { retain: [...retain] } };
+}
+
 /** Validated by the Worker host. Rejects anything that is not exactly one of the five known operations. */
 export function parseRequest(data: unknown): ParseResult<VaultWorkerRequest> {
   if (!isPlainObject(data)) return { ok: false, id: undefined };
@@ -150,18 +198,11 @@ export function parseRequest(data: unknown): ParseResult<VaultWorkerRequest> {
     case "capture": {
       if (!hasOnlyKeys(data, ["kind", "v", "id", "op", "input", "options"])) return { ok: false, id: data.id };
       if (typeof data.input !== "string") return { ok: false, id: data.id };
-      const options = data.options;
-      if (!isPlainObject(options) || !hasOnlyKeys(options, CAPTURE_OPTION_KEYS)) return { ok: false, id: data.id };
+      const options = parseCaptureOptions(data.options);
+      if (options === undefined) return { ok: false, id: data.id };
       return {
         ok: true,
-        value: {
-          kind: "vault-request",
-          v: 1,
-          id: data.id,
-          op: "capture",
-          input: data.input,
-          options: options as WorkerCaptureOptions,
-        },
+        value: { kind: "vault-request", v: PROTOCOL_VERSION, id: data.id, op: "capture", input: data.input, options },
       };
     }
     case "restore": {
@@ -171,7 +212,7 @@ export function parseRequest(data: unknown): ParseResult<VaultWorkerRequest> {
         ok: true,
         value: {
           kind: "vault-request",
-          v: 1,
+          v: PROTOCOL_VERSION,
           id: data.id,
           op: "restore",
           request: data.request as unknown as RestoreRequest,
@@ -181,12 +222,15 @@ export function parseRequest(data: unknown): ParseResult<VaultWorkerRequest> {
     case "revoke": {
       if (!hasOnlyKeys(data, ["kind", "v", "id", "op", "captureId"])) return { ok: false, id: data.id };
       if (typeof data.captureId !== "string") return { ok: false, id: data.id };
-      return { ok: true, value: { kind: "vault-request", v: 1, id: data.id, op: "revoke", captureId: data.captureId } };
+      return {
+        ok: true,
+        value: { kind: "vault-request", v: PROTOCOL_VERSION, id: data.id, op: "revoke", captureId: data.captureId },
+      };
     }
     case "stats":
     case "dispose": {
       if (!hasOnlyKeys(data, ["kind", "v", "id", "op"])) return { ok: false, id: data.id };
-      return { ok: true, value: { kind: "vault-request", v: 1, id: data.id, op: data.op } };
+      return { ok: true, value: { kind: "vault-request", v: PROTOCOL_VERSION, id: data.id, op: data.op } };
     }
   }
 }
@@ -196,8 +240,12 @@ export function parseResponse(data: unknown): ParseResult<VaultWorkerResponse> {
   if (!isPlainObject(data)) return { ok: false, id: undefined };
 
   if (data.kind === "vault-ready") {
-    if (!hasOnlyKeys(data, ["kind", "v"]) || data.v !== PROTOCOL_VERSION) return { ok: false, id: undefined };
-    return { ok: true, value: { kind: "vault-ready", v: 1 } };
+    if (!hasOnlyKeys(data, ["kind", "v", "piiActivation"]) || data.v !== PROTOCOL_VERSION) return { ok: false, id: undefined };
+    // Required, not optional: a version-2 host always states what it observed.
+    if (!Object.prototype.hasOwnProperty.call(data, "piiActivation")) return { ok: false, id: undefined };
+    const piiActivation = data.piiActivation;
+    if (piiActivation !== null && !isPiiActivationIdentity(piiActivation)) return { ok: false, id: undefined };
+    return { ok: true, value: { kind: "vault-ready", v: PROTOCOL_VERSION, piiActivation } };
   }
 
   if (data.kind === "vault-init-failed") {
@@ -208,7 +256,12 @@ export function parseResponse(data: unknown): ParseResult<VaultWorkerResponse> {
     if (data.coreCode !== undefined && typeof data.coreCode !== "string") return { ok: false, id: undefined };
     return {
       ok: true,
-      value: { kind: "vault-init-failed", v: 1, code: data.code, ...(data.coreCode === undefined ? {} : { coreCode: data.coreCode }) },
+      value: {
+        kind: "vault-init-failed",
+        v: PROTOCOL_VERSION,
+        code: data.code,
+        ...(data.coreCode === undefined ? {} : { coreCode: data.coreCode }),
+      },
     };
   }
 
@@ -220,7 +273,14 @@ export function parseResponse(data: unknown): ParseResult<VaultWorkerResponse> {
       if (!hasOnlyKeys(data, ["kind", "v", "id", "op", "ok", "result"])) return { ok: false, id: data.id };
       return {
         ok: true,
-        value: { kind: "vault-response", v: 1, id: data.id, op: data.op, ok: true, result: data.result as VaultWorkerResult },
+        value: {
+          kind: "vault-response",
+          v: PROTOCOL_VERSION,
+          id: data.id,
+          op: data.op,
+          ok: true,
+          result: data.result as VaultWorkerResult,
+        },
       };
     }
     if (data.ok === false) {
@@ -234,7 +294,7 @@ export function parseResponse(data: unknown): ParseResult<VaultWorkerResponse> {
         ok: true,
         value: {
           kind: "vault-response",
-          v: 1,
+          v: PROTOCOL_VERSION,
           id: data.id,
           op: data.op,
           ok: false,
@@ -264,6 +324,9 @@ export function buildCaptureRequest(id: string, input: string, options: WorkerCa
   if (!isPlainObject(options) || !hasOnlyKeys(options, CAPTURE_OPTION_KEYS)) {
     throw new VaultError("INVALID_ARGUMENT");
   }
+  // ADR §1 validation, as the main-thread vault applies it: an invalid `pii`
+  // fails synchronously with INVALID_ARGUMENT before anything is sent.
+  if (options.pii !== undefined) resolvePiiRetention(options.pii);
   return { kind: "vault-request", v: PROTOCOL_VERSION, id, op: "capture", input, options };
 }
 
