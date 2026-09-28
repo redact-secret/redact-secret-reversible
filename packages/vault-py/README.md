@@ -14,8 +14,11 @@ PyPI. It provides trusted principal/tenant resolution, a source→sink/path/purp
 tuple, fail-closed policy evaluation, an extended denial vocabulary, and
 audit events with no field capable of carrying a restored value. Storage is
 in-memory only, matching `@redact-secret/vault`'s threat boundary — nothing
-here is persistent. Version `0.1.0a2` (PEP 440; the counterpart of the npm
-`0.1.0-alpha.2` release) is installable only from this repository.
+here is persistent. Version `0.1.0a3` (PEP 440; the counterpart of the npm
+`0.1.0-alpha.3` release) is the first version to be published to PyPI, from
+`release.yml` through trusted publishing (see
+[RELEASING.md](../../RELEASING.md#python)). Until that publish has run, it is
+installable only from this repository.
 
 This package does not implement secret detection. `@redact-secret/core` has
 no published Python distribution (verified against the
@@ -107,7 +110,7 @@ asyncio.run(main())
 
 ## PII selection and retention
 
-**Status: implemented in `0.1.0a2`, which is not published to any index.** PII detection needs
+**Status: implemented since `0.1.0a2` (never published); `0.1.0a3` is the first PyPI release.** PII detection needs
 `@redact-secret/core@0.1.0-beta.10`, which this repository pins
 (`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
 fail-closed rules below. The rules are
