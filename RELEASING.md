@@ -60,7 +60,7 @@ For the first stable release, either keep this manual step or change each packag
 1. Bump `version` in `packages/vault-py/pyproject.toml` and `__version__` in `packages/vault-py/src/redact_secret_vault/__init__.py` (PEP 440, e.g. `0.1.0a3` for the npm `0.1.0-alpha.3` line) and merge to `main` with `ci` green.
 2. The same `v<version>` tag push (step 3 above), or a `workflow_dispatch` run of `release.yml` from `main`, publishes the Python distribution when its version is not on PyPI yet. The Python chain does not depend on the npm jobs, and they do not depend on it:
    - `python` re-runs `ruff check` and `pytest` on Python 3.12 against that commit (the `ci` workflow covers 3.10, 3.12, and 3.13).
-   - `python-dist` builds the sdist and wheel with a pinned `build`, fails unless the wheel contains `redact_secret_vault/boundary/core_bridge.mjs` and both files carry the `pyproject.toml` version, runs `twine check --strict`, and uploads `dist/` as the `python-dist` artifact.
+   - `python-dist` builds the sdist and wheel with a pinned `build`, fails unless the wheel contains `redact_secret_vault/boundary/core_bridge.mjs` and both files carry the `pyproject.toml` version (`scripts/verify-python-dist.py`). It then runs an install smoke test: it installs the wheel into a virtualenv under `$RUNNER_TEMP`, outside the checkout, and installs `@redact-secret/core` into a separate directory with `npm ci --ignore-scripts` from `scripts/python-wheel-smoke/package-lock.json`, whose core version must equal the wheel's `PINNED_CORE_VERSION`. `scripts/smoke-python-wheel.py` then checks that `NodeCoreBridge()` without a location fails with `BRIDGE_CORE_NOT_FOUND` and that `NodeCoreBridge(node_modules=...)` finds a synthetic `github_token`. Last, it runs `twine check --strict` and uploads `dist/` as the `python-dist` artifact. When the core pin changes, update that lockfile in the same change (`npm install --package-lock-only` in `scripts/python-wheel-smoke`).
    - `pypi-publish` is the only job with `id-token: write`. It resolves the version from `pyproject.toml` and checks `https://pypi.org/pypi/redact-secret-vault/<version>/json`: HTTP 200 skips the upload (so a re-pushed tag or re-run is a no-op), 404 proceeds, and anything else fails the job. It then downloads the artifact and uploads it with `pypa/gh-action-pypi-publish`, which also uploads PEP 740 attestations by default.
 3. Because the Python version is independent of the npm versions, a tag that bumps only the npm packages publishes nothing new to PyPI, and a Python-only bump can ship from a `workflow_dispatch` run on `main` without a new tag.
 
@@ -84,6 +84,8 @@ pip index versions redact-secret-vault --pre
 pip install --no-cache-dir "redact-secret-vault==<version>"
 python -c "import redact_secret_vault as m; print(m.__version__)"
 python -c "import importlib.resources as r; print(r.files('redact_secret_vault').joinpath('boundary/core_bridge.mjs').is_file())"
+mkdir -p /tmp/rsv-verify-core && npm install --prefix /tmp/rsv-verify-core --ignore-scripts @redact-secret/core@0.1.0-beta.10
+SMOKE_NODE_MODULES=/tmp/rsv-verify-core/node_modules python scripts/smoke-python-wheel.py  # from a checkout
 ```
 
 To check the PEP 740 attestations, fetch them from PyPI's integrity API, or verify them against this repository with [`pypi-attestations`](https://pypi.org/project/pypi-attestations/):

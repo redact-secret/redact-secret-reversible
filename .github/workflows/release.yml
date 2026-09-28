@@ -255,6 +255,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # For the install smoke test below (the bridge runs under node).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -271,6 +276,33 @@ jobs:
         # Exactly one wheel and one sdist, the wheel carries
         # boundary/core_bridge.mjs, and both carry pyproject.toml's version.
         run: python ../../scripts/verify-python-dist.py
+      # Installs the built wheel into a virtualenv outside the repository, as a
+      # consumer would, and installs the core into a separate directory from
+      # scripts/python-wheel-smoke's lockfile (`npm ci`: exact version and
+      # integrity hash, no lifecycle scripts, a fresh npm cache). The locked
+      # core version must equal the wheel's PINNED_CORE_VERSION. Then runs a
+      # synthetic scan through NodeCoreBridge(node_modules=...); the script
+      # also checks that the same scan without node_modules= fails with
+      # BRIDGE_CORE_NOT_FOUND, so a pass cannot come from the repository.
+      - name: Smoke-test the wheel from a virtualenv outside the repository
+        run: |
+          set -eu
+          SMOKE_ROOT="$RUNNER_TEMP/vault-py-smoke"
+          rm -rf "$SMOKE_ROOT"
+          mkdir -p "$SMOKE_ROOT/core"
+          python -m venv "$SMOKE_ROOT/venv"
+          "$SMOKE_ROOT/venv/bin/python" -m pip install --no-cache-dir packages/vault-py/dist/*.whl
+          PINNED=$(cd "$SMOKE_ROOT" && "$SMOKE_ROOT/venv/bin/python" -c 'from redact_secret_vault.core_client import PINNED_CORE_VERSION; print(PINNED_CORE_VERSION)')
+          LOCKED=$(node -p 'require("./scripts/python-wheel-smoke/package-lock.json").packages["node_modules/@redact-secret/core"].version')
+          if [ -z "$PINNED" ] || [ "$PINNED" != "$LOCKED" ]; then
+            echo "::error::scripts/python-wheel-smoke locks @redact-secret/core $LOCKED; the wheel pins $PINNED." >&2
+            exit 1
+          fi
+          cp scripts/python-wheel-smoke/package.json scripts/python-wheel-smoke/package-lock.json "$SMOKE_ROOT/core/"
+          npm ci --prefix "$SMOKE_ROOT/core" --ignore-scripts --no-audit --no-fund --cache "$SMOKE_ROOT/npm-cache"
+          cd "$SMOKE_ROOT"
+          SMOKE_NODE_MODULES="$SMOKE_ROOT/core/node_modules" \
+            "$SMOKE_ROOT/venv/bin/python" "$GITHUB_WORKSPACE/scripts/smoke-python-wheel.py"
       - name: twine check
         working-directory: packages/vault-py
         run: python -m twine check --strict dist/*

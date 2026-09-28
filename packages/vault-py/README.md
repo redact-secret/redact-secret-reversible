@@ -36,12 +36,49 @@ implementation" means here.
 ## Requirements
 
 - Python 3.10+
-- A `node` executable on `PATH` and `@redact-secret/core` resolvable from
-  `node_modules` (installed at this repository's root via `npm ci`), for
-  `NodeCoreBridge`. A consumer that supplies its own `CoreClient` does not
-  need Node at all — the boundary is a `Protocol`, not a hard dependency.
+- For `NodeCoreBridge`: a `node` executable (Node.js 20, 22, or 24) on
+  `PATH`, and `@redact-secret/core` at exactly the pinned version
+  (`PINNED_CORE_VERSION`, `0.1.0-beta.10`) installed with npm in a directory
+  your application owns. A consumer that supplies its own `CoreClient` does
+  not need Node at all — the boundary is a `Protocol`, not a hard dependency.
 
-## Install (from this repository)
+## Install
+
+```bash
+pip install redact-secret-vault==0.1.0a3
+# In a directory of your choice, for example /srv/myapp/core:
+npm install @redact-secret/core@0.1.0-beta.10
+```
+
+Then tell the bridge where that `node_modules` is, either in code or through
+the environment:
+
+```python
+bridge = NodeCoreBridge(node_modules="/srv/myapp/core/node_modules")
+```
+
+```bash
+export REDACT_SECRET_VAULT_NODE_MODULES=/srv/myapp/core/node_modules
+```
+
+The explicit `node_modules=` argument wins over the environment variable. The
+bridge then loads `<node_modules>/@redact-secret/core` from exactly that
+directory. It never searches parent directories or the working directory, so
+whoever controls the process's working directory cannot substitute the core.
+A relative path is made absolute when the bridge is constructed. The reported
+core version must still equal `PINNED_CORE_VERSION`
+(`CORE_VERSION_MISMATCH` otherwise). A directory without the core raises
+`CORE_FAILURE` with `core_code="BRIDGE_CORE_NOT_FOUND"`, or
+`BRIDGE_CORE_LOAD_FAILED` if the core is there but fails to load. Neither
+error includes the path.
+
+With neither setting, the bridge script resolves the core relative to its own
+location in site-packages. That works when the virtualenv lives inside the
+project that ran `npm install` (for example `/srv/myapp/.venv` with
+`/srv/myapp/node_modules`), and in this repository. For a virtualenv anywhere
+else it fails with `BRIDGE_CORE_NOT_FOUND`, so pass `node_modules=`.
+
+From this repository (development; `npm ci` at the root installs the core):
 
 ```bash
 cd packages/vault-py
