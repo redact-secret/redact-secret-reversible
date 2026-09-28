@@ -192,10 +192,21 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if ! npm view "@redact-secret/vault@${VAULT_DEP}" version >/dev/null 2>&1; then
-            echo "::error::$SPEC depends on @redact-secret/vault@${VAULT_DEP}, which is not on the registry." >&2
-            exit 1
-          fi
+          # A version published seconds ago (the vault step above) can 404 on
+          # the registry for a minute or two while npm processes it, so this
+          # dependency check retries (20 attempts, 15s apart, ~5 minutes)
+          # before failing. The already-published check above stays a single
+          # check.
+          ATTEMPT=1
+          until npm view "@redact-secret/vault@${VAULT_DEP}" version --prefer-online >/dev/null 2>&1; do
+            if [ "$ATTEMPT" -ge 20 ]; then
+              echo "::error::$SPEC depends on @redact-secret/vault@${VAULT_DEP}, which is not on the registry after $ATTEMPT attempts." >&2
+              exit 1
+            fi
+            echo "@redact-secret/vault@${VAULT_DEP} not visible on the registry yet (attempt $ATTEMPT/20); retrying in 15s." >&2
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 15
+          done
           echo "publish=true" >> "$GITHUB_OUTPUT"
 
       - name: npm publish --provenance (vault-server)
