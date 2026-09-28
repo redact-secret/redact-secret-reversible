@@ -3,14 +3,14 @@
 **Alpha.** Server authority for restoring values captured by [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault/README.md) across principals, tenants, sources, destinations, and purposes, with an in-memory storage backend. Implements the interface fixed by [the server authority ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/2026-09-27-define-server-authority-interface.md) (S1, #15): `PrincipalResolver`, `ServerReleasePolicy`, `ServerDenialReason`, and `ServerAuditEvent`.
 
 ```bash
-npm install @redact-secret/vault-server@0.1.0-alpha.2 @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault-server@0.1.0-alpha.3 @redact-secret/vault@0.1.0-alpha.3 @redact-secret/core@0.1.0-beta.10
 ```
 
-`0.1.0-alpha.2` is this package's first published version. Install exact versions: `@redact-secret/vault`'s npm `latest` tag still points at `0.1.0-alpha.1`, which conflicts with core beta.10, and this package's own `latest` tag is the prerelease `0.1.0-alpha.2` (npm assigned it on first publish).
+`0.1.0-alpha.2` was this package's first published version. Install exact versions: `@redact-secret/vault`'s npm `latest` tag still points at `0.1.0-alpha.1`, which conflicts with core beta.10, and this package's own `latest` tag is the prerelease `0.1.0-alpha.2` (npm assigned it on first publish).
 
 ## Supported, and not
 
-| | Status in 0.1.0-alpha.2 |
+| | Status in 0.1.0-alpha.3 |
 | --- | --- |
 | Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
 | Storage backend | In-memory only. `@redact-secret/store-*` persistent backends are a separate, later track ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) — this package does not implement or claim one |

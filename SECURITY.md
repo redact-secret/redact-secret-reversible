@@ -10,9 +10,10 @@ Detection problems (a secret the core misses or misclassifies) belong to the cor
 
 | Package | Version | Security fixes |
 | --- | --- | --- |
-| `@redact-secret/vault` | `0.1.0-alpha.2` (npm dist-tag `alpha`) | Latest alpha only |
-| `@redact-secret/vault-server` | `0.1.0-alpha.2` (npm dist-tag `alpha`) | Latest alpha only |
-| `@redact-secret/vault` | `0.1.0-alpha.1` (core `0.1.0-beta.9`) | None; upgrade to `0.1.0-alpha.2` |
+| `@redact-secret/vault` | `0.1.0-alpha.3` (npm dist-tag `alpha`) | Latest alpha only |
+| `@redact-secret/vault-server` | `0.1.0-alpha.3` (npm dist-tag `alpha`) | Latest alpha only |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.2` | None; upgrade to `0.1.0-alpha.3` |
+| `@redact-secret/vault` | `0.1.0-alpha.1` (core `0.1.0-beta.9`) | None; upgrade to `0.1.0-alpha.3` |
 
 Alpha releases may change their API between versions. Only the runtimes and core version listed in the [beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md) and the [Worker-mode record](docs/research/qualification-worker-mode.md) are supported: Node.js and browser main-thread use, the optional dedicated-Worker mode, and `@redact-secret/vault-server`'s single-process, in-memory server authority. Persistent-store modes and the unpublished Python package (`redact-secret-vault`) are unsupported, and reports about them are treated as design input.
 

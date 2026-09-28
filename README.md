@@ -8,9 +8,10 @@ Optional, policy-gated restoration of values redacted by [Redact Secret](https:/
 | --- | --- | --- |
 | `@redact-secret/vault@0.1.0-alpha.1` | `@redact-secret/core@0.1.0-beta.9` exactly | Published 2026-09-27, manually, without provenance. No PII support. [Qualification record](docs/research/qualification-0.1.0-alpha.1.md) |
 | `@redact-secret/vault@0.1.0-alpha.2`, `@redact-secret/vault-server@0.1.0-alpha.2` | `@redact-secret/core@0.1.0-beta.10` exactly | Published 2026-09-28 (npm `alpha` tag; [GitHub pre-release](https://github.com/redact-secret/redact-secret-vault/releases/tag/v0.1.0-alpha.2)). `@redact-secret/vault` was published by the release workflow with npm provenance; `@redact-secret/vault-server` (its first publish) was published manually, without provenance. Adds opt-in PII activation and retention ([decision record](docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)), Worker protocol v2, and a breaking initialization change; see the [changelog](CHANGELOG.md). Qualified with PII off and on in Node.js, three browser engines on the main thread and in a dedicated Worker, and the Python bridge ([beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md)) |
+| `@redact-secret/vault@0.1.0-alpha.3`, `@redact-secret/vault-server@0.1.0-alpha.3` | `@redact-secret/core@0.1.0-beta.10` exactly | Released 2026-09-28 from `release.yml` with npm provenance for both packages (npm `alpha` tag). Adds a Worker-script-owned core `policy` for Worker mode ([#59](https://github.com/redact-secret/redact-secret-vault/issues/59)); no breaking change from `0.1.0-alpha.2`. See the [changelog](CHANGELOG.md) |
 | `redact-secret-vault` (Python) `0.1.0a2` | `@redact-secret/core@0.1.0-beta.10` through the bridge | Not published to any index; install from this repository |
 
-Install exact versions rather than a dist-tag. `@alpha` resolves to `0.1.0-alpha.2` for both packages, but npm's `latest` tag is a prerelease on both: `0.1.0-alpha.1` for `@redact-secret/vault` (which peers core beta.9 and conflicts with core beta.10) and `0.1.0-alpha.2` for `@redact-secret/vault-server` (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
+Install exact versions rather than a dist-tag. `@alpha` resolves to `0.1.0-alpha.3` for both packages, but npm's `latest` tag is a prerelease on both: `0.1.0-alpha.1` for `@redact-secret/vault` (which peers core beta.9 and conflicts with core beta.10) and `0.1.0-alpha.2` for `@redact-secret/vault-server` (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -31,17 +32,16 @@ The agreed JavaScript package names describe two different responsibilities:
 
 | Package | Responsibility | Version on `main` | Runtimes |
 | --- | --- | --- | --- |
-| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | `0.1.0-alpha.2` (published) | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
-| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | `0.1.0-alpha.2` (published; first release) | Tested: Node.js 20/22/24. Not yet: persistent backends |
+| `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**alpha**) | `0.1.0-alpha.3` | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
+| `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**alpha**, in-memory backend) | `0.1.0-alpha.3` | Tested: Node.js 20/22/24. Not yet: persistent backends |
 | `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [contract](docs/decisions/2026-09-27-define-persistent-store-contract.md) only) | None | Backend-specific server environments |
 | `redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0a2` (unpublished) | Python 3.10+ server processes with a `node` executable available |
 
 All packages on `main` pin `@redact-secret/core@0.1.0-beta.10` exactly:
 
 ```bash
-# Once 0.1.0-alpha.2 is published (not yet):
-npm install @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
-npm install @redact-secret/vault-server@0.1.0-alpha.2 @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault@0.1.0-alpha.3 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault-server@0.1.0-alpha.3 @redact-secret/vault@0.1.0-alpha.3 @redact-secret/core@0.1.0-beta.10
 ```
 
 A server may use the default in-memory vault; `vault-server` and in-memory storage are not alternatives. Persistence is a storage choice, not a third trust environment. The server security contract is language-neutral: Python, Rust, and Go should have native distributions or a separately qualified service boundary as the core support and evidence permit. The npm names do not imply that server use is JavaScript-only. See the [package and language decision](docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md).
