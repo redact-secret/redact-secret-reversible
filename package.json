@@ -6,12 +6,13 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @redact-secret/vault",
-    "typecheck": "npm run typecheck -w @redact-secret/vault",
+    "build": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server",
+    "typecheck": "npm run typecheck -w @redact-secret/vault && npm run build -w @redact-secret/vault && npm run typecheck -w @redact-secret/vault-server",
     "qualify:node": "node qualification/node.mjs",
     "qualify:browser": "node qualification/browser.mjs",
     "qualify:worker": "node qualification/worker.mjs",
-    "check:boundaries": "node qualification/check-boundaries.mjs"
+    "check:boundaries": "node qualification/check-boundaries.mjs",
+    "test:vault-server": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server && npm run test -w @redact-secret/vault-server"
   },
   "devDependencies": {
     "@redact-secret/core": "0.1.0-beta.9",

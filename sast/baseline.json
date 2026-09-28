@@ -6,6 +6,69 @@
       "path": "qualification/browser.mjs",
       "rationale": "`dir` is the qualification runner's own temporary directory, used only as the file-system path passed to join() for writeFileSync. The written HTML is a constant template literal with no interpolation, so no external value reaches a <script> tag. The rule flags the path argument, not the markup.",
       "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    },
+    "3aca6b05b755a979": {
+      "classification": "false_positive",
+      "line": 25,
+      "path": "qualification/browser.mjs",
+      "rationale": "Same finding as 762bff0d2bdd5716, re-flagged under a new id after an earlier edit shifted this write from line 36 to line 25. `dir` is still the qualification runner's own temporary directory; the written HTML is still a constant template literal with no interpolation.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    },
+    "342a50ede6295565": {
+      "classification": "false_positive",
+      "line": 40,
+      "path": "qualification/worker.mjs",
+      "rationale": "Same pattern as 762bff0d2bdd5716 in the sibling Worker-mode qualification script (#14): `dir` is the qualification runner's own temporary directory, and the written index.html is a constant template literal with no interpolation reaching the <script> tag.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    },
+    "e408f8ce645d80ff": {
+      "classification": "false_positive",
+      "line": 51,
+      "path": "qualification/worker.mjs",
+      "rationale": "Same pattern as 762bff0d2bdd5716: `dir` is the qualification runner's own temporary directory, and the written main.js is a constant template literal (the Worker-mode qualification harness bootstrap) with no interpolation of external input.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    },
+    "ef3a56ef1b56a51b": {
+      "classification": "hardening",
+      "line": 177,
+      "path": "packages/vault/src/worker-client.ts",
+      "rationale": "This `postMessage` is the main-thread side of the optional dedicated-Worker protocol qualified in #14 (docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md), not an incidental messaging side channel. The request object is built locally by this same module from typed call arguments, immediately before this line; it carries nothing the vault's synchronous in-process API would not already return to a direct caller, and the Worker host validates every inbound message against `worker-protocol.ts` before it reaches the vault. The hardening is the schema-validated protocol itself, exercised adversarially by `packages/vault/test/worker-suite.js` and `qualification/worker.mjs`.",
+      "rule_id": "sast.rules.local.vault-no-side-channels"
+    },
+    "237ec8827aeee407": {
+      "classification": "hardening",
+      "line": 72,
+      "path": "packages/vault/src/worker-host.ts",
+      "rationale": "Worker-host side of the same qualified protocol as ef3a56ef1b56a51b: reports vault-init failure to the main thread as a typed `VaultWorkerResponse`, containing only an error code (and optional core error code), never a captured or restored value. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md.",
+      "rule_id": "sast.rules.local.vault-no-side-channels"
+    },
+    "a3bd6d8239b29797": {
+      "classification": "hardening",
+      "line": 77,
+      "path": "packages/vault/src/worker-host.ts",
+      "rationale": "Worker-host side of the same qualified protocol as ef3a56ef1b56a51b: sends the fixed `vault-ready` readiness signal, no payload data at all. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md.",
+      "rule_id": "sast.rules.local.vault-no-side-channels"
+    },
+    "0584f4f32e3e6155": {
+      "classification": "hardening",
+      "line": 94,
+      "path": "packages/vault/src/worker-host.ts",
+      "rationale": "Worker-host side of the same qualified protocol as ef3a56ef1b56a51b: reports a `WORKER_PROTOCOL_VIOLATION` for a raw message that failed `parseRequest`. Sent only when there is a valid caller id to answer; the malformed payload itself is never echoed back or logged. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md.",
+      "rule_id": "sast.rules.local.vault-no-side-channels"
+    },
+    "aedeaae7a25dda41": {
+      "classification": "hardening",
+      "line": 110,
+      "path": "packages/vault/src/worker-host.ts",
+      "rationale": "Worker-host side of the same qualified protocol as ef3a56ef1b56a51b: the successful-call response, carrying exactly the `result` the vault's synchronous API would already return to a direct in-process caller for the same operation. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md.",
+      "rule_id": "sast.rules.local.vault-no-side-channels"
+    },
+    "34ec29f2526f6987": {
+      "classification": "hardening",
+      "line": 125,
+      "path": "packages/vault/src/worker-host.ts",
+      "rationale": "Worker-host side of the same qualified protocol as ef3a56ef1b56a51b: the failed-call response, carrying the `VaultError` code/reason the vault's synchronous API would already throw to a direct in-process caller, never a plaintext value. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md.",
+      "rule_id": "sast.rules.local.vault-no-side-channels"
     }
   },
   "known_errors": {}
