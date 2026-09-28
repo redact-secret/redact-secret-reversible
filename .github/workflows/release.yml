@@ -268,34 +268,9 @@ jobs:
         run: python -m build
       - name: Verify distribution contents and versions
         working-directory: packages/vault-py
-        shell: python
-        run: |
-          import pathlib, sys, tarfile, tomllib, zipfile
-          from email.parser import HeaderParser
-
-          expected = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
-          dist = pathlib.Path("dist")
-          found = sorted(p.name for p in dist.iterdir())
-          wheels = sorted(dist.glob("*.whl"))
-          sdists = sorted(dist.glob("*.tar.gz"))
-          if len(wheels) != 1 or len(sdists) != 1 or len(found) != 2:
-              sys.exit(f"expected exactly one wheel and one sdist in dist/, found {found}")
-          wheel, sdist = wheels[0], sdists[0]
-
-          with zipfile.ZipFile(wheel) as zf:
-              names = zf.namelist()
-              if "redact_secret_vault/boundary/core_bridge.mjs" not in names:
-                  sys.exit(f"{wheel.name} is missing redact_secret_vault/boundary/core_bridge.mjs")
-              meta = next(n for n in names if n.endswith(".dist-info/METADATA"))
-              wheel_version = HeaderParser().parsestr(zf.read(meta).decode())["Version"]
-          with tarfile.open(sdist) as tf:
-              pkg_info = next(m for m in tf.getmembers() if m.name.count("/") == 1 and m.name.endswith("/PKG-INFO"))
-              sdist_version = HeaderParser().parsestr(tf.extractfile(pkg_info).read().decode())["Version"]
-
-          for name, version in ((wheel.name, wheel_version), (sdist.name, sdist_version)):
-              if version != expected:
-                  sys.exit(f"{name} has version {version!r}; pyproject.toml says {expected!r}")
-          print(f"{wheel.name} and {sdist.name}: version {expected}, wheel carries core_bridge.mjs")
+        # Exactly one wheel and one sdist, the wheel carries
+        # boundary/core_bridge.mjs, and both carry pyproject.toml's version.
+        run: python ../../scripts/verify-python-dist.py
       - name: twine check
         working-directory: packages/vault-py
         run: python -m twine check --strict dist/*
