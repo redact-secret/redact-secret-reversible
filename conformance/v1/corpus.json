@@ -1,14 +1,18 @@
 {
   "corpus": "redact-secret-reversible/conformance",
-  "version": "1.1.0",
-  "coreCompatibility": "@redact-secret/core 0.1.0-beta.9 (full profile)",
+  "version": "1.2.0",
+  "coreCompatibility": "@redact-secret/core 0.1.0-beta.10 (full profile); PII cases need PII activation with selection [\"pii\"]",
   "notes": [
     "Every value below is synthetic and unmistakably fake. None is a live credential.",
     "Templates: {NAME} is a fixture; {cN.i} is token i of capture cN; {cN.text} is capture cN's redacted text.",
     "restore.captures lists capture names the request may draw from; when omitted, the runner passes every capture made in that vault so far.",
     "policy maps a core finding type to an action; unmapped types use policy.default, else redact. Omitting policy uses the core's built-in policy.",
     "Every case also asserts that no fixture value appears in any error, audit event, or console output.",
-    "This corpus is versioned independently of detection benchmarks; it measures vault behavior, not detection accuracy."
+    "This corpus is versioned independently of detection benchmarks; it measures vault behavior, not detection accuracy.",
+    "piiActivation on a case (\"on\" or \"off\") names the core PII activation the case needs: \"on\" means selectors=pii:global (selection [\"pii\"]), \"off\" means selectors=off. A runner whose runtime has a different activation reports the case as skipped, never as passed. Cases without it run under any activation.",
+    "requiresSharedRealm marks a case that needs one realm-global, one-shot core activation shared by every vault in the process (JavaScript). A runner whose core boundary starts a fresh core per call (the Python bridge) reports it as skipped with that reason.",
+    "The vault step's pii and expectPiiActivation are forwarded verbatim to the implementation's activation options; expect on a vault step names the error that creating it (or, for the Python bridge, its first core call) must raise.",
+    "IBAN is the widely published documentation-example IBAN; it is not an account. The core detects it as pii_global_iban (High, redact) only next to a field label, so inputs write \"iban {IBAN}\". pii_global_iban warn and block come from an explicit policy: no synthetic input found yields a Medium or Low (default warn) PII finding on beta.10."
   ],
   "fixtures": {
     "GH": "ghp_SYNTHETICxREVOKEDxTESTx0000000000000",
@@ -18,7 +22,8 @@
     "KV_VALUE": "SYNTH_REVOKED_42",
     "SHORT_VALUE": "abcd1234",
     "ACCENT_VALUE": "SYNTHÉTIQUE_révoqué_ÆØÅ",
-    "EMOJI_VALUE": "🔑SYNTHETIC🔑VALUE"
+    "EMOJI_VALUE": "🔑SYNTHETIC🔑VALUE",
+    "IBAN": "DE89 3704 0044 0532 0130 00"
   },
   "cases": [
     {
@@ -2277,6 +2282,542 @@
               "aws_access_key_id",
               "contextual_secret"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.retention.default-not-retained",
+      "covers": [
+        "PII-1"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "as": "c1",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "unrestorable": 1,
+            "passedThrough": 0,
+            "textExcludes": [
+              "{IBAN}",
+              "{GH}"
+            ]
+          }
+        },
+        {
+          "op": "capture",
+          "as": "c2",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "eligibleTypes": [
+              "github_token",
+              "pii_global_iban"
+            ]
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "unrestorable": 1,
+            "textExcludes": [
+              "{IBAN}"
+            ]
+          }
+        },
+        {
+          "op": "stats",
+          "expect": {
+            "entries": 2,
+            "captures": 2
+          }
+        },
+        {
+          "op": "restore",
+          "sink": "reply",
+          "captures": [
+            "c1"
+          ],
+          "fields": {
+            "body": "{c1.text}"
+          },
+          "expect": {
+            "restored": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.retention.allowlist-restores",
+      "covers": [
+        "PII-1"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "as": "c1",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            }
+          },
+          "expect": {
+            "tokens": 2,
+            "types": [
+              "pii_global_iban",
+              "github_token"
+            ],
+            "unrestorable": 0,
+            "passedThrough": 0,
+            "textExcludes": [
+              "{IBAN}",
+              "{GH}"
+            ]
+          }
+        },
+        {
+          "op": "restore",
+          "sink": "reply",
+          "fields": {
+            "body": "{c1.text}"
+          },
+          "expect": {
+            "fields": {
+              "body": "iban {IBAN} token {GH}"
+            },
+            "restored": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.retention.allowlist-is-exact-and-eligible-narrows",
+      "covers": [
+        "PII-1"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_email"
+              ]
+            }
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "unrestorable": 1
+          }
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            },
+            "eligibleTypes": [
+              "github_token"
+            ]
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "unrestorable": 1,
+            "textExcludes": [
+              "{IBAN}"
+            ]
+          }
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban",
+                "pii_global_iban"
+              ]
+            }
+          },
+          "expect": {
+            "tokens": 2,
+            "unrestorable": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.action.warn-rejected-by-default",
+      "covers": [
+        "PII-2"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            },
+            "policy": {
+              "pii_global_iban": "warn"
+            }
+          },
+          "expect": {
+            "error": "UNREDACTED_FINDINGS"
+          }
+        },
+        {
+          "op": "stats",
+          "expect": {
+            "entries": 0,
+            "captures": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.action.warn-pass-through-is-visible",
+      "covers": [
+        "PII-2"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            },
+            "unredacted": "pass-through",
+            "policy": {
+              "pii_global_iban": "warn"
+            }
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "passedThrough": 1,
+            "passedThroughTypes": [
+              "pii_global_iban"
+            ],
+            "textIncludes": [
+              "iban {IBAN}"
+            ],
+            "textExcludes": [
+              "{GH}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.action.block-rejects",
+      "covers": [
+        "PII-2"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            },
+            "policy": {
+              "pii_global_iban": "block"
+            }
+          },
+          "expect": {
+            "error": "BLOCKED_FINDING"
+          }
+        },
+        {
+          "op": "stats",
+          "expect": {
+            "entries": 0,
+            "captures": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.activation.retention-unavailable-when-off",
+      "covers": [
+        "PII-1",
+        "PII-3"
+      ],
+      "piiActivation": "off",
+      "steps": [
+        {
+          "op": "vault"
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            }
+          },
+          "expect": {
+            "error": "PII_UNAVAILABLE"
+          }
+        },
+        {
+          "op": "stats",
+          "expect": {
+            "entries": 0,
+            "captures": 0
+          }
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "tokens": 1,
+            "types": [
+              "github_token"
+            ],
+            "unrestorable": 0,
+            "textIncludes": [
+              "iban {IBAN}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.activation.conflict-when-off",
+      "covers": [
+        "PII-3"
+      ],
+      "piiActivation": "off",
+      "requiresSharedRealm": true,
+      "steps": [
+        {
+          "op": "vault",
+          "pii": [
+            "pii"
+          ],
+          "expect": {
+            "error": "CORE_FAILURE",
+            "coreCode": "PII_ACTIVATION_CONFLICT"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.activation.conflict-when-on",
+      "covers": [
+        "PII-3"
+      ],
+      "piiActivation": "on",
+      "requiresSharedRealm": true,
+      "steps": [
+        {
+          "op": "vault",
+          "pii": [],
+          "expect": {
+            "error": "CORE_FAILURE",
+            "coreCode": "PII_ACTIVATION_CONFLICT"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.activation.equivalent-selection-is-idempotent",
+      "covers": [
+        "PII-3"
+      ],
+      "piiActivation": "on",
+      "steps": [
+        {
+          "op": "vault",
+          "pii": [
+            "pii:global"
+          ]
+        },
+        {
+          "op": "capture",
+          "input": "iban {IBAN} token {GH}",
+          "options": {
+            "release": [
+              {
+                "sink": "reply",
+                "paths": [
+                  "body"
+                ]
+              }
+            ],
+            "pii": {
+              "retain": [
+                "pii_global_iban"
+              ]
+            }
+          },
+          "expect": {
+            "tokens": 2,
+            "unrestorable": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pii.activation.expectation-mismatch",
+      "covers": [
+        "PII-3"
+      ],
+      "steps": [
+        {
+          "op": "vault",
+          "expectPiiActivation": "credentials=full;selectors=conformance-mismatch;families=;vocabulary=pii-context/v1",
+          "expect": {
+            "error": "PII_ACTIVATION_MISMATCH"
           }
         }
       ]

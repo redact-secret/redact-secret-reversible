@@ -14,9 +14,19 @@ export async function runSuite({ vault: V, core: C, corpus }) {
   const secrets = Object.values(fixtures);
   const observed = { errors: [], audit: [], console: [] };
 
+  // The realm's core PII activation, fixed by the host runner before this
+  // suite starts: "on" (selectors active), "off" (selectors=off), or "none"
+  // (a core without a PII surface). Corpus cases that name a `piiActivation`
+  // run only under that activation and are reported as skipped otherwise.
+  const piiActivation = observedPiiActivation(C);
+
   const restoreConsole = trapConsole(observed.console);
   try {
     for (const testCase of corpus.cases) {
+      if (testCase.piiActivation !== undefined && testCase.piiActivation !== piiActivation) {
+        results.push({ id: `corpus:${testCase.id}`, ok: true, skipped: `needs PII activation ${testCase.piiActivation}, realm is ${piiActivation}` });
+        continue;
+      }
       results.push(await record(`corpus:${testCase.id}`, () => runCase(V, C, testCase, fixtures, observed)));
     }
     for (const [name, check] of Object.entries(runtimeChecks)) {
@@ -49,11 +59,20 @@ export async function runSuite({ vault: V, core: C, corpus }) {
     corpus: `${corpus.corpus}@${corpus.version}`,
     coreVersion: C.VERSION,
     artifact: C.artifact(),
-    passed: results.filter((r) => r.ok).length,
+    piiActivation,
+    passed: results.filter((r) => r.ok && !r.skipped).length,
     failed: results.filter((r) => !r.ok).length,
+    skipped: results.filter((r) => r.skipped).length,
     results,
     probes: await coreProbes(C, fixtures),
   };
+}
+
+function observedPiiActivation(C) {
+  if (typeof C.piiActivation !== "function") return "none";
+  const identity = C.piiActivation();
+  const field = identity.split(";").find((part) => part.startsWith("selectors="));
+  return field === undefined || field === "selectors=off" || field === "selectors=" ? "off" : "on";
 }
 
 async function record(id, body) {
@@ -151,13 +170,25 @@ async function runCase(V, C, testCase, fixtures, observed) {
 
     switch (step.op) {
       case "vault": {
-        const created = await V.createVault({
-          ...(step.limits ? { limits: step.limits } : {}),
-          ...(step.releasePolicy ? { releasePolicy: makeReleasePolicy(step.releasePolicy) } : {}),
-          onAudit,
-          now: () => clock,
-        });
-        vaults.set(step.id ?? "A", created);
+        let outcome;
+        try {
+          outcome = {
+            value: await V.createVault({
+              ...(step.limits ? { limits: step.limits } : {}),
+              ...(step.releasePolicy ? { releasePolicy: makeReleasePolicy(step.releasePolicy) } : {}),
+              ...(step.pii !== undefined ? { pii: step.pii } : {}),
+              ...(step.expectPiiActivation !== undefined ? { expectPiiActivation: step.expectPiiActivation } : {}),
+              onAudit,
+              now: () => clock,
+            }),
+          };
+        } catch (error) {
+          observed.errors.push(error);
+          assert(error instanceof V.VaultError, `${where(i)}: non-VaultError thrown`);
+          outcome = { error };
+        }
+        if (expectError(outcome)) break;
+        vaults.set(step.id ?? "A", outcome.value);
         break;
       }
       case "capture": {

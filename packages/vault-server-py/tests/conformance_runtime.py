@@ -17,6 +17,21 @@ One case, ``policy.throwing-callback-denies``, is a deliberate, documented
 exception (see ``_POLICY_REASON_OVERRIDES`` below): the vault-level
 ``ReleasePolicy`` and the S1 ``ServerReleasePolicy`` disagree, by contract,
 on what a throwing policy callback means.
+
+PII activation (corpus 1.2.0, #42). Every case runs in one of two *lanes*,
+``PII_LANES``: ``off`` gives each ``NodeCoreBridge`` the selection ``()``
+(``selectors=off``) and ``on`` gives it ``("pii",)`` (``selectors=pii:global``).
+A case's ``piiActivation`` restricts it to the matching lane; the runner
+raises ``CaseSkipped`` otherwise. Two adapter rules differ from the JS
+runner, where activation is realm-global and one-shot:
+
+- The bridge starts a fresh core per ``scan``, so an activation conflict
+  cannot arise. Cases marked ``requiresSharedRealm`` raise ``CaseSkipped``.
+- The bridge reports its activation only on its first core call, not at
+  construction. A ``vault`` step whose ``expect`` names an error therefore
+  makes one ``scan("")`` call right after construction, and that call must
+  raise the expected error (``PII_ACTIVATION_MISMATCH`` for an
+  ``expectPiiActivation`` the core does not report).
 """
 
 from __future__ import annotations
@@ -31,6 +46,7 @@ from redact_secret_vault_server import (
     CaptureOptions,
     InMemoryVaultServer,
     NodeCoreBridge,
+    PiiRetention,
     PolicyDecision,
     Principal,
     RestoreRequest,
@@ -87,6 +103,28 @@ _TEMPLATE_PATTERN = re.compile(
 
 class ConformanceFailure(AssertionError):
     pass
+
+
+class CaseSkipped(Exception):
+    """The case does not apply to this lane or to the per-call bridge realm."""
+
+
+# lane name -> the PII selection every bridge in that lane forwards.
+PII_LANES: dict[str, tuple[str, ...]] = {"off": (), "on": ("pii",)}
+
+
+def case_skip_reason(case: dict[str, Any], lane: str) -> str | None:
+    """Why ``case`` does not run in ``lane``, or ``None`` when it does."""
+
+    required = case.get("piiActivation")
+    if required is not None and required != lane:
+        return f"needs PII activation {required}, lane is {lane}"
+    if case.get("requiresSharedRealm"):
+        return (
+            "needs one realm-global core activation shared by every vault; "
+            "NodeCoreBridge starts a fresh core per scan, so no activation conflict can arise"
+        )
+    return None
 
 
 def load_corpus() -> dict[str, Any]:
@@ -198,14 +236,20 @@ async def run_case(
     fixtures: dict[str, str],
     *,
     observed: dict[str, list[Any]] | None = None,
+    lane: str = "off",
 ) -> None:
-    """Raises ``ConformanceFailure`` on the first mismatch.
+    """Raises ``ConformanceFailure`` on the first mismatch, or
+    ``CaseSkipped`` when the case does not apply to ``lane``.
 
     ``observed``, when given, collects every ``VaultServerError`` raised and
     every audit event emitted, for a leakage check across the whole corpus
     (see ``test_leakage_across_corpus`` in ``test_conformance.py``).
     """
 
+    skip = case_skip_reason(case, lane)
+    if skip is not None:
+        raise CaseSkipped(skip)
+    lane_selection = PII_LANES[lane]
     clock = {"value": 0}
     vaults: dict[str, InMemoryVaultServer] = {}
     captures: dict[str, dict[str, Any]] = {}
@@ -221,8 +265,25 @@ async def run_case(
         op = step["op"]
 
         if op == "vault":
+            expect = step.get("expect", {})
+            try:
+                bridge = NodeCoreBridge(
+                    pii=tuple(step.get("pii", lane_selection)),
+                    expected_pii_activation=step.get("expectPiiActivation"),
+                )
+                if "error" in expect:
+                    # The bridge observes activation on its first core call.
+                    bridge.scan("")
+                error = None
+            except VaultServerError as exc:
+                error = exc
+            if observed is not None and error is not None:
+                observed["errors"].append(error)
+            _check_error(where(i), expect, error)
+            if error is not None:
+                continue
             server = InMemoryVaultServer(
-                core_client=NodeCoreBridge(),
+                core_client=bridge,
                 principal_resolver=_resolve_principal,
                 release_policy=_make_release_policy(step.get("releasePolicy")),
                 on_audit=on_audit if observed is not None else None,
@@ -239,6 +300,7 @@ async def run_case(
         if op == "capture":
             options = step["options"]
             eligible_types = options.get("eligibleTypes")
+            pii_option = options.get("pii")
             capture_options = CaptureOptions(
                 issued_tenant=SYNTHETIC_TENANT,
                 release=tuple(
@@ -249,6 +311,7 @@ async def run_case(
                 unredacted=options.get("unredacted", "reject"),
                 policy=options.get("policy"),
                 eligible=(lambda f, _t=eligible_types: f["type"] in _t) if eligible_types else None,
+                pii=PiiRetention(retain=tuple(pii_option["retain"])) if pii_option is not None else None,
             )
             input_text = _expand(step["input"], fixtures, captures)
             try:

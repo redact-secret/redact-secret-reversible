@@ -10,7 +10,7 @@ import { extname, join, normalize } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 import { build } from "vite";
 
-import { makeConsumer, packVault, STRICT_CSP, summarize, writeReport } from "./lib.mjs";
+import { makeConsumer, packVault, scenarioReport, STRICT_CSP, summarize, writeReport } from "./lib.mjs";
 
 // Identical except WebAssembly compilation is not permitted.
 const NO_WASM_CSP = STRICT_CSP.replace(" 'wasm-unsafe-eval'", "");
@@ -32,19 +32,29 @@ writeFileSync(
 import * as core from "@redact-secret/core";
 import corpus from "./corpus.json";
 import { runSuite } from "./suite.js";
+import { PII_SELECTION, runPiiScenario } from "./pii-scenarios.js";
 
 const violations = [];
 document.addEventListener("securitypolicyviolation", (e) => violations.push(e.effectiveDirective));
 
-const mode = new URLSearchParams(location.search).get("mode");
+// Each page load is a fresh realm with an uninitialized core, so every PII
+// lane and every PII scenario gets its own navigation (#42).
+const params = new URLSearchParams(location.search);
+const mode = params.get("mode");
 if (mode === "no-wasm") {
   vault.createVault({ pii: [] }).then(
     () => { window.__result = { created: true }; },
     (e) => { window.__result = { created: false, code: e.code, coreCode: e.coreCode, violations }; },
   );
+} else if (mode === "pii-scenario") {
+  runPiiScenario(params.get("name"), { vault, core, fixtures: corpus.fixtures }).then((result) => {
+    try { result.artifact = core.artifact(); } catch {}
+    result.cspViolations = violations;
+    window.__result = result;
+  });
 } else {
   // The application owns PII activation (core beta.10+ requires it before createVault()).
-  core.initialize({ pii: [] }).then(() => runSuite({ vault, core, corpus })).then(
+  core.initialize({ pii: mode === "pii-on" ? [...PII_SELECTION] : [] }).then(() => runSuite({ vault, core, corpus })).then(
     (report) => { report.cspViolations = violations; window.__result = report; },
     (e) => { window.__result = { fatal: String(e && e.code || "non-vault failure") }; },
   );
@@ -81,6 +91,9 @@ const server = createServer((req, res) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
+// Scenario names only; the scenarios themselves run in the browser bundle.
+const { piiScenarios, PII_SELECTION } = await import(new URL("../packages/vault/test/pii-scenarios.js", import.meta.url).href);
+
 let ok = true;
 try {
   for (const name of requested) {
@@ -110,14 +123,54 @@ try {
         ok: negative.created === false && negative.code === "CORE_FAILURE" && negative.coreCode === "INITIALIZATION_FAILED",
         message: `outcome ${JSON.stringify(negative)}`,
       });
+      extra.push({ id: "browser:pii-activation-off", ok: report.piiActivation === "off", message: `realm PII activation ${report.piiActivation}` });
       for (const r of extra) {
         if (r.ok) delete r.message;
         report.results.push(r);
       }
-      report.passed = report.results.filter((r) => r.ok).length;
+      report.passed = report.results.filter((r) => r.ok && !r.skipped).length;
       report.failed = report.results.filter((r) => !r.ok).length;
       writeReport(`browser-${name}-${version}`, report);
-      ok = summarize(`${name} ${version}`, report) && ok;
+      ok = summarize(`${name} ${version} pii-off`, report) && ok;
+
+      // PII on (#42): the same suite in a fresh page whose core the page
+      // initialized with PII_SELECTION, under the same strict CSP.
+      const onPage = await browser.newPage();
+      await onPage.goto(`${origin}/?mode=pii-on`);
+      await onPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 120_000 });
+      const onReport = await onPage.evaluate(() => window.__result);
+      if (onReport.fatal) throw new Error(`${name}: PII-on suite failed to run (${onReport.fatal})`);
+      onReport.runtime = { name, version, csp: STRICT_CSP, piiSelection: PII_SELECTION };
+      for (const r of [
+        { id: "browser:artifact-is-wasm", ok: onReport.artifact === "wasm", message: `artifact ${onReport.artifact}` },
+        { id: "browser:no-csp-violations", ok: onReport.cspViolations.length === 0, message: `violations ${onReport.cspViolations}` },
+        { id: "browser:pii-activation-on", ok: onReport.piiActivation === "on", message: `realm PII activation ${onReport.piiActivation}` },
+      ]) {
+        if (r.ok) delete r.message;
+        onReport.results.push(r);
+      }
+      onReport.passed = onReport.results.filter((r) => r.ok && !r.skipped).length;
+      onReport.failed = onReport.results.filter((r) => !r.ok).length;
+      writeReport(`browser-${name}-${version}-pii-on`, onReport);
+      ok = summarize(`${name} ${version} pii-on`, onReport) && ok;
+
+      // PII scenarios: one fresh page (realm) per scenario.
+      const scenarioResults = [];
+      for (const scenario of Object.keys(piiScenarios)) {
+        const scenarioPage = await browser.newPage();
+        await scenarioPage.goto(`${origin}/?mode=pii-scenario&name=${encodeURIComponent(scenario)}`);
+        await scenarioPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 60_000 });
+        const result = await scenarioPage.evaluate(() => window.__result);
+        await scenarioPage.close();
+        const { artifact, cspViolations, ...rest } = result;
+        if (rest.ok && artifact !== undefined && artifact !== "wasm") Object.assign(rest, { ok: false, message: `artifact ${artifact}` });
+        if (rest.ok && cspViolations.length > 0) Object.assign(rest, { ok: false, message: `violations ${cspViolations}` });
+        scenarioResults.push(rest);
+      }
+      const scenarios = scenarioReport(scenarioResults, { coreVersion: report.coreVersion, artifact: "wasm" });
+      scenarios.runtime = { name, version, csp: STRICT_CSP };
+      writeReport(`browser-${name}-${version}-pii-scenarios`, scenarios);
+      ok = summarize(`${name} ${version} pii-scenarios`, scenarios) && ok;
     } finally {
       await browser.close();
     }

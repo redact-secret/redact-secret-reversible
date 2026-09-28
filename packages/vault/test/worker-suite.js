@@ -217,16 +217,42 @@ export async function runWorkerSuite({ workerVault, worker, fixtures, corePii = 
     }),
   );
 
+  // Which PII-dependent cases apply depends on the Worker realm's activation,
+  // which the Worker script (not this page) chose. An inapplicable case is
+  // reported as skipped, never as passed (#42).
+  const identity = workerVault.piiActivation;
+  const piiActive = identity !== null && !/(^|;)selectors=off(;|$)/.test(identity);
+
   results.push(
-    await record("parity:pii-retention-fails-closed-without-active-pii", async () => {
-      const identity = workerVault.piiActivation;
-      const active = identity !== null && !/(^|;)selectors=off(;|$)/.test(identity);
-      if (active) return; // this Worker entry never activates PII; the pii-select control covers activation
-      await expectWorkerError(
-        () => workerVault.capture(fixtures.GH, { release: RELEASE, pii: { retain: ["pii_global_iban"] } }),
-        "PII_UNAVAILABLE",
-      );
-    }),
+    piiActive
+      ? { id: "parity:pii-retention-fails-closed-without-active-pii", ok: true, skipped: "Worker realm has PII active" }
+      : await record("parity:pii-retention-fails-closed-without-active-pii", async () => {
+          await expectWorkerError(
+            () => workerVault.capture(fixtures.GH, { release: RELEASE, pii: { retain: ["pii_global_iban"] } }),
+            "PII_UNAVAILABLE",
+          );
+        }),
+  );
+
+  // ADR §1 through protocol v2 on a PII-on Worker realm: PII is not retained
+  // without the allowlist (counted unrestorable, absent from the output),
+  // and an allowlisted PII type is retained and restores. `eligible` and
+  // `policy` are functions and cannot cross the protocol, so narrowing and
+  // warn gating are main-thread-only cases.
+  const piiInput = fixtures.IBAN === undefined ? undefined : `iban ${fixtures.IBAN} token ${fixtures.GH}`;
+  results.push(
+    !piiActive || piiInput === undefined
+      ? { id: "parity:pii-retention-default-and-allowlist", ok: true, skipped: "Worker realm has no active PII" }
+      : await record("parity:pii-retention-default-and-allowlist", async () => {
+          const plain = await workerVault.capture(piiInput, { release: RELEASE });
+          assert(JSON.stringify(plain.tokens.map((t) => t.type)) === '["github_token"]', "PII retained by default");
+          assert(plain.unrestorable === 1 && !plain.text.includes(fixtures.IBAN), "default PII not replaced by a display placeholder");
+          const kept = await workerVault.capture(piiInput, { release: RELEASE, pii: { retain: ["pii_global_iban"] } });
+          assert(JSON.stringify(kept.tokens.map((t) => t.type)) === '["pii_global_iban","github_token"]', "allowlisted PII not retained");
+          assert(kept.unrestorable === 0 && !kept.text.includes(fixtures.IBAN), "allowlisted capture output");
+          const { fields, restored } = await workerVault.restore({ sink: "draft-reply", captures: [kept.captureId], fields: { body: kept.text } });
+          assert(restored === 2 && fields.body === piiInput, "allowlisted PII did not restore");
+        }),
   );
 
   results.push(
@@ -248,8 +274,9 @@ export async function runWorkerSuite({ workerVault, worker, fixtures, corePii = 
   );
 
   return {
-    passed: results.filter((r) => r.ok).length,
+    passed: results.filter((r) => r.ok && !r.skipped).length,
     failed: results.filter((r) => !r.ok).length,
+    skipped: results.filter((r) => r.skipped).length,
     results,
   };
 }

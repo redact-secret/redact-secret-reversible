@@ -72,6 +72,7 @@ export function makeConsumer(name, tarball, { omitOptional = false, extraDeps = 
   }
   cpSync(join(ROOT, "packages/vault/test/suite.js"), join(dir, "suite.js"));
   cpSync(join(ROOT, "packages/vault/test/worker-suite.js"), join(dir, "worker-suite.js"));
+  cpSync(join(ROOT, "packages/vault/test/pii-scenarios.js"), join(dir, "pii-scenarios.js"));
   cpSync(join(ROOT, "conformance/v1/corpus.json"), join(dir, "corpus.json"));
   return dir;
 }
@@ -81,9 +82,27 @@ export function writeReport(name, report) {
   writeFileSync(join(REPORTS, `${name}.json`), JSON.stringify(report, null, 2) + "\n");
 }
 
+/**
+ * Folds one-realm-per-scenario PII results (packages/vault/test/pii-scenarios.js)
+ * into a report shaped like the suite's.
+ */
+export function scenarioReport(results, { coreVersion, artifact }) {
+  return {
+    kind: "pii-scenarios",
+    coreVersion,
+    artifact,
+    passed: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    results,
+    probes: null,
+  };
+}
+
 export function summarize(name, report) {
   const failed = report.results.filter((r) => !r.ok);
-  console.log(`${name}: ${report.passed} passed, ${report.failed} failed (core ${report.coreVersion}, artifact ${report.artifact})`);
+  const skipped = report.skipped ? `, ${report.skipped} skipped` : "";
+  const activation = report.piiActivation ? `, PII ${report.piiActivation}` : "";
+  console.log(`${name}: ${report.passed} passed, ${report.failed} failed${skipped} (core ${report.coreVersion}, artifact ${report.artifact}${activation})`);
   for (const f of failed) console.log(`  FAIL ${f.id}: ${f.message}`);
   console.log(`  probes: ${JSON.stringify(report.probes)}`);
   return failed.length === 0;

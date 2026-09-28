@@ -13,7 +13,7 @@ import { extname, join, normalize } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 import { build } from "vite";
 
-import { makeConsumer, packVault, STRICT_CSP, summarize, writeReport } from "./lib.mjs";
+import { makeConsumer, packVault, scenarioReport, STRICT_CSP, summarize, writeReport } from "./lib.mjs";
 
 // Adds worker-src explicitly rather than relying on the script-src fallback,
 // so the qualification evidence states the exact directive Worker mode
@@ -88,7 +88,110 @@ function makeWorker() {
   return new Worker(new URL("./worker-entry.js", import.meta.url), { type: "module" });
 }
 
+// PII scenarios (#42). Each creates fresh Workers, so each Worker realm's
+// core is uninitialized until its own script or host initializes it.
+const MISMATCH = "credentials=full;selectors=qualification-mismatch;families=;vocabulary=pii-context/v1";
+function check(condition, message) {
+  if (!condition) throw Object.assign(new Error(message), { qualification: true });
+}
+function selectorsOf(identity) {
+  return String(identity).split(";").find((part) => part.startsWith("selectors=")) || "";
+}
+async function rejectionOf(promise) {
+  try { await promise; } catch (e) { return e; }
+  return undefined;
+}
+const workerScenarios = {
+  async "order:worker-script-first-host-adopts"() {
+    const w1 = new Worker(new URL("./worker-app-first-entry.js", import.meta.url), { type: "module" });
+    const v1 = await createWorkerVault(w1, { timeoutMs: 10000 });
+    check(selectorsOf(v1.piiActivation) === "selectors=pii:global", "adopted identity is not pii:global");
+    const w2 = new Worker(new URL("./worker-app-first-entry.js", import.meta.url), { type: "module" });
+    const v2 = await createWorkerVault(w2, { timeoutMs: 10000, expectPiiActivation: v1.piiActivation });
+    check(v2.piiActivation === v1.piiActivation, "a second Worker realm reported a different identity");
+    w1.terminate();
+    w2.terminate();
+  },
+  async "order:worker-script-first-host-conflicts"() {
+    const w = new Worker(new URL("./worker-app-first-conflict-entry.js", import.meta.url), { type: "module" });
+    const e = await rejectionOf(createWorkerVault(w, { timeoutMs: 10000 }));
+    check(e && e.code === "CORE_FAILURE" && e.coreCode === "PII_ACTIVATION_CONFLICT", "host with a different selection: " + (e ? e.code + "/" + e.coreCode : "created"));
+    w.terminate();
+  },
+  async "order:host-first-worker-script-conflicts"() {
+    const w = new Worker(new URL("./worker-host-first-entry.js", import.meta.url), { type: "module" });
+    const probe = new Promise((resolve) => {
+      w.addEventListener("message", (event) => {
+        if (event.data && event.data.kind === "qualification-probe") resolve(event.data);
+      });
+    });
+    const v = await createWorkerVault(w, { timeoutMs: 10000 });
+    check(selectorsOf(v.piiActivation) === "selectors=pii:global", "host-selected identity is not pii:global");
+    const outcome = await probe;
+    check(outcome.identical === "ok", "identical selection after the host: " + outcome.identical);
+    check(outcome.different === "PII_ACTIVATION_CONFLICT", "different selection after the host: " + outcome.different);
+    w.terminate();
+  },
+  async "activation:omitted-and-uninitialized-is-not-initialized"() {
+    const w = new Worker(new URL("./worker-uninitialized-entry.js", import.meta.url), { type: "module" });
+    const e = await rejectionOf(createWorkerVault(w, { timeoutMs: 10000 }));
+    check(e && e.code === "CORE_FAILURE" && e.coreCode === "NOT_INITIALIZED", "pii omitted, uninitialized: " + (e ? e.code + "/" + e.coreCode : "created"));
+    w.terminate();
+  },
+  async "activation:expectation-mismatch-rejects"() {
+    const w = new Worker(new URL("./worker-pii-entry.js", import.meta.url), { type: "module" });
+    const e = await rejectionOf(createWorkerVault(w, { timeoutMs: 10000, expectPiiActivation: MISMATCH }));
+    check(e && e.code === "PII_ACTIVATION_MISMATCH", "expectPiiActivation mismatch: " + (e ? e.code : "created"));
+    w.terminate();
+  },
+  async "retention:selectors-off-capture-pii-unavailable"() {
+    const w = makeWorker();
+    const v = await createWorkerVault(w, { timeoutMs: 10000 });
+    check(selectorsOf(v.piiActivation) === "selectors=off", "pii: [] did not report selectors=off");
+    const e = await rejectionOf(v.capture("token " + corpus.fixtures.GH, { release: [{ sink: "reply", paths: ["body"] }], pii: { retain: ["pii_global_iban"] } }));
+    check(e && e.code === "PII_UNAVAILABLE", "capture pii.retain with selectors=off: " + (e ? e.code : "succeeded"));
+    const stats = await v.stats();
+    check(stats.entries === 0, "a refused capture left a mapping");
+    w.terminate();
+  },
+};
+
 async function main() {
+  if (mode === "pii-scenario-list") {
+    window.__result = Object.keys(workerScenarios);
+    return;
+  }
+
+  if (mode === "pii-scenario") {
+    const name = new URLSearchParams(location.search).get("name");
+    const id = "worker-pii-scenario:" + name;
+    try {
+      if (!(name in workerScenarios)) throw Object.assign(new Error("unknown scenario"), { qualification: true });
+      await workerScenarios[name]();
+      window.__result = { id, ok: true, cspViolations: violations };
+    } catch (e) {
+      const message = e && e.qualification ? e.message : "unexpected error " + ((e && e.code) || "non-vault exception");
+      window.__result = { id, ok: false, message, cspViolations: violations };
+    }
+    return;
+  }
+
+  if (mode === "pii-on") {
+    // The same Worker suite against a Worker realm whose script selected PII.
+    const worker = new Worker(new URL("./worker-pii-entry.js", import.meta.url), { type: "module" });
+    const workerVault = await createWorkerVault(worker, { timeoutMs: 10000 });
+    const report = await runWorkerSuite({ workerVault, worker, fixtures: corpus.fixtures, corePii });
+    report.cspViolations = violations;
+    report.coreVersion = core.VERSION;
+    report.artifact = "wasm";
+    report.probes = null;
+    report.piiActivation = selectorsOf(workerVault.piiActivation);
+    await workerVault.dispose();
+    worker.terminate();
+    window.__result = report;
+    return;
+  }
+
   if (mode === "no-worker-src") {
     // The page's own CSP forbids creating the Worker at all. No fallback to
     // main-thread capture may occur; the client must reject explicitly.
@@ -164,6 +267,7 @@ async function main() {
   report.coreVersion = core.VERSION;
   report.artifact = "wasm";
   report.probes = null;
+  report.piiActivation = selectorsOf(workerVault.piiActivation);
   await workerVault.dispose();
   worker.terminate();
   window.__result = report;
@@ -175,6 +279,44 @@ main().catch((e) => {
 `,
 );
 
+// PII scenarios (#42), each Worker a fresh realm. The Worker script is the
+// application inside that realm: it may initialize the core itself first.
+writeFileSync(
+  join(dir, "worker-app-first-entry.js"),
+  `import * as core from "@redact-secret/core";
+import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+// No top-level await: Vite emits Worker bundles as classic scripts (iife).
+core.initialize({ pii: ["pii"] }).then(() => startVaultWorkerHost()); // adopts the Worker script's activation
+`,
+);
+writeFileSync(
+  join(dir, "worker-app-first-conflict-entry.js"),
+  `import * as core from "@redact-secret/core";
+import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+core.initialize({ pii: ["pii"] }).then(() => startVaultWorkerHost({ pii: [] })); // a different selection: must fail closed
+`,
+);
+// Host first, then the Worker script's own identical and different
+// initializations. Their outcome codes (never values) go to the page on a
+// message kind the vault client ignores.
+writeFileSync(
+  join(dir, "worker-host-first-entry.js"),
+  `import * as core from "@redact-secret/core";
+import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+const outcome = (p) => p.then(() => "ok", (e) => String((e && e.code) || "non-core failure"));
+startVaultWorkerHost({ pii: ["pii"] }).then(async () => {
+  const identical = await outcome(core.initialize({ pii: ["pii"] }));
+  const different = await outcome(core.initialize());
+  self.postMessage({ kind: "qualification-probe", identical, different });
+});
+`,
+);
+writeFileSync(
+  join(dir, "worker-uninitialized-entry.js"),
+  `import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+startVaultWorkerHost(); // pii omitted and nobody initialized this realm's core
+`,
+);
 await build({
   root: dir,
   logLevel: "warn",
@@ -283,14 +425,57 @@ try {
         message: `outcome ${JSON.stringify(mismatchResult)}`,
       });
 
+      extra.push({ id: "worker:pii-activation-off", ok: report.piiActivation === "selectors=off", message: `Worker realm ${report.piiActivation}` });
+
       for (const r of extra) {
         if (r.ok) delete r.message;
         report.results.push(r);
       }
-      report.passed = report.results.filter((r) => r.ok).length;
+      report.passed = report.results.filter((r) => r.ok && !r.skipped).length;
       report.failed = report.results.filter((r) => !r.ok).length;
       writeReport(`worker-${name}-${version}`, report);
-      ok = summarize(`worker ${name} ${version}`, report) && ok;
+      ok = summarize(`worker ${name} ${version} pii-off`, report) && ok;
+
+      // PII on (#42): the Worker suite against a Worker realm whose script
+      // selected ["pii"], under the same strict CSP.
+      const onPage = await browser.newPage();
+      await onPage.goto(`${origin}/?mode=pii-on`);
+      await onPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 120_000 });
+      const onReport = await onPage.evaluate(() => window.__result);
+      if (onReport.fatal) throw new Error(`${name}: PII-on worker suite failed to run (${onReport.fatal})`);
+      onReport.runtime = { name, version, csp: WORKER_CSP, workerPiiSelection: ["pii"] };
+      for (const r of [
+        { id: "worker:no-csp-violations", ok: onReport.cspViolations.length === 0, message: `violations ${onReport.cspViolations}` },
+        { id: "worker:pii-activation-on", ok: onReport.piiActivation === "selectors=pii:global", message: `Worker realm ${onReport.piiActivation}` },
+      ]) {
+        if (r.ok) delete r.message;
+        onReport.results.push(r);
+      }
+      onReport.passed = onReport.results.filter((r) => r.ok && !r.skipped).length;
+      onReport.failed = onReport.results.filter((r) => !r.ok).length;
+      writeReport(`worker-${name}-${version}-pii-on`, onReport);
+      ok = summarize(`worker ${name} ${version} pii-on`, onReport) && ok;
+
+      // PII scenarios: one fresh page per scenario, fresh Workers inside it.
+      const listPage = await browser.newPage();
+      await listPage.goto(`${origin}/?mode=pii-scenario-list`);
+      await listPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 60_000 });
+      const scenarioNames = await listPage.evaluate(() => window.__result);
+      await listPage.close();
+      const scenarioResults = [];
+      for (const scenario of scenarioNames) {
+        const scenarioPage = await browser.newPage();
+        await scenarioPage.goto(`${origin}/?mode=pii-scenario&name=${encodeURIComponent(scenario)}`);
+        await scenarioPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 60_000 });
+        const { cspViolations, ...result } = await scenarioPage.evaluate(() => window.__result);
+        await scenarioPage.close();
+        if (result.ok && cspViolations.length > 0) Object.assign(result, { ok: false, message: `violations ${cspViolations}` });
+        scenarioResults.push(result);
+      }
+      const scenarios = scenarioReport(scenarioResults, { coreVersion: report.coreVersion, artifact: "wasm" });
+      scenarios.runtime = { name, version, csp: WORKER_CSP };
+      writeReport(`worker-${name}-${version}-pii-scenarios`, scenarios);
+      ok = summarize(`worker ${name} ${version} pii-scenarios`, scenarios) && ok;
     } finally {
       await browser.close();
     }
