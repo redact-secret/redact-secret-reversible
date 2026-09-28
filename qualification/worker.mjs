@@ -47,6 +47,16 @@ writeFileSync(
 startVaultWorkerHost();
 `,
 );
+// PII activation control (#39): the Worker script, not the page, states a
+// PII selection for its own realm. On a core without a PII surface (the
+// pinned beta.9) this must fail closed with PII_UNAVAILABLE; on a PII-capable
+// core it must report the activation it observed in the Worker realm.
+writeFileSync(
+  join(dir, "worker-pii-entry.js"),
+  `import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+startVaultWorkerHost({ pii: ["pii"] });
+`,
+);
 writeFileSync(
   join(dir, "main.js"),
   `import { createWorkerVault } from "@redact-secret/vault/worker";
@@ -58,6 +68,10 @@ const violations = [];
 document.addEventListener("securitypolicyviolation", (e) => violations.push(e.effectiveDirective));
 
 const mode = new URLSearchParams(location.search).get("mode");
+// Runtime feature detection, as the vault does: the page's core module has a
+// PII surface iff it exports a piiActivation function (beta.10+). Read
+// dynamically so the bundler does not flag the export beta.9 lacks.
+const corePii = typeof Reflect.get(core, "piiActivation") === "function";
 
 // Trusted Types, where the engine supports it (the CSP directive is simply
 // unsupported elsewhere): \`new Worker(url)\` is itself a Trusted Types sink,
@@ -94,6 +108,32 @@ async function main() {
     return;
   }
 
+  if (mode === "pii-select") {
+    const worker = new Worker(new URL("./worker-pii-entry.js", import.meta.url), { type: "module" });
+    try {
+      const vault = await createWorkerVault(worker, { timeoutMs: 10000 });
+      window.__result = { corePii, created: true, piiActive: /(^|;)selectors=(?!off(;|$))[^;]+/.test(vault.piiActivation ?? "") };
+    } catch (e) {
+      window.__result = { corePii, created: false, code: e && e.code, coreCode: e && e.coreCode };
+    }
+    worker.terminate();
+    return;
+  }
+
+  if (mode === "expect-mismatch") {
+    // The page states an activation the Worker realm cannot have. The client
+    // must reject with PII_ACTIVATION_MISMATCH and return no vault.
+    const worker = makeWorker();
+    try {
+      await createWorkerVault(worker, { timeoutMs: 10000, expectPiiActivation: "credentials=full;selectors=qualification-mismatch" });
+      window.__result = { created: true };
+    } catch (e) {
+      window.__result = { created: false, code: e && e.code };
+    }
+    worker.terminate();
+    return;
+  }
+
   if (mode === "no-wasm") {
     // The Worker itself is created, but its CSP forbids WebAssembly
     // compilation, so the core cannot initialize inside it.
@@ -109,7 +149,12 @@ async function main() {
 
   const worker = makeWorker();
   const workerVault = await createWorkerVault(worker);
-  const report = await runWorkerSuite({ workerVault, worker, fixtures: corpus.fixtures });
+  const report = await runWorkerSuite({
+    workerVault,
+    worker,
+    fixtures: corpus.fixtures,
+    corePii,
+  });
   report.cspViolations = violations;
   // core.VERSION is a static export; core.artifact() is deliberately not
   // called here. It would throw NOT_INITIALIZED: this main thread never
@@ -211,6 +256,31 @@ try {
         id: "worker:fails-closed-without-wasm-csp-inside-worker",
         ok: noWasmResult.created === false && noWasmResult.code === "CORE_FAILURE" && noWasmResult.coreCode === "INITIALIZATION_FAILED",
         message: `outcome ${JSON.stringify(noWasmResult)}`,
+      });
+
+      // PII controls (#39), same strict CSP as the main run.
+      const piiPage = await browser.newPage();
+      await piiPage.goto(`${origin}/?mode=pii-select`);
+      await piiPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 60_000 });
+      const piiResult = await piiPage.evaluate(() => window.__result);
+      report.piiSelect = piiResult;
+      extra.push({
+        id: "worker:pii-selection-owned-by-worker-script",
+        ok: piiResult.corePii
+          ? piiResult.created === true && piiResult.piiActive === true
+          : piiResult.created === false && piiResult.code === "PII_UNAVAILABLE",
+        message: `outcome ${JSON.stringify(piiResult)}`,
+      });
+
+      const mismatchPage = await browser.newPage();
+      await mismatchPage.goto(`${origin}/?mode=expect-mismatch`);
+      await mismatchPage.waitForFunction(() => window.__result !== undefined, null, { timeout: 60_000 });
+      const mismatchResult = await mismatchPage.evaluate(() => window.__result);
+      report.expectMismatch = mismatchResult;
+      extra.push({
+        id: "worker:expect-pii-activation-mismatch-rejects",
+        ok: mismatchResult.created === false && mismatchResult.code === "PII_ACTIVATION_MISMATCH",
+        message: `outcome ${JSON.stringify(mismatchResult)}`,
       });
 
       for (const r of extra) {

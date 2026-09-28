@@ -12,6 +12,7 @@
  * docs/specs/in-memory-security.md section 5 and the Worker-mode ADR.
  */
 import { VaultError } from "./errors.js";
+import { resolveExpectedPiiActivation } from "./pii.js";
 import type { CaptureResult, RestoreRequest, RestoreResult, VaultStats } from "./types.js";
 import {
   buildCaptureRequest,
@@ -25,6 +26,10 @@ import {
 } from "./worker-protocol.js";
 
 export type { WorkerCaptureOptions } from "./worker-protocol.js";
+export type { PiiRetention } from "./types.js";
+// The same class the main entry exports (one module), so `instanceof` agrees across both entries.
+export { VaultError } from "./errors.js";
+export type { VaultErrorCode } from "./errors.js";
 
 /** The minimal surface this client needs from a `Worker` (or a `MessagePort`). */
 export interface VaultWorkerPort {
@@ -37,6 +42,12 @@ export interface VaultWorkerPort {
 
 /** Worker-mode mirror of `Vault`. Every operation is an asynchronous round trip to the Worker that owns the mapping. */
 export interface WorkerVault {
+  /**
+   * The core PII activation identity the Worker's vault observed in the
+   * Worker realm, as reported by its ready message, or `null` when that core
+   * has no PII surface (beta.9). Fixed for the Worker vault's lifetime.
+   */
+  readonly piiActivation: string | null;
   capture(input: string, options: WorkerCaptureOptions): Promise<CaptureResult>;
   restore(request: RestoreRequest): Promise<RestoreResult>;
   /** Removes every entry of one capture. Resolves to the number removed. */
@@ -51,6 +62,15 @@ export interface WorkerVault {
 export interface CreateWorkerVaultOptions {
   /** Milliseconds to wait for the Worker to become ready, or for a reply to any one call. Default 15000. */
   readonly timeoutMs?: number;
+  /**
+   * Optional exact canonical PII activation identity the page expects the
+   * Worker realm to have, compared byte-for-byte with the ready message's
+   * `piiActivation`. A difference (including `null`, a core without a PII
+   * surface) rejects with `PII_ACTIVATION_MISMATCH` and no `WorkerVault` is
+   * returned. 1 to 512 characters. This only checks: the Worker script, not
+   * the page, chooses the selection.
+   */
+  readonly expectPiiActivation?: string;
 }
 
 interface Waiter {
@@ -72,6 +92,12 @@ export function createWorkerVault(worker: VaultWorkerPort, options: CreateWorker
   const timeoutMs = options.timeoutMs ?? 15_000;
   if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return Promise.reject(new VaultError("INVALID_ARGUMENT"));
+  }
+  let expectPiiActivation: string | undefined;
+  try {
+    expectPiiActivation = resolveExpectedPiiActivation(options.expectPiiActivation);
+  } catch (thrown) {
+    return Promise.reject(thrown);
   }
 
   return new Promise<WorkerVault>((resolveReady, rejectReady) => {
@@ -99,6 +125,16 @@ export function createWorkerVault(worker: VaultWorkerPort, options: CreateWorker
     worker.addEventListener("message", (event) => {
       const parsed = parseResponse(event.data);
       if (!parsed.ok) {
+        // A readiness message that fails validation (for example a
+        // version-1 host, or a ready message without `piiActivation`) is a
+        // protocol mismatch with this Worker: reject the handshake
+        // explicitly rather than wait for a timeout.
+        if (!readySettled && isHandshakeKind(event.data)) {
+          readySettled = true;
+          clearTimeout(readyTimer);
+          rejectReady(new VaultError("WORKER_PROTOCOL_VIOLATION"));
+          return;
+        }
         // Never coerced into a result. If we can identify which caller this
         // was meant for, that caller's promise rejects explicitly; a message
         // we cannot correlate is dropped, not guessed at.
@@ -118,7 +154,12 @@ export function createWorkerVault(worker: VaultWorkerPort, options: CreateWorker
         if (!readySettled) {
           readySettled = true;
           clearTimeout(readyTimer);
-          resolveReady(makeVault());
+          if (expectPiiActivation !== undefined && message.piiActivation !== expectPiiActivation) {
+            // Value-free: neither identity is carried by the error.
+            rejectReady(new VaultError("PII_ACTIVATION_MISMATCH"));
+            return;
+          }
+          resolveReady(makeVault(message.piiActivation));
         }
         return;
       }
@@ -178,8 +219,9 @@ export function createWorkerVault(worker: VaultWorkerPort, options: CreateWorker
       });
     }
 
-    function makeVault(): WorkerVault {
-      return {
+    function makeVault(piiActivation: string | null): WorkerVault {
+      return Object.freeze<WorkerVault>({
+        piiActivation,
         capture: (input, captureOptions) => send((id) => buildCaptureRequest(id, input, captureOptions)),
         restore: (request) => send((id) => buildRestoreRequest(id, request)),
         revoke: (captureId) => send((id) => buildRevokeRequest(id, captureId)),
@@ -194,7 +236,14 @@ export function createWorkerVault(worker: VaultWorkerPort, options: CreateWorker
           if (typeof worker.terminate === "function") worker.terminate();
           failAllPending(new VaultError("WORKER_UNAVAILABLE"));
         },
-      };
+      });
     }
   });
+}
+
+/** True for a message that claims to be part of the readiness handshake, whether or not it is valid. */
+function isHandshakeKind(data: unknown): boolean {
+  if (typeof data !== "object" || data === null) return false;
+  const kind = (data as { readonly kind?: unknown }).kind;
+  return kind === "vault-ready" || kind === "vault-init-failed";
 }
