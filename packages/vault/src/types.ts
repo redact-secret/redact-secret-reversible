@@ -91,6 +91,37 @@ export interface VaultOptions {
    * fails the call with `INVALID_ARGUMENT`.
    */
   readonly now?: () => number;
+  /**
+   * PII selectors, forwarded verbatim (as a copied array) to the core's
+   * `initialize({ pii })`. `[]` is an explicit "PII off". Omit to adopt the
+   * activation the application already established: on a core with a PII
+   * surface the vault then calls no initializer, and fails `CORE_FAILURE`
+   * with `coreCode: "NOT_INITIALIZED"` when nobody initialized the core.
+   * Shape: 0 to 64 strings of 1 to 128 characters; the core judges selector
+   * grammar (`PII_SELECTOR_*`). On a core without a PII surface (beta.9),
+   * a non-empty array fails `PII_UNAVAILABLE` and `[]` equals omission.
+   */
+  readonly pii?: readonly string[];
+  /**
+   * Optional exact canonical activation identity the application expects,
+   * compared byte-for-byte with the core's `piiActivation()` after
+   * initialization or adoption. A difference fails `PII_ACTIVATION_MISMATCH`.
+   * 1 to 512 characters. On a core without a PII surface it fails
+   * `PII_UNAVAILABLE`.
+   */
+  readonly expectPiiActivation?: string;
+}
+
+/** Exact public PII finding types whose `redact` findings may be retained. */
+export interface PiiRetention {
+  /**
+   * Non-empty (1 to 64 entries). Each entry is an exact public PII type
+   * (`pii_…`, at most 128 ASCII characters from `[a-z0-9_-]`). No wildcards,
+   * prefixes, or selectors. Duplicates are ignored. Unknown but well-formed
+   * names are accepted and simply never match: the vault does not know the
+   * core's inventory.
+   */
+  readonly retain: readonly string[];
 }
 
 export interface CaptureOptions {
@@ -109,10 +140,22 @@ export interface CaptureOptions {
   /** Core declarative ruleset. */
   readonly ruleset?: Uint8Array | string;
   /**
-   * Which `redact` findings to retain. Default: all. An ineligible finding is
-   * still replaced, with a display placeholder that cannot be restored.
+   * Which `redact` findings to retain. Default: all non-PII findings. An
+   * ineligible finding is still replaced, with a display placeholder that
+   * cannot be restored. For a PII finding (type starting `pii_`) this is
+   * consulted only after `pii.retain` allowlists its exact type: it can
+   * narrow the PII allowlist, never widen it, and is not called for a PII
+   * finding outside the allowlist.
    */
   readonly eligible?: (finding: SecretFinding) => boolean;
+  /**
+   * PII retention opt-in. Omit to retain no PII finding: every `redact`
+   * finding whose type starts `pii_` is then replaced by a non-restorable
+   * display placeholder and counted in `unrestorable`. Supplying it while the
+   * vault's observed activation is `null` or has `selectors=off` fails
+   * `PII_UNAVAILABLE`.
+   */
+  readonly pii?: PiiRetention;
   /** Display placeholder for ineligible findings. Default `<SECRET_n>`. */
   readonly displayFormatter?: PlaceholderFormatter;
 }
@@ -166,6 +209,12 @@ export interface VaultStats {
 }
 
 export interface Vault {
+  /**
+   * The core's canonical PII activation identity observed at `createVault`,
+   * or `null` when the installed core has no PII surface (beta.9). Fixed for
+   * the vault's lifetime because activation is one-shot per realm.
+   */
+  readonly piiActivation: string | null;
   capture(input: string, options: CaptureOptions): CaptureResult;
   restore(request: RestoreRequest): RestoreResult;
   /** Removes every entry of one capture. Returns the number removed. */

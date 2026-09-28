@@ -16,6 +16,7 @@ export type {
   CaptureOptions,
   CaptureResult,
   IssuedToken,
+  PiiRetention,
   ReleaseGrant,
   ReleasePolicy,
   ReleaseRequest,

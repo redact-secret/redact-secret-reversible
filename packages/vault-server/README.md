@@ -94,15 +94,17 @@ Exceptions thrown by either hook never change an operation's outcome.
 
 ## API
 
-`createServerVault(options) → Promise<ServerVault>`. Options: `resolvePrincipal` (required), `policy` (required), `onAudit`, `onVaultAudit`, `limits` (partial `VaultLimits`, same shape as `@redact-secret/vault`), `now()` (for tests), `policyRevision` (string or a function, stamped per capture), `revocationMemoryMs` (default `limits.entryTtlMs`), `resolverTimeoutMs`/`policyTimeoutMs` (default 5000 each).
+`createServerVault(options) → Promise<ServerVault>`. Options: `resolvePrincipal` (required), `policy` (required), `onAudit`, `onVaultAudit`, `limits` (partial `VaultLimits`, same shape as `@redact-secret/vault`), `now()` (for tests), `policyRevision` (string or a function, stamped per capture), `revocationMemoryMs` (default `limits.entryTtlMs`), `resolverTimeoutMs`/`policyTimeoutMs` (default 5000 each), `pii` and `expectPiiActivation` (forwarded as given to `@redact-secret/vault`'s `createVault`. This package adds no PII activation behavior of its own. See the vault README's "PII findings" section).
 
-`server.capture(input, options) → Promise<CaptureResult>`. Options extend `@redact-secret/vault`'s `CaptureOptions` with a required `issuedTenant`. Result is the vault's own unmodified `CaptureResult`.
+`server.piiActivation → string | null`. The wrapped vault's observed core PII activation identity. It is `null` on a core without PII support.
+
+`server.capture(input, options) → Promise<CaptureResult>`. Options extend `@redact-secret/vault`'s `CaptureOptions` with a required `issuedTenant`. The PII retention allowlist `pii: { retain }` is forwarded as given. Result is the vault's own unmodified `CaptureResult`.
 
 `server.restore({ context, tenant?, sink, purpose, sessionId?, captures, fields, requestId? }) → Promise<{ fields, restored, principalId, tenant }>`. Throws `VaultServerError` with code `RESTORE_DENIED` and one of the reasons above, or `INVALID_ARGUMENT` for a structurally malformed request (checked before principal resolution, and never audited as a security decision).
 
 `server.revoke(captureId) → Promise<number>`, `server.dispose() → Promise<void>` (idempotent), `server.stats() → Promise<{ entries, captures, revokedCaptures, disposed }>`.
 
-Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the shadow registry and the wrapped vault disagreed — a bug in this package, always fails closed), `VAULT_FAILURE` (wraps a `@redact-secret/vault` `VaultError`, exposed as `.vaultCode`), `DISPOSED`.
+Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the shadow registry and the wrapped vault disagreed — a bug in this package, always fails closed), `VAULT_FAILURE` (wraps a `@redact-secret/vault` `VaultError`, exposed as `.vaultCode`; when that is `CORE_FAILURE`, the core's fixed code, for example `PII_ACTIVATION_CONFLICT`, is exposed as `.coreCode`), `DISPOSED`.
 
 ## Threat boundary, failure behavior, and residual risk
 

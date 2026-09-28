@@ -188,9 +188,14 @@ export async function createServerVault<Context = unknown>(
       ...(limits === undefined ? {} : { limits }),
       now: clock,
       ...(options.onVaultAudit === undefined ? {} : { onAudit: options.onVaultAudit }),
+      // PII activation is the application's: forwarded verbatim, never chosen here.
+      ...(options.pii === undefined ? {} : { pii: options.pii }),
+      ...(options.expectPiiActivation === undefined ? {} : { expectPiiActivation: options.expectPiiActivation }),
     });
   } catch (thrown) {
-    if (thrown instanceof VaultError) throw new VaultServerError("VAULT_FAILURE", { vaultCode: thrown.code });
+    if (thrown instanceof VaultError) {
+      throw new VaultServerError("VAULT_FAILURE", { vaultCode: thrown.code, coreCode: thrown.coreCode });
+    }
     throw new VaultServerError("INVARIANT_VIOLATION");
   }
 
@@ -211,6 +216,10 @@ export async function createServerVault<Context = unknown>(
 
 class ServerVaultImpl<Context> implements ServerVault<Context> {
   readonly #vault: Vault;
+
+  get piiActivation(): string | null {
+    return this.#vault.piiActivation;
+  }
   readonly #clock: () => number;
   readonly #resolvePrincipal: PrincipalResolver<Context>;
   readonly #policy: ServerReleasePolicy;
@@ -321,7 +330,7 @@ class ServerVaultImpl<Context> implements ServerVault<Context> {
           this.#disposed = true;
           throw new VaultServerError("DISPOSED");
         }
-        throw new VaultServerError("VAULT_FAILURE", { vaultCode: thrown.code });
+        throw new VaultServerError("VAULT_FAILURE", { vaultCode: thrown.code, coreCode: thrown.coreCode });
       }
       throw new VaultServerError("INVARIANT_VIOLATION");
     }
