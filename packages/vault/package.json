@@ -33,13 +33,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/redact-secret/redact-secret-reversible.git",
+    "url": "git+https://github.com/redact-secret/redact-secret-vault.git",
     "directory": "packages/vault"
   },
   "bugs": {
-    "url": "https://github.com/redact-secret/redact-secret-reversible/issues"
+    "url": "https://github.com/redact-secret/redact-secret-vault/issues"
   },
-  "homepage": "https://github.com/redact-secret/redact-secret-reversible/tree/main/packages/vault#readme",
+  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/vault#readme",
   "keywords": [
     "redaction",
     "secrets",

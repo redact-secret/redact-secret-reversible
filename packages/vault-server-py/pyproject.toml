@@ -21,8 +21,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/redact-secret/redact-secret-reversible/tree/main/packages/vault-server-py"
-Issues = "https://github.com/redact-secret/redact-secret-reversible/issues"
+Homepage = "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/vault-server-py"
+Issues = "https://github.com/redact-secret/redact-secret-vault/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8.0,<9"]
