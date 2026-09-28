@@ -138,7 +138,20 @@ options = CaptureOptions(
 
 With PII on, Medium- and Low-confidence PII findings default to `warn`, so a
 capture containing them fails with `UNREDACTED_FINDINGS` unless the caller
-passes a `policy` that maps them or `unredacted="pass-through"`.
+passes a `policy` that maps them or `unredacted="pass-through"`. For example,
+beta.10 rates a labeled seven-digit local phone number (`telephone=…`) as
+Medium `pii_global_phone`. `pii.retain` applies only to `redact` findings, so
+listing a warn-level type there does not retain it.
+
+Every finding the core returns, PII included, counts toward `max_findings`,
+which the bridge passes to the core. Exceeding it raises `CORE_FAILURE` with
+`core_code="FINDING_LIMIT_EXCEEDED"` and commits nothing.
+
+This package has no `displayFormatter`: it builds its own output with
+`<SECRET_n>` placeholders and never calls the core's `redact()`. The core
+beta.10 rule that rejects a placeholder reproducing any finding's matched text
+(`INVALID_PLACEHOLDER`, which the JavaScript vault surfaces from a custom
+`displayFormatter`) therefore does not apply here.
 
 ## Tests
 

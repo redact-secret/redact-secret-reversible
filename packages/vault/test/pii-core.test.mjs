@@ -14,8 +14,12 @@
 // Data is synthetic: the widely published documentation-example IBAN (the
 // core detects it as `pii_global_iban`, High, `redact`) and the repository's
 // revoked-looking GitHub token shape. Documentation-range emails
-// (example.com), test card numbers, and 555 phone numbers are treated as
-// synthetic by the core and not detected, so they are not used here.
+// (example.com), test card numbers, and 555-01xx phone numbers are treated
+// as synthetic by the core and not detected, so they are not used here.
+// PHONE is the core's own conformance value for a Medium-confidence
+// (default `warn`) PII finding (conformance/fixtures/pii-phone-v1.json,
+// `phone-sensitive-local-separated-medium-confidence`): a seven-digit local
+// number with no area code, detected only after a label such as `telephone=`.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { dirname } from "node:path";
@@ -35,7 +39,14 @@ import * as core from "@redact-secret/core";
 import { createVault, VaultError } from "@redact-secret/vault";
 const GH = "ghp_SYNTHETICxREVOKEDxTESTx0000000000000";
 const IBAN = "DE89 3704 0044 0532 0130 00";
+const GH2 = "ghp_SYNTHETICxREVOKEDxTESTx1111111111111";
+const PHONE = "555-2345";
 const RELEASE = [{ sink: "sink-a", paths: ["body"] }];
+// A value-free error carries no fixture value anywhere it can be read.
+function valueFree(e, ...values) {
+  const surfaces = [String(e), String(e.message), String(e.stack), JSON.stringify(e), JSON.stringify(Object.entries(e))];
+  for (const v of values) assert.ok(surfaces.every((s) => !s.includes(v)), "an error surface carries a fixture value");
+}
 async function rejectsWith(promise, code, coreCode) {
   try { await promise; } catch (e) {
     assert.ok(e instanceof VaultError, "expected a VaultError");
@@ -160,5 +171,101 @@ test("real core: PII not retained without the allowlist, allow-all eligible cann
     assert.ok(!kept.text.includes(IBAN));
     const restored = vault.restore({ sink: "sink-a", captures: [kept.captureId], fields: { body: kept.text } });
     assert.ok(restored.fields.body === input, "restored text equals the original input");
+  `);
+});
+
+// Core #887 (beta.10): redact() rejects a placeholder that reproduces the
+// matched text of ANY finding in the input, including a sibling warn or allow
+// finding the vault leaves as plaintext. A displayFormatter label that does
+// so fails the whole capture as CORE_FAILURE / INVALID_PLACEHOLDER, value-free,
+// with nothing committed (#43).
+test("real core: a displayFormatter label reproducing a sibling warn/allow finding -> CORE_FAILURE / INVALID_PLACEHOLDER, nothing committed", { skip: SKIP }, () => {
+  scenario(`
+    const events = [];
+    const vault = await createVault({ pii: ["pii"], onAudit: (e) => events.push(e) });
+    const input = "token " + GH + " iban " + IBAN + " token " + GH2 + " end";
+    for (const action of ["warn", "allow"]) {
+      const policy = { evaluate: (f) => (f.type === "pii_global_iban" ? action : "redact") };
+      // Retain the first github_token only; the second gets a display label.
+      const options = (label) => {
+        let calls = 0;
+        return { release: RELEASE, policy, unredacted: "pass-through", eligible: () => ++calls === 1, displayFormatter: () => label };
+      };
+      const before = vault.stats();
+      events.length = 0;
+      let error;
+      try { vault.capture(input, options(IBAN)); } catch (e) { error = e; }
+      assert.ok(error instanceof VaultError, action + ": expected a VaultError");
+      assert.equal(error.code, "CORE_FAILURE");
+      assert.equal(error.coreCode, "INVALID_PLACEHOLDER");
+      assert.equal(error.message, "The redaction core rejected the operation.");
+      valueFree(error, IBAN, GH, GH2);
+      assert.deepEqual(vault.stats(), before, action + ": the failed capture committed something");
+      assert.equal(events.length, 1);
+      assert.deepEqual({ ...events[0], at: 0 }, { operation: "capture", outcome: "failed", at: 0, code: "CORE_FAILURE" });
+
+      // Control: the same capture with a label that reproduces no finding commits.
+      const ok = vault.capture(input, options("[hidden]"));
+      assert.deepEqual(ok.tokens.map((t) => t.type), ["github_token"]);
+      assert.equal(ok.unrestorable, 1);
+      assert.deepEqual(ok.passedThroughTypes, ["pii_global_iban"]);
+      assert.ok(ok.text.includes("iban " + IBAN) && ok.text.includes("[hidden]"));
+      assert.equal(vault.stats().entries, before.entries + 1);
+    }
+  `);
+});
+
+// A Medium-confidence PII finding gets the core's default action warn (no
+// policy): the vault's unredacted gate applies to it like any warn finding,
+// and pii.retain (which governs redact findings only) does not retain it.
+test("real core: default-confidence warn PII (Medium pii_global_phone) x unredacted reject / pass-through", { skip: SKIP }, () => {
+  scenario(`
+    const vault = await createVault({ pii: ["pii"] });
+    const input = "telephone=" + PHONE + " token " + GH;
+    // Guard: the core still rates this input Medium / warn by default.
+    assert.deepEqual(core.scan(input).map((f) => [f.type, f.confidence, f.action]), [["pii_global_phone", "medium", "warn"], ["github_token", "high", "redact"]]);
+
+    let error;
+    try { vault.capture(input, { release: RELEASE }); } catch (e) { error = e; }
+    assert.ok(error instanceof VaultError);
+    assert.equal(error.code, "UNREDACTED_FINDINGS");
+    valueFree(error, PHONE, GH);
+    assert.equal(vault.stats().entries, 0);
+    assert.equal(vault.stats().captures, 0);
+
+    for (const extra of [{}, { pii: { retain: ["pii_global_phone"] } }]) {
+      const passed = vault.capture(input, { release: RELEASE, unredacted: "pass-through", ...extra });
+      assert.equal(passed.passedThrough, 1);
+      assert.deepEqual(passed.passedThroughTypes, ["pii_global_phone"]);
+      assert.deepEqual(passed.tokens.map((t) => t.type), ["github_token"]);
+      assert.equal(passed.unrestorable, 0);
+      assert.ok(passed.text.includes("telephone=" + PHONE) && !passed.text.includes(GH));
+    }
+  `);
+});
+
+// PII findings count toward maxFindings (passed to the core as its limit);
+// exceeding it is the core's FINDING_LIMIT_EXCEEDED, surfaced as CORE_FAILURE,
+// whether the PII finding would be retained, replaced, or passed through.
+test("real core: PII findings count toward maxFindings -> CORE_FAILURE / FINDING_LIMIT_EXCEEDED, nothing committed", { skip: SKIP }, () => {
+  scenario(`
+    const vault = await createVault({ pii: ["pii"], limits: { maxFindings: 2 } });
+    const two = "iban " + IBAN + "; iban " + IBAN;
+    const kept = vault.capture(two, { release: RELEASE, pii: { retain: ["pii_global_iban"] } });
+    assert.equal(kept.tokens.length, 2, "exactly maxFindings PII findings are accepted");
+    const before = vault.stats();
+    for (const [input, options] of [
+      [two + "; iban " + IBAN, { release: RELEASE, pii: { retain: ["pii_global_iban"] } }],
+      [two + "; iban " + IBAN, { release: RELEASE }],
+      ["telephone=" + PHONE + "; iban " + IBAN + "; token " + GH, { release: RELEASE, unredacted: "pass-through" }],
+    ]) {
+      let error;
+      try { vault.capture(input, options); } catch (e) { error = e; }
+      assert.ok(error instanceof VaultError);
+      assert.equal(error.code, "CORE_FAILURE");
+      assert.equal(error.coreCode, "FINDING_LIMIT_EXCEEDED");
+      valueFree(error, IBAN, PHONE, GH);
+      assert.deepEqual(vault.stats(), before);
+    }
   `);
 });

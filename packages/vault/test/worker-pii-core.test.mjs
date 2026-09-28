@@ -155,6 +155,26 @@ test("real core: Worker-mode PII retention default and allowlist", { skip: NEEDS
   `);
 });
 
+// Default-confidence warn PII needs no policy, so Worker mode can gate it (#43).
+// PHONE is the core's own Medium-confidence conformance value (see pii-core.test.mjs).
+test("real core: Worker-mode default-confidence warn PII x unredacted reject / pass-through; PII counts toward maxFindings", { skip: NEEDS_PII }, () => {
+  scenario(`
+    const PHONE = "555-2345";
+    const v = await (await connect({ pii: ["pii"], limits: { maxFindings: 2 } })).vault;
+    const input = "telephone=" + PHONE + " token " + GH;
+    await rejectsWith(v.capture(input, { release: RELEASE }), "UNREDACTED_FINDINGS");
+    assert.equal((await v.stats()).entries, 0);
+    const passed = await v.capture(input, { release: RELEASE, unredacted: "pass-through" });
+    assert.equal(passed.passedThrough, 1);
+    assert.deepEqual(passed.passedThroughTypes, ["pii_global_phone"]);
+    assert.deepEqual(passed.tokens.map((t) => t.type), ["github_token"]);
+    assert.ok(passed.text.includes("telephone=" + PHONE) && !passed.text.includes(GH));
+    const before = await v.stats();
+    await rejectsWith(v.capture(input + " iban " + IBAN, { release: RELEASE, unredacted: "pass-through" }), "CORE_FAILURE", "FINDING_LIMIT_EXCEEDED");
+    assert.deepEqual(await v.stats(), before);
+  `);
+});
+
 test("real core: a hostile page cannot change the Worker realm's activation", { skip: NEEDS_PII }, () => {
   scenario(`
     const { vault, port } = await connect({ pii: ["pii"] });
