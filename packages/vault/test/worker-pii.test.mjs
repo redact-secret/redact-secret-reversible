@@ -473,6 +473,157 @@ test("Worker realm: a hostile page cannot send selectors, and activation never c
   `);
 });
 
+// --- Worker-script-owned core policy (#59) ------------------------------------------
+
+test("no request can carry a policy, in any shape (the Worker script owns it)", () => {
+  const shapes = [
+    { evaluate: "() => 'redact'" },
+    { pii_global_phone: "redact" },
+    { escalate: ["pii_global_phone"] },
+    "redact",
+    ["redact"],
+    null,
+  ];
+  for (const policy of shapes) {
+    rejectedWithId(parseRequest(request({ op: "capture", input: "x", options: { release: RELEASE, policy } })));
+    rejectedWithId(parseRequest(request({ op: "capture", input: "x", options: { release: RELEASE }, policy })));
+    rejectedWithId(parseRequest(request({ op: "stats", policy })));
+    assert.throws(() => buildCaptureRequest("w1", "x", { release: RELEASE, policy }), isVaultError("INVALID_ARGUMENT"));
+  }
+  assert.throws(
+    () => buildCaptureRequest("w1", "x", { release: RELEASE, policy: { evaluate: () => "redact" } }),
+    isVaultError("INVALID_ARGUMENT"),
+  );
+});
+
+test("Worker realm: host policy escalates warn PII to redact, non-restorable unless pii.retain names the type", () => {
+  scenario(`
+    const seen = [];
+    const policy = { evaluate(finding) { seen.push(finding.type); return "redact"; } };
+    const v = await (await connect({ pii: ["pii"], policy })).vault;
+    const input = "call " + PHONE + " token " + GH;
+    const escalated = await v.capture(input, { release: RELEASE });
+    assert.deepEqual(seen.sort(), ["github_token", "pii_global_phone"], "the host policy saw every finding");
+    assert.equal(escalated.passedThrough, 0);
+    assert.equal(escalated.unrestorable, 1);
+    assert.deepEqual(escalated.tokens.map((t) => t.type), ["github_token"]);
+    assert.ok(!escalated.text.includes(PHONE) && !escalated.text.includes(GH), "plaintext left in the text");
+    const restored = await v.restore({ sink: "sink-a", captures: [escalated.captureId], fields: { body: escalated.text } });
+    assert.ok(!restored.fields.body.includes(PHONE), "an unretained PII value restored");
+    assert.ok(restored.fields.body.includes(GH));
+
+    const kept = await v.capture(input, { release: RELEASE, pii: { retain: ["pii_global_phone"] } });
+    assert.deepEqual(kept.tokens.map((t) => t.type).sort(), ["github_token", "pii_global_phone"]);
+    assert.equal(kept.unrestorable, 0);
+    const back = await v.restore({ sink: "sink-a", captures: [kept.captureId], fields: { body: kept.text } });
+    assert.equal(back.fields.body, input);
+  `);
+});
+
+test("Worker realm: without a host policy, warn PII keeps reject / pass-through behavior", () => {
+  scenario(`
+    const v = await (await connect({ pii: ["pii"] })).vault;
+    await rejectsWith(v.capture("call " + PHONE, { release: RELEASE }), "UNREDACTED_FINDINGS");
+    assert.equal((await v.stats()).entries, 0);
+    const passed = await v.capture("call " + PHONE, { release: RELEASE, unredacted: "pass-through", pii: { retain: ["pii_global_phone"] } });
+    assert.deepEqual(passed.passedThroughTypes, ["pii_global_phone"]);
+    assert.ok(passed.text.includes(PHONE));
+  `);
+});
+
+test("Worker realm: a host policy returning block still rejects the capture with BLOCKED_FINDING", () => {
+  scenario(`
+    const policy = { evaluate: (f) => (f.type === "pii_global_phone" ? "block" : "redact") };
+    const v = await (await connect({ pii: ["pii"], policy })).vault;
+    await rejectsWith(v.capture("call " + PHONE + " token " + GH, { release: RELEASE, unredacted: "pass-through" }), "BLOCKED_FINDING");
+    assert.equal((await v.stats()).entries, 0);
+    assert.equal((await v.capture("token " + GH, { release: RELEASE })).tokens.length, 1);
+  `);
+});
+
+test("Worker realm: the page cannot replace or remove the host policy", () => {
+  scenario(`
+    const policy = { evaluate: () => "redact" };
+    const { vault, port } = await connect({ pii: ["pii"], policy });
+    const v = await vault;
+    for (const [id, options] of [
+      ["p1", { release: RELEASE, policy: { evaluate: "allow" } }],
+      ["p2", { release: RELEASE, policy: null }],
+      ["p3", { release: RELEASE, policy: { pii_global_phone: "allow" } }],
+    ]) {
+      const reply = await rawRequest(port, { kind: "vault-request", v: 2, id, op: "capture", input: "call " + PHONE, options });
+      assert.equal(reply.ok, false, id + " was accepted");
+      assert.equal(reply.error.code, "WORKER_PROTOCOL_VIOLATION", id);
+      assert.ok(!JSON.stringify(reply).includes(PHONE));
+    }
+    // Swapping evaluate on the Worker script's own object later changes nothing: it was pinned at start.
+    policy.evaluate = () => "allow";
+    const result = await v.capture("call " + PHONE, { release: RELEASE });
+    assert.equal(result.unrestorable, 1);
+    assert.ok(!result.text.includes(PHONE));
+  `);
+});
+
+test("Worker realm: an invalid host policy fails init with INVALID_ARGUMENT before the core is touched", () => {
+  scenario(`
+    const bad = [null, "redact", () => "redact", { evaluate: "redact" }, {}, { get evaluate() { throw new Error("getter " + PHONE); } }];
+    for (const policy of bad) {
+      const { port, scope } = channel();
+      const handshake = nextHandshake(port);
+      await startVaultWorkerHost({ pii: ["pii"], policy, target: scope });
+      const message = await handshake;
+      assert.deepEqual(message, { kind: "vault-init-failed", v: 2, code: "INVALID_ARGUMENT" });
+      assert.equal(scope.listeners.message.length, 0, "a listener was installed after a failed init");
+    }
+    assert.equal(core.calls.initialize.length, 0, "an invalid policy still activated the core");
+    const { vault } = await connect({ pii: ["pii"], policy: { get evaluate() { throw new Error("getter " + PHONE); } } });
+    try { await vault; assert.fail("created"); } catch (e) {
+      assert.ok(e instanceof VaultError);
+      assert.equal(e.code, "INVALID_ARGUMENT");
+      assert.ok(!String(e.message).includes(PHONE) && !JSON.stringify(e).includes(PHONE));
+    }
+  `);
+});
+
+test("Worker realm: vault-ready carries no policy detail", () => {
+  scenario(`
+    const { port, scope } = channel();
+    const handshake = nextHandshake(port);
+    await startVaultWorkerHost({ pii: ["pii"], policy: { name: "host-policy-marker", evaluate: () => "redact" }, target: scope });
+    const message = await handshake;
+    assert.deepEqual(Object.keys(message).sort(), ["kind", "piiActivation", "v"]);
+    assert.equal(message.piiActivation, core.piiActivation());
+    assert.ok(!JSON.stringify(message).includes("host-policy-marker"));
+  `);
+});
+
+test("Worker realm: a throwing or invalid-action host policy fails that capture exactly as on the main thread, nothing committed", () => {
+  scenario(`
+    const { createVault } = await import("@redact-secret/vault");
+    const policies = {
+      throws: { evaluate() { throw new Error("policy failure " + PHONE); } },
+      invalid: { evaluate: () => "escalate" },
+      undefined: { evaluate: () => undefined },
+    };
+    const main = await createVault({ pii: ["pii"] });
+    for (const [name, policy] of Object.entries(policies)) {
+      let expected;
+      try { main.capture("call " + PHONE, { release: RELEASE, policy }); } catch (e) { expected = { code: e.code, coreCode: e.coreCode }; }
+      assert.ok(expected !== undefined, name + ": main thread accepted");
+      const v = await (await connect({ policy })).vault;
+      const before = await v.stats();
+      let got;
+      try { await v.capture("call " + PHONE + " token " + GH, { release: RELEASE }); } catch (e) {
+        assert.ok(e instanceof VaultError, name);
+        got = { code: e.code, coreCode: e.coreCode };
+        assert.ok(!String(e.message).includes(PHONE) && !JSON.stringify(e).includes(PHONE), name + ": value in error");
+      }
+      assert.deepEqual(got, expected, name);
+      assert.deepEqual(await v.stats(), before, name + ": the failed capture committed something");
+    }
+  `);
+});
+
 test("beta.9-shaped Worker realm: no PII option means ready with piiActivation null", () => {
   scenario(
     `

@@ -12,6 +12,8 @@
  * call restore" — it still can, through the same protocol a legitimate
  * caller uses. See docs/specs/in-memory-security.md section 5.
  */
+import type { DetectedSecretFinding, PolicyContext, SecretAction, SecretPolicy } from "@redact-secret/core";
+
 import { VaultError, type VaultErrorCode } from "./errors.js";
 import { createVault } from "./vault.js";
 import type { Vault, VaultOptions } from "./types.js";
@@ -35,6 +37,18 @@ export interface VaultWorkerTarget {
 export interface VaultWorkerHostOptions extends VaultOptions {
   /** Message target. Defaults to `globalThis`, which is the Worker's own scope inside a real dedicated Worker. Overridable for tests. */
   readonly target?: VaultWorkerTarget;
+  /**
+   * Core policy for every capture this Worker serves (#59; PII ADR addendum
+   * of 2026-09-28). The Worker script owns it, as it owns `pii`: no request
+   * message carries policy data, so the page cannot see, send, replace, or
+   * weaken it. Same semantics as the main-thread `CaptureOptions.policy`: it
+   * replaces the core's built-in policy for every finding, and a `redact` it
+   * assigns to a PII finding is still not restorable unless the capture's
+   * `pii.retain` names that exact type. Must be an object with a callable
+   * `evaluate`, checked once at start (otherwise `vault-init-failed` with
+   * `INVALID_ARGUMENT`); that `evaluate` is pinned for the host's lifetime.
+   */
+  readonly policy?: SecretPolicy;
 }
 
 function errorCode(thrown: unknown): { code: VaultErrorCode; coreCode: string | undefined } {
@@ -42,10 +56,35 @@ function errorCode(thrown: unknown): { code: VaultErrorCode; coreCode: string | 
   return { code: "CORE_FAILURE", coreCode: undefined };
 }
 
-function dispatch(vault: Vault, request: VaultWorkerRequest): unknown {
+/**
+ * Checks the Worker script's policy once and pins its `evaluate`, so a later
+ * change to that object cannot swap it out. The check is the core's own
+ * (an object with a callable `evaluate`), and also refuses `null`. Fails
+ * with a fixed, value-free `INVALID_ARGUMENT`.
+ */
+function resolveHostPolicy(policy: unknown): SecretPolicy | undefined {
+  if (policy === undefined) return undefined;
+  if (typeof policy !== "object" || policy === null) throw new VaultError("INVALID_ARGUMENT");
+  let evaluate: unknown;
+  try {
+    evaluate = (policy as { evaluate?: unknown }).evaluate;
+  } catch {
+    throw new VaultError("INVALID_ARGUMENT");
+  }
+  if (typeof evaluate !== "function") throw new VaultError("INVALID_ARGUMENT");
+  const pinned = evaluate as SecretPolicy["evaluate"];
+  return Object.freeze({
+    evaluate: (finding: DetectedSecretFinding, context: PolicyContext): SecretAction =>
+      pinned.call(policy, finding, context),
+  });
+}
+
+function dispatch(vault: Vault, policy: SecretPolicy | undefined, request: VaultWorkerRequest): unknown {
   switch (request.op) {
     case "capture":
-      return vault.capture(request.input, request.options);
+      // A page's options never carry `policy` (parseRequest rejects the key),
+      // so the only policy a Worker-mode capture runs is the Worker script's.
+      return vault.capture(request.input, policy === undefined ? request.options : { ...request.options, policy });
     case "restore":
       return vault.restore(request.request);
     case "revoke":
@@ -62,18 +101,22 @@ function dispatch(vault: Vault, request: VaultWorkerRequest): unknown {
  * Creates the in-memory vault inside this Worker and starts listening for
  * validated protocol messages. Resolves once the listener is installed.
  *
- * If vault creation itself fails (for example the core's WASM artifact could
- * not compile under the Worker's CSP), this posts an explicit
+ * If `policy` is invalid, or vault creation itself fails (for example the
+ * core's WASM artifact could not compile under the Worker's CSP), this posts an explicit
  * `vault-init-failed` message and returns without installing a listener —
  * there is no main-thread fallback and no partially-initialized vault left
  * reachable by any later message.
  */
 export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {}): Promise<void> {
-  const { target: providedTarget, ...vaultOptions } = options;
+  const { target: providedTarget, policy: providedPolicy, ...vaultOptions } = options;
   const target: VaultWorkerTarget = providedTarget ?? (globalThis as unknown as VaultWorkerTarget);
 
+  let policy: SecretPolicy | undefined;
   let vault: Vault;
   try {
+    // Checked before the core is touched: an invalid policy fails init
+    // without activating anything in this realm.
+    policy = resolveHostPolicy(providedPolicy);
     vault = await createVault(vaultOptions);
   } catch (thrown) {
     const { code, coreCode } = errorCode(thrown);
@@ -87,7 +130,8 @@ export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {})
     return;
   }
 
-  // The observed identity only; the vault fixed it at creation and it cannot change.
+  // The observed identity only; the vault fixed it at creation and it cannot
+  // change. Nothing about the Worker script's policy is sent.
   const ready: VaultWorkerResponse = { kind: "vault-ready", v: PROTOCOL_VERSION, piiActivation: vault.piiActivation };
   target.postMessage(ready);
 
@@ -113,7 +157,7 @@ export async function startVaultWorkerHost(options: VaultWorkerHostOptions = {})
 
     const request = parsed.value;
     try {
-      const result = dispatch(vault, request);
+      const result = dispatch(vault, policy, request);
       const response: VaultWorkerResponse = {
         kind: "vault-response",
         v: PROTOCOL_VERSION,

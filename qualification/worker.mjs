@@ -154,6 +154,34 @@ const workerScenarios = {
     check(stats.entries === 0, "a refused capture left a mapping");
     w.terminate();
   },
+  // #59: the Worker script's own policy escalates a default-warn PII finding
+  // (beta.10 rates "telephone=555-2345" Medium pii_global_phone) to redact.
+  // Replaced and non-restorable by default; restorable only with pii.retain.
+  async "policy:worker-script-escalates-warn-pii"() {
+    const release = [{ sink: "reply", paths: ["body"] }];
+    const phone = "555-2345";
+    const input = "telephone=" + phone + " token " + corpus.fixtures.GH;
+    const plain = new Worker(new URL("./worker-pii-entry.js", import.meta.url), { type: "module" });
+    const pv = await createWorkerVault(plain, { timeoutMs: 10000 });
+    const e = await rejectionOf(pv.capture(input, { release }));
+    check(e && e.code === "UNREDACTED_FINDINGS", "no host policy: warn PII " + (e ? e.code : "accepted"));
+    plain.terminate();
+    const w = new Worker(new URL("./worker-policy-entry.js", import.meta.url), { type: "module" });
+    const v = await createWorkerVault(w, { timeoutMs: 10000 });
+    const escalated = await v.capture(input, { release });
+    check(escalated.passedThrough === 0 && escalated.unrestorable === 1, "escalated phone was not replaced non-restorably");
+    check(escalated.tokens.length === 1 && escalated.tokens[0].type === "github_token", "unexpected retained types");
+    check(!escalated.text.includes(phone) && !escalated.text.includes(corpus.fixtures.GH), "plaintext left in the text");
+    const kept = await v.capture(input, { release, pii: { retain: ["pii_global_phone"] } });
+    check(kept.tokens.map((t) => t.type).sort().join() === "github_token,pii_global_phone", "pii.retain did not retain the escalated type");
+    const back = await v.restore({ sink: "reply", captures: [kept.captureId], fields: { body: kept.text } });
+    check(back.fields.body === input, "allowlisted escalated PII did not restore");
+    // A page-supplied policy is refused synchronously, before anything is sent.
+    let denied;
+    try { v.capture(input, { release, policy: { evaluate: () => "allow" } }); } catch (err) { denied = err; }
+    check(denied && denied.code === "INVALID_ARGUMENT", "a page-supplied policy was not refused");
+    w.terminate();
+  },
 };
 
 async function main() {
@@ -315,6 +343,15 @@ writeFileSync(
   join(dir, "worker-uninitialized-entry.js"),
   `import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
 startVaultWorkerHost(); // pii omitted and nobody initialized this realm's core
+`,
+);
+// #59: the Worker script, not the page, owns the core policy for its captures.
+writeFileSync(
+  join(dir, "worker-policy-entry.js"),
+  `import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+// Escalate the Medium phone finding to redact; keep High findings redact, others warn.
+const policy = { evaluate: (f) => (f.type === "pii_global_phone" || f.confidence === "high" ? "redact" : "warn") };
+startVaultWorkerHost({ pii: ["pii"], policy });
 `,
 );
 await build({

@@ -244,6 +244,45 @@ test("real core: default-confidence warn PII (Medium pii_global_phone) x unredac
   `);
 });
 
+// The main-thread contract Worker mode's Worker-script policy reuses (#59): a
+// policy escalating default-warn PII to redact replaces it (non-restorable
+// unless allowlisted); a policy that throws or returns an unknown action fails
+// the capture as CORE_FAILURE with the core's fixed code, value-free, with
+// nothing committed.
+test("real core: policy escalation of warn PII, and a throwing / invalid-action policy -> CORE_FAILURE, nothing committed", { skip: SKIP }, () => {
+  scenario(`
+    const events = [];
+    const vault = await createVault({ pii: ["pii"], onAudit: (e) => events.push(e) });
+    const input = "telephone=" + PHONE + " token " + GH;
+    const escalate = { evaluate: (f) => (f.type === "pii_global_phone" ? "redact" : f.confidence === "high" ? "redact" : "warn") };
+    const escalated = vault.capture(input, { release: RELEASE, policy: escalate });
+    assert.equal(escalated.passedThrough, 0);
+    assert.equal(escalated.unrestorable, 1);
+    assert.deepEqual(escalated.tokens.map((t) => t.type), ["github_token"]);
+    assert.ok(!escalated.text.includes(PHONE));
+    const kept = vault.capture(input, { release: RELEASE, policy: escalate, pii: { retain: ["pii_global_phone"] } });
+    assert.deepEqual(kept.tokens.map((t) => t.type).sort(), ["github_token", "pii_global_phone"]);
+
+    for (const [policy, coreCode] of [
+      [{ evaluate() { throw new Error("policy failure " + PHONE); } }, "POLICY_FAILURE"],
+      [{ evaluate: () => undefined }, "POLICY_FAILURE"],
+      [{ evaluate: () => "escalate" }, "INVALID_POLICY_ACTION"],
+    ]) {
+      const before = vault.stats();
+      events.length = 0;
+      let error;
+      try { vault.capture(input, { release: RELEASE, policy }); } catch (e) { error = e; }
+      assert.ok(error instanceof VaultError, coreCode);
+      assert.equal(error.code, "CORE_FAILURE");
+      assert.equal(error.coreCode, coreCode);
+      assert.equal(error.message, "The redaction core rejected the operation.");
+      valueFree(error, PHONE, GH);
+      assert.deepEqual(vault.stats(), before, coreCode + ": the failed capture committed something");
+      assert.deepEqual(events.map((e) => ({ ...e, at: 0 })), [{ operation: "capture", outcome: "failed", at: 0, code: "CORE_FAILURE" }]);
+    }
+  `);
+});
+
 // PII findings count toward maxFindings (passed to the core as its limit);
 // exceeding it is the core's FINDING_LIMIT_EXCEEDED, surfaced as CORE_FAILURE,
 // whether the PII finding would be retained, replaced, or passed through.

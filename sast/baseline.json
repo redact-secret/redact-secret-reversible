@@ -28,37 +28,37 @@
       "rationale": "This `postMessage` is the main-thread side of the optional dedicated-Worker protocol qualified in #14 (docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md), not an incidental messaging side channel. The request object is built locally by this same module from typed call arguments, immediately before this line; it carries nothing the vault's synchronous in-process API would not already return to a direct caller, and the Worker host validates every inbound message against `worker-protocol.ts` before it reaches the vault. The hardening is the schema-validated protocol itself, exercised adversarially by `packages/vault/test/worker-suite.js` and `qualification/worker.mjs`.",
       "rule_id": "sast.rules.local.vault-no-side-channels"
     },
-    "47cd73e8e58089dd": {
+    "95b14676cf7ee2aa": {
       "classification": "hardening",
-      "line": 86,
+      "line": 129,
       "path": "packages/vault/src/worker-host.ts",
       "rationale": "Worker-host side of the same qualified protocol as dc76f66070b137fe: reports vault-init failure to the main thread as a typed `VaultWorkerResponse`, containing only an error code (and optional core error code, for example PII_ACTIVATION_CONFLICT), never a captured or restored value, selector, or activation identity. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md and, for protocol version 2, docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md section 3.",
       "rule_id": "sast.rules.local.vault-no-side-channels"
     },
-    "eefcf7e96b9af0fe": {
+    "9cc7792b9218876c": {
       "classification": "hardening",
-      "line": 92,
+      "line": 136,
       "path": "packages/vault/src/worker-host.ts",
       "rationale": "Worker-host side of the same qualified protocol as dc76f66070b137fe: sends the `vault-ready` readiness signal. Since protocol version 2 (#39) it carries exactly one datum, `piiActivation`: the core's canonical PII activation identity observed in this Worker realm (a configuration identity naming selectors and families, never input data), or null without a PII surface. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md and, for protocol version 2, docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md section 3.",
       "rule_id": "sast.rules.local.vault-no-side-channels"
     },
-    "c8f1e83fbd258d50": {
+    "23ac980577121550": {
       "classification": "hardening",
-      "line": 109,
+      "line": 153,
       "path": "packages/vault/src/worker-host.ts",
       "rationale": "Worker-host side of the same qualified protocol as dc76f66070b137fe: reports a `WORKER_PROTOCOL_VIOLATION` for a raw message that failed `parseRequest` (including a version-1 message or any attempt to send PII selectors). Sent only when there is a valid caller id to answer; the malformed payload itself is never echoed back or logged. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md and, for protocol version 2, docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md section 3.",
       "rule_id": "sast.rules.local.vault-no-side-channels"
     },
-    "34ec29f2526f6987": {
+    "2f572f3dbb6e97da": {
       "classification": "hardening",
-      "line": 125,
+      "line": 169,
       "path": "packages/vault/src/worker-host.ts",
       "rationale": "Worker-host side of the same qualified protocol as dc76f66070b137fe: the successful-call response, carrying exactly the `result` the vault's synchronous API would already return to a direct in-process caller for the same operation. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md and, for protocol version 2, docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md section 3.",
       "rule_id": "sast.rules.local.vault-no-side-channels"
     },
-    "9544d7761d9a4dd7": {
+    "4cbe0e6e72ff9fd6": {
       "classification": "hardening",
-      "line": 140,
+      "line": 184,
       "path": "packages/vault/src/worker-host.ts",
       "rationale": "Worker-host side of the same qualified protocol as dc76f66070b137fe: the failed-call response, carrying the `VaultError` code/reason the vault's synchronous API would already throw to a direct in-process caller, never a plaintext value. See docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md and, for protocol version 2, docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md section 3.",
       "rule_id": "sast.rules.local.vault-no-side-channels"

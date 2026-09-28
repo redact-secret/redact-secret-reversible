@@ -39,7 +39,9 @@ export const PROTOCOL_VERSION = 2;
  * the Worker would defeat the isolation this mode exists to provide. A
  * request that includes one of them is rejected explicitly and
  * synchronously before anything is sent (see `buildCaptureRequest`); it is
- * never dropped or ignored silently.
+ * never dropped or ignored silently. A core policy for Worker-mode captures
+ * belongs to the Worker script instead (`startVaultWorkerHost({ policy })`,
+ * #59); no message ever carries one.
  *
  * `pii` is the PII retention allowlist (ADR §1): plain, cloneable data naming
  * exact `pii_` finding types. It is not a selector and has no effect on

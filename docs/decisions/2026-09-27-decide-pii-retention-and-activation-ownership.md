@@ -83,7 +83,7 @@ Impact, stated plainly: once PII is active, **most real captures that contain Me
 - Pass a core `policy` that maps the chosen PII types to `redact`, so they are replaced. Retention still requires §1's allowlist. Or map them to `allow` with `"pass-through"`.
 - Choose `unredacted: "pass-through"` for a named outbound boundary and accept the plaintext PII that `passedThroughTypes` reports.
 
-Worker mode has neither `policy` nor `eligible` in the protocol, because functions cannot be cloned, and a `ruleset` adds detectors without changing built-in actions. So a Worker-mode capture containing warn-level PII can only reject or pass through (see *Questions left open*).
+Worker mode has neither `policy` nor `eligible` in the protocol, because functions cannot be cloned, and a `ruleset` adds detectors without changing built-in actions. So a Worker-mode capture containing warn-level PII can only reject or pass through (see *Questions left open*). *Superseded for `policy` by the [addendum of 2026-09-28](#addendum-2026-09-28-worker-script-owned-core-policy-59): the Worker script may give the host a policy; the protocol still carries none.*
 
 ### 3. The application owns core PII activation. The vault forwards and observes; it never chooses.
 
@@ -203,7 +203,7 @@ Each `NodeCoreBridge.scan` spawns a fresh Node.js process whose realm has no oth
 - An application that enables PII and wants any PII restorable must name each type. Everything else is replaced and counted in `unrestorable`.
 - With PII on and default options, captures containing Medium or Low PII reject. This is intended. Applications must choose a policy or pass-through per boundary.
 - On beta.10, `createVault()` with no arguments requires the core to have been initialized first. This is a behavior change for the alpha that adopts beta.10.
-- Worker mode cannot remap PII actions until a cloneable policy exists.
+- Worker mode cannot remap PII actions until a cloneable policy exists. *Resolved by the [addendum of 2026-09-28](#addendum-2026-09-28-worker-script-owned-core-policy-59): the Worker script owns the policy; nothing is cloned.*
 - The threat model records new residual risks: regulatory exposure from opting in to retain PAN/SSN-class values, realm-global activation, warn-level PII pass-through, and PII type labels as metadata. See [threat model](../specs/threat-model.md#pii-findings-core-beta10--current-unreleased).
 
 ## Verification before implementation is accepted
@@ -218,7 +218,39 @@ Covered by #38, #39, #40, and #43, against a local beta.10 build, with PII-on ca
 
 ## Questions left open
 
-- A cloneable policy for Worker mode (for example a type-to-action map), so warn-level PII can be redacted without main-thread code. Tracked outside this record.
+- ~~A cloneable policy for Worker mode (for example a type-to-action map), so warn-level PII can be redacted without main-thread code.~~ Resolved without a cloneable policy by the addendum below ([#59](https://github.com/redact-secret/redact-secret-vault/issues/59)).
 - Whether a future core adds PII types to always-redact, which would change §2's practical impact but not the rule.
 - Per-type retention limits (for example a lower `maxUses` or TTL ceiling for PII). Not decided. The existing limits apply uniformly.
 - Streaming capture remains excluded, as in the gate ADR.
+
+## Addendum 2026-09-28: Worker-script-owned core policy ([#59](https://github.com/redact-secret/redact-secret-vault/issues/59))
+
+**Decision (maintainer, option A).** The application-authored Worker script owns the core policy for every capture its Worker serves:
+
+```ts
+// worker.js, written by the application
+import { startVaultWorkerHost } from "@redact-secret/vault/worker/host";
+startVaultWorkerHost({ pii: ["pii"], policy: { evaluate: (finding) => "redact" } });
+```
+
+`VaultWorkerHostOptions.policy?: SecretPolicy` is the core's own policy type. The host applies it by passing it as `policy` to every `vault.capture` it makes, so it has exactly the main-thread `CaptureOptions.policy` semantics. This is the same ownership model §3 gives `pii` and `expectPiiActivation`: the Worker realm's configuration comes from the Worker script, never from the page.
+
+**Invariants.**
+
+1. **No policy data crosses the boundary.** No request message carries a policy in any shape: `CAPTURE_OPTION_KEYS` is unchanged, the host parser still rejects a `policy` key (in `options` or at the top level) with `WORKER_PROTOCOL_VIOLATION`, and the client still throws `INVALID_ARGUMENT` synchronously for any `policy`, `eligible`, or `displayFormatter` option. The page cannot see, send, replace, remove, or weaken the Worker script's policy.
+2. **`vault-ready` is unchanged.** It still carries only `kind`, `v`, and `piiActivation`; nothing about whether a policy exists or what it does is sent. `PROTOCOL_VERSION` stays `2`: no message shape changed.
+3. **Validated once, at host start.** `policy` must be an object (not `null`) with a callable `evaluate`, the same check the core applies. Otherwise the host posts `vault-init-failed` with the fixed, value-free code `INVALID_ARGUMENT`, before the core is touched (the realm's activation is not changed), and installs no listener; `createWorkerVault` rejects with that code. The host pins `evaluate` at start, so later mutation of the Worker script's object does not change the policy in use.
+4. **§1 is unchanged.** Escalating a PII `warn` to `redact` replaces the value with a display placeholder that cannot be restored, counted in `unrestorable`, unless the capture's `pii.retain` names that exact type. The page can still send `pii.retain`: retention is per capture, data, and validated on both sides, as before.
+5. **§2's gate is unchanged.** The vault still never reinterprets an action. A `warn` or `allow` the policy returns is gated by `unredacted`; a `block` still rejects the capture with `BLOCKED_FINDING`.
+6. **Failures match the main thread.** A policy that throws or returns anything but `redact`/`block`/`warn`/`allow` fails that capture as the main-thread vault does, because the same code path runs: on core beta.10, `CORE_FAILURE` with `coreCode` `POLICY_FAILURE` (thrown, or `undefined` returned) or `INVALID_POLICY_ACTION`. The error is fixed and value-free, nothing is committed, and the Worker keeps serving.
+7. **The policy replaces the core's built-in policy for every finding,** credentials included, exactly as on the main thread. The core deliberately exports no default policy to delegate to, so a Worker-script policy must return an action for every finding it sees.
+
+**Audit limitation (documented, not solved).** The vault sees only the final actions the core returns. It cannot tell which findings the policy changed from the built-in action without a second scan under the built-in policy, and it does not do one: that would double the core's work and make the host run detection twice on every input. `AuditEvent` is unchanged. An application that needs counts of overridden findings can count inside its own `evaluate`, in the Worker realm.
+
+**Alternatives.**
+
+- **Page-sent escalate-only data** (for example `{ escalate: ["pii_global_phone"] }`, which could only turn `warn`/`allow` into `redact`). *Deferred, not rejected.* It is monotone toward redaction, so a hostile page could at worst make its own captures stricter, and it is plain cloneable data. It would still be a new, page-controlled input to the Worker's detection outcome and a protocol change, and option A covers the need. It can be reconsidered if integrators need per-page escalation.
+- **Page-sent arbitrary policy data** (a type-to-action map). *Rejected.* A hostile or careless page could downgrade credential findings to `allow` and pass them through under `"pass-through"`, which is exactly the control Worker mode keeps away from the page.
+- **Function source strings evaluated in the Worker** (`new Function`, `eval`). *Rejected.* It runs page-supplied code inside the Worker, defeating the isolation the mode exists for, and needs `'unsafe-eval'` in the Worker's CSP.
+
+**Verification.** Fake-core Worker scenarios (`packages/vault/test/worker-pii.test.mjs`) and real-core beta.10 scenarios (`worker-pii-core.test.mjs`, PII on) cover escalation with and without `pii.retain`, no host policy, `block`, page attempts to send or replace a policy, invalid policies at start, a throwing and an invalid-action policy compared against the main thread, and the `vault-ready` shape. `pii-core.test.mjs` pins the main-thread failure codes on the real core. `qualification/worker.mjs` runs the escalation scenario in real dedicated Workers in Chromium, Firefox, and WebKit.
