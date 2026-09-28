@@ -19,6 +19,7 @@ for example) without changing ``InMemoryVaultServer``.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -37,6 +38,33 @@ DEFAULT_BRIDGE_SCRIPT = Path(__file__).parent / "boundary" / "core_bridge.mjs"
 # docs/research/qualification-0.1.0-alpha.1.md. A response reporting a
 # different version is treated as CORE_FAILURE rather than silently trusted.
 PINNED_CORE_VERSION = "0.1.0-beta.10"
+
+#: Environment variable ``NodeCoreBridge`` reads when ``node_modules`` is not
+#: passed: the ``node_modules`` directory that holds ``@redact-secret/core``.
+NODE_MODULES_ENV = "REDACT_SECRET_VAULT_NODE_MODULES"
+
+
+def _resolve_node_modules(value: str | os.PathLike[str] | None) -> str | None:
+    """The absolute ``node_modules`` directory to load the core from, or
+    ``None`` for the bridge script's own resolution.
+
+    An explicit argument wins; otherwise a non-empty
+    ``REDACT_SECRET_VAULT_NODE_MODULES`` is used. A relative path is made
+    absolute once, here, so later scans never depend on the working
+    directory. Whether the directory holds the core is checked by the bridge
+    process on each scan (``CORE_FAILURE`` / ``BRIDGE_CORE_NOT_FOUND``).
+    """
+    if value is None:
+        value = os.environ.get(NODE_MODULES_ENV) or None
+        if value is None:
+            return None
+    try:
+        raw = os.fspath(value)
+    except TypeError:
+        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT) from None
+    if type(raw) is not str or not raw or "\x00" in raw:
+        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+    return os.path.abspath(raw)
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,8 +139,22 @@ class NodeCoreBridge:
     """Calls the real ``@redact-secret/core`` over a Node.js subprocess.
 
     Threat boundary: this class trusts the local ``node`` executable and the
-    npm-installed ``@redact-secret/core`` resolved from this repository's
-    workspace (or a caller-supplied script/executable). It is a server-side,
+    npm-installed ``@redact-secret/core`` (or a caller-supplied
+    script/executable).
+
+    Core location: ``node_modules`` (or, when it is ``None``, the
+    ``REDACT_SECRET_VAULT_NODE_MODULES`` environment variable) names the
+    ``node_modules`` directory the application installed the core into, for
+    example with ``npm install @redact-secret/core@<PINNED_CORE_VERSION>``.
+    The bridge then loads ``<node_modules>/@redact-secret/core`` and nothing
+    else: no parent directories and never the working directory. With
+    neither set, the bridge script resolves the core relative to its own
+    location, which works in this repository and when the virtualenv lives
+    inside the project that installed the core, but not for a
+    ``pip``-installed package whose site-packages is elsewhere. A directory
+    that does not hold the core raises ``CORE_FAILURE`` with ``core_code``
+    ``BRIDGE_CORE_NOT_FOUND`` (``BRIDGE_CORE_LOAD_FAILED`` if it is found but
+    fails to load); so does a missing core without either setting. It is a server-side,
     same-host integration only — not qualified for browser/Worker/CSP
     contexts, which remain V1-V4's scope. It never passes a fixture, secret,
     or matched value back to the caller; the core's ``scan`` API structurally
@@ -156,14 +198,17 @@ class NodeCoreBridge:
         expected_core_version: str | None = PINNED_CORE_VERSION,
         pii: Sequence[str] = (),
         expected_pii_activation: str | None = None,
+        node_modules: str | os.PathLike[str] | None = None,
     ) -> None:
         selection = resolve_pii_selection(pii)
+        resolved_node_modules = _resolve_node_modules(node_modules)
         expected_activation = resolve_expected_pii_activation(expected_pii_activation)
         resolved_node = node_executable or shutil.which("node")
         if resolved_node is None:
             raise VaultServerError(VaultServerErrorCode.UNSUPPORTED_RUNTIME)
         self._node = resolved_node
         self._script = script
+        self._node_modules = resolved_node_modules
         self._timeout_s = timeout_s
         self._expected_version = expected_core_version
         self._pii = selection
@@ -180,7 +225,10 @@ class NodeCoreBridge:
     ) -> CoreScanOutcome:
         if not isinstance(text, str):
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-        payload = json.dumps({"input": text, "pii": list(self._pii), "policy": policy, "limits": limits})
+        request: dict[str, Any] = {"input": text, "pii": list(self._pii), "policy": policy, "limits": limits}
+        if self._node_modules is not None:
+            request["nodeModules"] = self._node_modules
+        payload = json.dumps(request)
         try:
             proc = subprocess.run(
                 [self._node, str(self._script)],

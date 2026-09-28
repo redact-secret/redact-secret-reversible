@@ -1,8 +1,11 @@
 name: release
 
-# Publishes @redact-secret/vault, then @redact-secret/vault-server, to npm.
+# Publishes the npm packages (@redact-secret/vault, then
+# @redact-secret/vault-server) and the Python distribution (redact-secret-vault,
+# to PyPI), all through trusted publishing. The npm and Python job chains are
+# independent of each other.
 # Triggered by pushing a `v<version>` tag (RELEASING.md step 3) or manually via
-# workflow_dispatch (e.g. to retry after a transient failure — the publish job
+# workflow_dispatch (e.g. to retry after a transient failure — each publish job
 # is idempotent per package, see below).
 on:
   push:
@@ -214,3 +217,181 @@ jobs:
         env:
           DIST_TAG: ${{ steps.server_pkg.outputs.dist_tag }}
         run: npm publish -w @redact-secret/vault-server --provenance --tag "$DIST_TAG"
+
+  # --- Python: redact-secret-vault -------------------------------------------
+  # Independent of the npm jobs above: a failure in either chain does not block
+  # the other's publish. CI already runs the full Python matrix; this re-runs
+  # lint and tests once, on Python 3.12, against the released commit.
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The capture path shells out to @redact-secret/core over a Node.js
+      # subprocess boundary, so the tests need the npm workspace installed.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci
+      # No pip cache, for the same reason as package-manager-cache above.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[test,lint]"
+        working-directory: packages/vault-py
+      - run: ruff check .
+        working-directory: packages/vault-py
+      - run: pytest -q
+        working-directory: packages/vault-py
+
+  # Builds the sdist and wheel once, checks them, and hands them to the publish
+  # job as an artifact, so the job holding `id-token: write` never builds.
+  python-dist:
+    needs: [python]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # For the install smoke test below (the bridge runs under node).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      # Pinned so the build frontend and checker are known versions; bump
+      # deliberately. (The build backend, hatchling, is resolved by `build`'s
+      # isolated environment from pyproject.toml's [build-system].)
+      - name: Install build tooling
+        run: python -m pip install build==1.6.1 twine==7.0.0
+      - name: Build sdist and wheel
+        working-directory: packages/vault-py
+        run: python -m build
+      - name: Verify distribution contents and versions
+        working-directory: packages/vault-py
+        # Exactly one wheel and one sdist, the wheel carries
+        # boundary/core_bridge.mjs, and both carry pyproject.toml's version.
+        run: python ../../scripts/verify-python-dist.py
+      # Installs the built wheel into a virtualenv outside the repository, as a
+      # consumer would, and installs the core into a separate directory from
+      # scripts/python-wheel-smoke's lockfile (`npm ci`: exact version and
+      # integrity hash, no lifecycle scripts, a fresh npm cache). The locked
+      # core version must equal the wheel's PINNED_CORE_VERSION. Then runs a
+      # synthetic scan through NodeCoreBridge(node_modules=...); the script
+      # also checks that the same scan without node_modules= fails with
+      # BRIDGE_CORE_NOT_FOUND, so a pass cannot come from the repository.
+      - name: Smoke-test the wheel from a virtualenv outside the repository
+        run: |
+          set -eu
+          SMOKE_ROOT="$RUNNER_TEMP/vault-py-smoke"
+          rm -rf "$SMOKE_ROOT"
+          mkdir -p "$SMOKE_ROOT/core"
+          python -m venv "$SMOKE_ROOT/venv"
+          "$SMOKE_ROOT/venv/bin/python" -m pip install --no-cache-dir packages/vault-py/dist/*.whl
+          PINNED=$(cd "$SMOKE_ROOT" && "$SMOKE_ROOT/venv/bin/python" -c 'from redact_secret_vault.core_client import PINNED_CORE_VERSION; print(PINNED_CORE_VERSION)')
+          LOCKED=$(node -p 'require("./scripts/python-wheel-smoke/package-lock.json").packages["node_modules/@redact-secret/core"].version')
+          if [ -z "$PINNED" ] || [ "$PINNED" != "$LOCKED" ]; then
+            echo "::error::scripts/python-wheel-smoke locks @redact-secret/core $LOCKED; the wheel pins $PINNED." >&2
+            exit 1
+          fi
+          cp scripts/python-wheel-smoke/package.json scripts/python-wheel-smoke/package-lock.json "$SMOKE_ROOT/core/"
+          npm ci --prefix "$SMOKE_ROOT/core" --ignore-scripts --no-audit --no-fund --cache "$SMOKE_ROOT/npm-cache"
+          cd "$SMOKE_ROOT"
+          SMOKE_NODE_MODULES="$SMOKE_ROOT/core/node_modules" \
+            "$SMOKE_ROOT/venv/bin/python" "$GITHUB_WORKSPACE/scripts/smoke-python-wheel.py"
+      - name: twine check
+        working-directory: packages/vault-py
+        run: python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-dist
+          path: packages/vault-py/dist/
+          if-no-files-found: error
+
+  # Publishes with PyPI trusted publishing (OIDC): no PyPI API token, an
+  # `id-token: write` grant scoped to this job only, and PEP 740 attestations
+  # (gh-action-pypi-publish's default). PyPI has a pending publisher for
+  # project `redact-secret-vault`, repository redact-secret/redact-secret-vault,
+  # workflow `release.yml`, environment (Any); PyPI turns it into a normal
+  # trusted publisher on the first upload. This job deliberately sets no
+  # `environment:`. Adding one later requires updating the PyPI publisher to
+  # name that environment as well (see RELEASING.md).
+  pypi-publish:
+    needs: [python-dist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout, to read pyproject.toml's version
+      id-token: write # OIDC token for PyPI trusted publishing and attestations
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve Python package version
+        id: pypkg
+        run: |
+          set -eu
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("packages/vault-py/pyproject.toml", "rb"))["project"]["version"])')
+          if [ -z "$VERSION" ]; then
+            echo "::error::packages/vault-py/pyproject.toml has an empty project.version." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Same idea as the npm guards above: re-pushing a tag or re-running the
+      # workflow when this version is already on PyPI is a no-op, not an
+      # error. HTTP 200 means published, 404 means not published; any other
+      # answer fails the job rather than guessing. The version is passed
+      # through `env:`, never interpolated into the script.
+      - name: Check whether this version is already on PyPI
+        id: pyguard
+        env:
+          PKG_VERSION: ${{ steps.pypkg.outputs.version }}
+        run: |
+          set -eu
+          if [ -z "$PKG_VERSION" ]; then
+            echo "::error::Resolved Python package version is empty." >&2
+            exit 1
+          fi
+          URL="https://pypi.org/pypi/redact-secret-vault/${PKG_VERSION}/json"
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$URL")
+          case "$STATUS" in
+            200)
+              echo "redact-secret-vault ${PKG_VERSION} is already on PyPI; skipping publish." >&2
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Unexpected HTTP $STATUS from $URL." >&2
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: steps.pyguard.outputs.publish == 'true'
+        with:
+          name: python-dist
+          path: dist/
+
+      - name: Confirm the artifact matches the resolved version
+        if: steps.pyguard.outputs.publish == 'true'
+        env:
+          PKG_VERSION: ${{ steps.pypkg.outputs.version }}
+        run: |
+          set -eu
+          ls -l dist/
+          test -f "dist/redact_secret_vault-${PKG_VERSION}.tar.gz"
+          test -f "dist/redact_secret_vault-${PKG_VERSION}-py3-none-any.whl"
+          test "$(find dist -type f | wc -l)" -eq 2
+
+      - name: Publish to PyPI
+        if: steps.pyguard.outputs.publish == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/

@@ -4,7 +4,7 @@ Each package is versioned independently of the core. Every release pins an exact
 
 1. Merge to `main` with the `ci` workflow green: boundaries, Node.js 20/22/24 on Linux and macOS (addon and WASM fallback), and real-browser qualification in Chromium, Firefox, and WebKit.
 2. Bump the `version` in `packages/vault/package.json` and, when it ships in the same release, `packages/vault-server/package.json` (including its exact `@redact-secret/vault` dependency), and merge that to `main`. `npm pack --dry-run -w @redact-secret/vault` (or the `boundaries` job below) confirms the vault's packed file list stays exactly `LICENSE`, `README.md`, `package.json`, and `dist/*.js`/`*.d.ts`.
-3. Tag the merged commit `v<version>` and push the tag (`git tag v<version> && git push origin v<version>`). This triggers `.github/workflows/release.yml`, which re-runs `check:boundaries`, the `@redact-secret/vault-server` test suite, and the Node and browser qualification against that commit. Its `publish` job then runs `npm publish --provenance` for `@redact-secret/vault` and, after it, `@redact-secret/vault-server`, each with its own `publishConfig` dist-tag (`alpha` today). One tag publishes both packages, vault first, because the vault-server depends on an exact vault version; the vault-server step refuses to publish when that vault version is not on the registry, after retrying for about 5 minutes because a just-published version can 404 briefly while npm processes it. The workflow never publishes with the `latest` dist-tag; step 6 moves it. Each package's step checks `npm view <package>@<version>` first, so re-pushing a tag, re-running the workflow, or tagging a release that bumps only one package publishes only what is missing instead of failing on a double publish. The same workflow can be run by hand from a specific ref with `workflow_dispatch` (e.g. to retry after a transient failure).
+3. Tag the merged commit `v<version>` and push the tag (`git tag v<version> && git push origin v<version>`). This triggers `.github/workflows/release.yml`, which re-runs `check:boundaries`, the `@redact-secret/vault-server` test suite, and the Node and browser qualification against that commit. Its `publish` job then runs `npm publish --provenance` for `@redact-secret/vault` and, after it, `@redact-secret/vault-server`, each with its own `publishConfig` dist-tag (`alpha` today). One tag publishes both packages, vault first, because the vault-server depends on an exact vault version; the vault-server step refuses to publish when that vault version is not on the registry, after retrying for about 5 minutes because a just-published version can 404 briefly while npm processes it. The workflow never publishes with the `latest` dist-tag; step 6 moves it. Each package's step checks `npm view <package>@<version>` first, so re-pushing a tag, re-running the workflow, or tagging a release that bumps only one package publishes only what is missing instead of failing on a double publish. The same workflow can be run by hand from a specific ref with `workflow_dispatch` (e.g. to retry after a transient failure). The same run also publishes the Python distribution to PyPI when its version is new; see [Python](#python).
 4. Once the workflow's `publish` job succeeds, create a GitHub pre-release for the `v<version>` tag summarizing the tested matrix and limitations.
 5. Verify: `npm view @redact-secret/vault dist-tags` and `npm view @redact-secret/vault-server dist-tags`, then a clean install of the published packages with the pinned core, a `node` import, and a browser load, all against the *registry* tarball rather than the working tree. Set `VAULT_SPEC=@redact-secret/vault@<version>` and run `npm run qualify:node` and `npm run qualify:browser`; `qualification/lib.mjs`'s `packVault()` returns that spec directly instead of building and packing the local source, so both qualification runners install the published package. Record the results in the qualification record (for `0.1.0-alpha.2`: [registry verification](docs/research/qualification-core-0.1.0-beta.10.md#registry-verification-010-alpha2)).
 
@@ -51,19 +51,49 @@ Current tags (2026-09-28, after `0.1.0-alpha.3`):
 
 For the first stable release, either keep this manual step or change each package's `publishConfig.tag` to `latest` and deliberately relax the workflow guard in the same reviewed change.
 
-## Python (not yet published)
+## Python
 
-`redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) has never been uploaded to PyPI or any other index; it installs only from this repository. **No publish workflow exists for it yet.** `release.yml` publishes only the npm packages and never builds or uploads a Python distribution. It was named `redact-secret-vault-server` until [#56](https://github.com/redact-secret/redact-secret-vault/issues/56); that name was never published.
+`redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) is published to PyPI by the same `.github/workflows/release.yml`, through PyPI trusted publishing (OIDC). No PyPI API token is stored in the repository. The distribution was named `redact-secret-vault-server` until [#56](https://github.com/redact-secret/redact-secret-vault/issues/56); that name was never published. `0.1.0a2` was never published either. `0.1.0a3` is the first version to go to PyPI.
 
-The intended setup is PyPI trusted publishing (OIDC), mirroring the npm packages, so no PyPI API token is ever stored in the repository. Because the project does not exist on PyPI yet, it has to start from a **pending publisher**, which PyPI turns into a normal trusted publisher on the first successful upload. This is manual, on pypi.org, and has not been done:
+### Procedure
 
-- On pypi.org, open Account settings → Publishing → "Add a new pending publisher" → GitHub, with:
-  - PyPI project name: `redact-secret-vault`
-  - Owner: `redact-secret`
-  - Repository name: `redact-secret-vault`
-  - Workflow name: the future Python publish workflow's file name (for example `release-python.yml`; it must match the file that is eventually added)
-  - Environment name: `pypi`
-- Create a GitHub environment named `pypi` in the repository settings, restricted to release tags, so only a reviewed tag can reach the upload job.
-- A pending publisher does not reserve the name. Anyone can register `redact-secret-vault` on PyPI until the first upload, so the first publish should follow soon after the pending publisher is created.
+1. Bump `version` in `packages/vault-py/pyproject.toml` and `__version__` in `packages/vault-py/src/redact_secret_vault/__init__.py` (PEP 440, e.g. `0.1.0a3` for the npm `0.1.0-alpha.3` line) and merge to `main` with `ci` green.
+2. The same `v<version>` tag push (step 3 above), or a `workflow_dispatch` run of `release.yml` from `main`, publishes the Python distribution when its version is not on PyPI yet. The Python chain does not depend on the npm jobs, and they do not depend on it:
+   - `python` re-runs `ruff check` and `pytest` on Python 3.12 against that commit (the `ci` workflow covers 3.10, 3.12, and 3.13).
+   - `python-dist` builds the sdist and wheel with a pinned `build`, fails unless the wheel contains `redact_secret_vault/boundary/core_bridge.mjs` and both files carry the `pyproject.toml` version (`scripts/verify-python-dist.py`). It then runs an install smoke test: it installs the wheel into a virtualenv under `$RUNNER_TEMP`, outside the checkout, and installs `@redact-secret/core` into a separate directory with `npm ci --ignore-scripts` from `scripts/python-wheel-smoke/package-lock.json`, whose core version must equal the wheel's `PINNED_CORE_VERSION`. `scripts/smoke-python-wheel.py` then checks that `NodeCoreBridge()` without a location fails with `BRIDGE_CORE_NOT_FOUND` and that `NodeCoreBridge(node_modules=...)` finds a synthetic `github_token`. Last, it runs `twine check --strict` and uploads `dist/` as the `python-dist` artifact. When the core pin changes, update that lockfile in the same change (`npm install --package-lock-only` in `scripts/python-wheel-smoke`).
+   - `pypi-publish` is the only job with `id-token: write`. It resolves the version from `pyproject.toml` and checks `https://pypi.org/pypi/redact-secret-vault/<version>/json`: HTTP 200 skips the upload (so a re-pushed tag or re-run is a no-op), 404 proceeds, and anything else fails the job. It then downloads the artifact and uploads it with `pypa/gh-action-pypi-publish`, which also uploads PEP 740 attestations by default.
+3. Because the Python version is independent of the npm versions, a tag that bumps only the npm packages publishes nothing new to PyPI, and a Python-only bump can ship from a `workflow_dispatch` run on `main` without a new tag.
 
-Adding the workflow is separate, reviewed work. It should build the sdist and wheel, run the Python tests against the built wheel, and upload with `pypa/gh-action-pypi-publish` from a job that alone holds `id-token: write` and runs in the `pypi` environment. Until that lands, the Python version in `pyproject.toml` (`0.1.0a2`) is a repository version only.
+### Trusted publisher
+
+The maintainer registered a PyPI **pending publisher**: project `redact-secret-vault`, repository `redact-secret/redact-secret-vault`, workflow `release.yml`, environment (Any). PyPI turns it into a normal trusted publisher for the project on the first successful upload. A pending publisher does not reserve the name, so the first publish should happen soon after this workflow lands.
+
+`pypi-publish` sets no GitHub `environment:`, which the (Any) publisher accepts. To gate uploads behind a GitHub environment later, add the environment to the job **and** update the PyPI publisher to name it in the same change; otherwise the OIDC exchange is rejected.
+
+### First publish
+
+After this workflow merges, the maintainer runs `release.yml` once via `workflow_dispatch` on `main`. The npm packages are already at `0.1.0-alpha.3` on the registry, so their publish steps skip; only `redact-secret-vault` `0.1.0a3` is uploaded. Afterwards, confirm on pypi.org that the pending publisher became a trusted publisher for the project, and record the run in the release history above.
+
+### Verification
+
+In a fresh virtual environment, not this repository's:
+
+```bash
+python3 -m venv /tmp/rsv-verify && . /tmp/rsv-verify/bin/activate
+pip index versions redact-secret-vault --pre
+pip install --no-cache-dir "redact-secret-vault==<version>"
+python -c "import redact_secret_vault as m; print(m.__version__)"
+python -c "import importlib.resources as r; print(r.files('redact_secret_vault').joinpath('boundary/core_bridge.mjs').is_file())"
+mkdir -p /tmp/rsv-verify-core && npm install --prefix /tmp/rsv-verify-core --ignore-scripts @redact-secret/core@0.1.0-beta.10
+SMOKE_NODE_MODULES=/tmp/rsv-verify-core/node_modules python scripts/smoke-python-wheel.py  # from a checkout
+```
+
+To check the PEP 740 attestations, fetch them from PyPI's integrity API, or verify them against this repository with [`pypi-attestations`](https://pypi.org/project/pypi-attestations/):
+
+```bash
+curl -fsS "https://pypi.org/integrity/redact-secret-vault/<version>/redact_secret_vault-<version>-py3-none-any.whl/provenance"
+uvx pypi-attestations verify pypi --repository https://github.com/redact-secret/redact-secret-vault "pypi:redact_secret_vault-<version>-py3-none-any.whl"
+uvx pypi-attestations verify pypi --repository https://github.com/redact-secret/redact-secret-vault "pypi:redact_secret_vault-<version>.tar.gz"
+```
+
+The PyPI project page's "Verified details" should also show `redact-secret/redact-secret-vault` and `release.yml`.
