@@ -8,7 +8,7 @@ tuple, fail-closed policy evaluation, an extended denial vocabulary, and
 audit events with no field capable of carrying a restored value. Storage is
 in-memory only, matching `@redact-secret/vault`'s threat boundary — nothing
 here is persistent. Version `0.1.0a2` (PEP 440; the counterpart of the npm
-`0.1.0-alpha.2` candidate) is installable only from this repository.
+`0.1.0-alpha.2` release) is installable only from this repository.
 
 This package does not implement secret detection. `@redact-secret/core` has
 no published Python distribution (verified against the

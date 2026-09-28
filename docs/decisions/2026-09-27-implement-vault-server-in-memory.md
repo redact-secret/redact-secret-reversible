@@ -7,7 +7,7 @@ decided_at: 2026-09-27
 ---
 # Implement `@redact-secret/vault-server`'s in-memory backend and linearization point
 
-> **Accepted 2026-09-27** for `@redact-secret/vault-server` 0.1.0-alpha.1 ([#16](https://github.com/redact-secret/redact-secret-reversible/issues/16), S2). Records the concrete choices this package makes where [the server authority interface ADR](2026-09-27-define-server-authority-interface.md) (S1, #15) deliberately left implementation open. Python ([#17](https://github.com/redact-secret/redact-secret-reversible/issues/17)) and persistent stores ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)) are not covered and must each make and document their own equivalent choices.
+> **Accepted 2026-09-27** for `@redact-secret/vault-server` 0.1.0-alpha.1 ([#16](https://github.com/redact-secret/redact-secret-vault/issues/16), S2). Records the concrete choices this package makes where [the server authority interface ADR](2026-09-27-define-server-authority-interface.md) (S1, #15) deliberately left implementation open. Python ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) and persistent stores ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) are not covered and must each make and document their own equivalent choices.
 
 ## Context
 

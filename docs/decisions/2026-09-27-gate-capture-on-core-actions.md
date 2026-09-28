@@ -8,7 +8,7 @@ decided_at: 2026-09-27
 ---
 # Gate capture and outbound text on core actions
 
-> **Accepted 2026-09-27** for whole-input capture in `@redact-secret/vault` ([#8](https://github.com/redact-secret/redact-secret-reversible/issues/8)), against `@redact-secret/core@0.1.0-beta.9` in real browsers and Node.js. Streaming remains excluded.
+> **Accepted 2026-09-27** for whole-input capture in `@redact-secret/vault` ([#8](https://github.com/redact-secret/redact-secret-vault/issues/8)), against `@redact-secret/core@0.1.0-beta.9` in real browsers and Node.js. Streaming remains excluded.
 
 ## Context
 

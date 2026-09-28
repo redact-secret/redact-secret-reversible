@@ -8,7 +8,7 @@ decided_at: 2026-09-27
 ---
 # Define the restore transaction boundary
 
-> **Accepted 2026-09-27** for the single-process in-memory vault ([#9](https://github.com/redact-secret/redact-secret-reversible/issues/9)). External stores, multi-process deployments, and server authorization must each prove their own linearization point before claiming this contract ([#16](https://github.com/redact-secret/redact-secret-reversible/issues/16), [#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)).
+> **Accepted 2026-09-27** for the single-process in-memory vault ([#9](https://github.com/redact-secret/redact-secret-vault/issues/9)). External stores, multi-process deployments, and server authorization must each prove their own linearization point before claiming this contract ([#16](https://github.com/redact-secret/redact-secret-vault/issues/16), [#19](https://github.com/redact-secret/redact-secret-vault/issues/19)).
 
 ## Context
 

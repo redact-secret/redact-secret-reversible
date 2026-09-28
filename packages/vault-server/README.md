@@ -1,20 +1,20 @@
 # @redact-secret/vault-server
 
-**Alpha.** Server authority for restoring values captured by [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-reversible/blob/main/packages/vault/README.md) across principals, tenants, sources, destinations, and purposes, with an in-memory storage backend. Implements the interface fixed by [the server authority ADR](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-define-server-authority-interface.md) (S1, #15): `PrincipalResolver`, `ServerReleasePolicy`, `ServerDenialReason`, and `ServerAuditEvent`.
+**Alpha.** Server authority for restoring values captured by [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault/README.md) across principals, tenants, sources, destinations, and purposes, with an in-memory storage backend. Implements the interface fixed by [the server authority ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/2026-09-27-define-server-authority-interface.md) (S1, #15): `PrincipalResolver`, `ServerReleasePolicy`, `ServerDenialReason`, and `ServerAuditEvent`.
 
 ```bash
 npm install @redact-secret/vault-server@0.1.0-alpha.2 @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
 ```
 
-`0.1.0-alpha.2` is this package's first published version. Install exact versions: the npm `alpha` tag of `@redact-secret/vault` points at `0.1.0-alpha.1` until `0.1.0-alpha.2` is published, and that version conflicts with core beta.10.
+`0.1.0-alpha.2` is this package's first published version. Install exact versions: `@redact-secret/vault`'s npm `latest` tag still points at `0.1.0-alpha.1`, which conflicts with core beta.10, and this package's own `latest` tag is the prerelease `0.1.0-alpha.2` (npm assigned it on first publish).
 
 ## Supported, and not
 
 | | Status in 0.1.0-alpha.2 |
 | --- | --- |
-| Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
-| Storage backend | In-memory only. `@redact-secret/store-*` persistent backends are a separate, later track ([#19](https://github.com/redact-secret/redact-secret-reversible/issues/19)) — this package does not implement or claim one |
-| Python | **Not in this package.** A research-grade native Python implementation of the same contract is [`redact-secret-vault-server`](https://github.com/redact-secret/redact-secret-reversible/blob/main/packages/vault-server-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-reversible/issues/17)) |
+| Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
+| Storage backend | In-memory only. `@redact-secret/store-*` persistent backends are a separate, later track ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) — this package does not implement or claim one |
+| Python | **Not in this package.** A research-grade native Python implementation of the same contract is [`redact-secret-vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
 | Streaming, arbitrary-text `restore(text)` | **Not supported**, matching `@redact-secret/vault` |
 | Browser | **Not a target.** This package assumes a server trust boundary (`PrincipalResolver` reads request-scoped, already-authenticated context); it is Node.js-only and is never bundled for a browser |
 
@@ -79,7 +79,7 @@ Only after every occurrence of every path clears all nine steps does this packag
 
 ## Concurrency
 
-Every `capture`/`restore`/`revoke`/`dispose`/`stats` call on one `ServerVault` is queued onto a single FIFO chain: at most one is ever executing, and each fully commits or denies before the next begins — including across the `await`s a `PrincipalResolver` or `ServerReleasePolicy` introduces (which the underlying, synchronous `@redact-secret/vault` never has to contend with). This is this package's own linearization point, generalizing [the transaction-boundary ADR](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-define-restore-transaction-boundary.md)'s contract to genuinely concurrent async operations:
+Every `capture`/`restore`/`revoke`/`dispose`/`stats` call on one `ServerVault` is queued onto a single FIFO chain: at most one is ever executing, and each fully commits or denies before the next begins — including across the `await`s a `PrincipalResolver` or `ServerReleasePolicy` introduces (which the underlying, synchronous `@redact-secret/vault` never has to contend with). This is this package's own linearization point, generalizing [the transaction-boundary ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/2026-09-27-define-restore-transaction-boundary.md)'s contract to genuinely concurrent async operations:
 
 - A `revoke()` queued before a `restore()` call denies it (`revoked`), never the other way around.
 - A slow or malicious `PrincipalResolver`/`ServerReleasePolicy` holds the queue for at most `resolverTimeoutMs`/`policyTimeoutMs` (default 5000 each); exceeding it fails closed (`unauthenticated` / `policy-evaluation-error`) rather than hanging or, worse, letting a reentrant call from inside that same callback deadlock the queue.
@@ -114,7 +114,7 @@ Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the sh
 
 ## Threat boundary, failure behavior, and residual risk
 
-- **Threat boundary added over the in-memory vault:** a different authenticated principal, a cross-tenant request, a stale grant surviving a policy or revocation change, and a resolver or policy that is unreachable, slow, or throws — the exact boundary the [server authority ADR](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-define-server-authority-interface.md) names.
+- **Threat boundary added over the in-memory vault:** a different authenticated principal, a cross-tenant request, a stale grant surviving a policy or revocation change, and a resolver or policy that is unreachable, slow, or throws — the exact boundary the [server authority ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/2026-09-27-define-server-authority-interface.md) names.
 - **Failure behavior:** every injection point fails closed, as above. A revoked or drained token reads as `unknown-token` once its short-lived tombstone (`revocationMemoryMs`) ages out — both are conformant per the ADR's §4.
 - **Residual risk (this package's own, beyond what the ADR already states):**
   - Single-process only. This is `@redact-secret/vault`'s in-memory backend wrapped with server authority, not a distributed store; a multi-process deployment needs its own shared linearization mechanism, deferred to the persistent-store contract (#19).
@@ -124,11 +124,11 @@ Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the sh
 
 ## Core compatibility
 
-This package adds no direct dependency on `@redact-secret/core`; its `@redact-secret/core` peer is pinned exactly to `0.1.0-beta.10`, the same core `@redact-secret/vault@0.1.0-alpha.2` requires (see the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)). Before this release, the unpublished package on `main` pinned `0.1.0-beta.9`.
+This package adds no direct dependency on `@redact-secret/core`; its `@redact-secret/core` peer is pinned exactly to `0.1.0-beta.10`, the same core `@redact-secret/vault@0.1.0-alpha.2` requires (see the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)). Before this release, the unpublished package on `main` pinned `0.1.0-beta.9`.
 
 ## Security reports
 
-Report vulnerabilities privately through [GitHub security advisories](https://github.com/redact-secret/redact-secret-reversible/security/advisories/new). Never include live credentials. See [SECURITY.md](https://github.com/redact-secret/redact-secret-reversible/blob/main/SECURITY.md).
+Report vulnerabilities privately through [GitHub security advisories](https://github.com/redact-secret/redact-secret-vault/security/advisories/new). Never include live credentials. See [SECURITY.md](https://github.com/redact-secret/redact-secret-vault/blob/main/SECURITY.md).
 
 ## License
 

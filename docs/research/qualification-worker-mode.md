@@ -1,7 +1,7 @@
 # Qualification record: optional dedicated-Worker mode
 
 **Status:** executed evidence, 2026-09-27. Additional to, and does not replace or modify, the [0.1.0-alpha.1 qualification record](qualification-0.1.0-alpha.1.md): every number in that record is unchanged by this addition.
-**Issue:** [#14](https://github.com/redact-secret/redact-secret-reversible/issues/14) (depends on [#12](https://github.com/redact-secret/redact-secret-reversible/issues/12), [#13](https://github.com/redact-secret/redact-secret-reversible/issues/13)). **Decision:** [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md).
+**Issue:** [#14](https://github.com/redact-secret/redact-secret-vault/issues/14) (depends on [#12](https://github.com/redact-secret/redact-secret-vault/issues/12), [#13](https://github.com/redact-secret/redact-secret-vault/issues/13)). **Decision:** [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md).
 
 ## Pinned core artifact
 
@@ -38,7 +38,7 @@ Firefox and WebKit do not implement Trusted Types; the `trusted-types default` d
 
 **Status:** executed evidence, 2026-09-28, still against the pinned `0.1.0-beta.9`. The table above is the #14 run and is left as recorded.
 
-[#39](https://github.com/redact-secret/redact-secret-reversible/issues/39) implements §3 "Worker mode" of the [PII retention and activation ADR](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md):
+[#39](https://github.com/redact-secret/redact-secret-vault/issues/39) implements §3 "Worker mode" of the [PII retention and activation ADR](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md):
 
 - `PROTOCOL_VERSION` is `2`. A version-1 request is answered with `WORKER_PROTOCOL_VIOLATION`, and a version-1 or incomplete `vault-ready` makes `createWorkerVault` reject with `WORKER_PROTOCOL_VIOLATION` instead of waiting for the timeout. Unknown keys are still rejected everywhere.
 - `vault-ready` carries `piiActivation: string | null`, the identity the Worker realm's vault observed. `vault-init-failed` still carries only `code` and `coreCode`.
@@ -57,7 +57,7 @@ What `qualify:worker` adds (the existing hostile cases now send `v: 2`, so they 
 | Firefox 155.0 (Playwright), darwin-arm64 local | 22/22 |
 | WebKit 26.6 (Playwright), darwin-arm64 local | 22/22 |
 
-Protocol and activation cases that do not need a browser are in `packages/vault/test/worker-pii.test.mjs` (fake core, one Node.js process per Worker realm) and `worker-pii-core.test.mjs` (real installed core; PII-on cases skip with a stated reason on beta.9). Against a local build of the `0.1.0-beta.10` candidate, which is not on npm, the six PII-on cases of `worker-pii-core.test.mjs` pass. **Browser qualification of Worker mode against beta.10 itself is [#42](https://github.com/redact-secret/redact-secret-reversible/issues/42), recorded in the [beta.10 qualification record](qualification-core-0.1.0-beta.10.md).** Note for #42: on a PII-capable core the default Worker entry (`startVaultWorkerHost()` with no `pii`) fails with `CORE_FAILURE`/`NOT_INITIALIZED` by design, so the runner needs `pii: []` or a Worker script that initializes the core first.
+Protocol and activation cases that do not need a browser are in `packages/vault/test/worker-pii.test.mjs` (fake core, one Node.js process per Worker realm) and `worker-pii-core.test.mjs` (real installed core; PII-on cases skip with a stated reason on beta.9). Against a local build of the `0.1.0-beta.10` candidate, which is not on npm, the six PII-on cases of `worker-pii-core.test.mjs` pass. **Browser qualification of Worker mode against beta.10 itself is [#42](https://github.com/redact-secret/redact-secret-vault/issues/42), recorded in the [beta.10 qualification record](qualification-core-0.1.0-beta.10.md).** Note for #42: on a PII-capable core the default Worker entry (`startVaultWorkerHost()` with no `pii`) fails with `CORE_FAILURE`/`NOT_INITIALIZED` by design, so the runner needs `pii: []` or a Worker script that initializes the core first.
 
 ## What this does and does not establish
 

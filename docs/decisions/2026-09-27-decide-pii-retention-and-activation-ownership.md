@@ -8,7 +8,7 @@ decided_at: 2026-09-27
 ---
 # Decide PII retention eligibility and core PII activation ownership
 
-> **Accepted 2026-09-27** as the contract for [#45](https://github.com/redact-secret/redact-secret-reversible/issues/45). Implemented on every surface, unreleased: main-thread `@redact-secret/vault` and `@redact-secret/vault-server` ([#38](https://github.com/redact-secret/redact-secret-reversible/issues/38)), Worker mode with protocol version 2 ([#39](https://github.com/redact-secret/redact-secret-reversible/issues/39)), and the Python bridge ([#40](https://github.com/redact-secret/redact-secret-reversible/issues/40)). The unreleased packages pin the published `@redact-secret/core@0.1.0-beta.10` exactly ([#41](https://github.com/redact-secret/redact-secret-reversible/issues/41)). **Qualified 2026-09-28** against that core with PII off and on ([#42](https://github.com/redact-secret/redact-secret-reversible/issues/42), [qualification record](../research/qualification-core-0.1.0-beta.10.md)): Node.js 20/22/24 (addon and WASM), Chromium, Firefox, and WebKit on the main thread and in a dedicated Worker, and the Python bridge. Every rule in *Verification before implementation is accepted* below holds in a fresh realm per scenario. Conformance corpus 1.2.0 carries the retention, warn and block, and activation cases in language-neutral form. A default-confidence `warn` PII finding (Medium `pii_global_phone`) is covered by corpus 1.3.0 ([#43](https://github.com/redact-secret/redact-secret-reversible/issues/43)). Not yet covered: a release ([#44](https://github.com/redact-secret/redact-secret-reversible/issues/44)).
+> **Accepted 2026-09-27** as the contract for [#45](https://github.com/redact-secret/redact-secret-vault/issues/45). Implemented on every surface: main-thread `@redact-secret/vault` and `@redact-secret/vault-server` ([#38](https://github.com/redact-secret/redact-secret-vault/issues/38)), Worker mode with protocol version 2 ([#39](https://github.com/redact-secret/redact-secret-vault/issues/39)), and the Python bridge ([#40](https://github.com/redact-secret/redact-secret-vault/issues/40)). The packages pin the published `@redact-secret/core@0.1.0-beta.10` exactly ([#41](https://github.com/redact-secret/redact-secret-vault/issues/41)). **Qualified 2026-09-28** against that core with PII off and on ([#42](https://github.com/redact-secret/redact-secret-vault/issues/42), [qualification record](../research/qualification-core-0.1.0-beta.10.md)): Node.js 20/22/24 (addon and WASM), Chromium, Firefox, and WebKit on the main thread and in a dedicated Worker, and the Python bridge. Every rule in *Verification before implementation is accepted* below holds in a fresh realm per scenario. Conformance corpus 1.2.0 carries the retention, warn and block, and activation cases in language-neutral form. A default-confidence `warn` PII finding (Medium `pii_global_phone`) is covered by corpus 1.3.0 ([#43](https://github.com/redact-secret/redact-secret-vault/issues/43)). **Released 2026-09-28** in `@redact-secret/vault@0.1.0-alpha.2` and `@redact-secret/vault-server@0.1.0-alpha.2` ([#44](https://github.com/redact-secret/redact-secret-vault/issues/44), [#55](https://github.com/redact-secret/redact-secret-vault/issues/55)); the Python bridge `0.1.0a2` is not published to any index.
 
 ## Context
 
@@ -147,7 +147,7 @@ Neither error carries a selector, an identity string, or any input. Core rejecti
 
 `@redact-secret/vault-server` creates its vault through `createVault` (`packages/vault-server/src/server-vault.ts`). Its options gain the same `pii` and `expectPiiActivation` fields, forwarded verbatim. Its capture options gain the same `pii: PiiRetention`, forwarded verbatim. It adds no activation behavior of its own.
 
-#### Worker mode ([#39](https://github.com/redact-secret/redact-secret-reversible/issues/39))
+#### Worker mode ([#39](https://github.com/redact-secret/redact-secret-vault/issues/39))
 
 The Worker is its own realm with its own core instance, and the application writes the Worker script. So activation belongs to that script, not to the page:
 
@@ -158,7 +158,7 @@ The Worker is its own realm with its own core instance, and the application writ
 - `CreateWorkerVaultOptions` gains `expectPiiActivation?: string`. The client compares it with the ready message and rejects `createWorkerVault` with `PII_ACTIVATION_MISMATCH` on a difference. `WorkerVault` exposes `readonly piiActivation: string | null`.
 - `WorkerCaptureOptions` gains `pii: PiiRetention`. It is a plain cloneable object, so it is allowed. The host parser accepts only the key `retain` with a string array and applies §1's validation independently.
 
-#### Python bridge ([#40](https://github.com/redact-secret/redact-secret-reversible/issues/40))
+#### Python bridge ([#40](https://github.com/redact-secret/redact-secret-vault/issues/40))
 
 Each `NodeCoreBridge.scan` spawns a fresh Node.js process whose realm has no other initializer. So the Python application's bridge configuration is the only owner of the selection. Adoption is meaningless here, and omission means PII off.
 
@@ -176,7 +176,7 @@ Each `NodeCoreBridge.scan` spawns a fresh Node.js process whose realm has no oth
 - The package keeps compiling and passing CI against the pinned `0.1.0-beta.9`. PII support is detected at runtime by the presence of `piiActivation`, never by version string.
 - On beta.9, callers that pass no PII option see no behavior change: `createVault()`, `startVaultWorkerHost()`, and `NodeCoreBridge()` call plain `initialize()` exactly as today. The only additions are the observable `piiActivation: null` and the `v: 2` Worker protocol.
 - On beta.9, any PII option fails closed with `PII_UNAVAILABLE` before the core is called: a non-empty `pii` selection, `expectPiiActivation`, or a capture's `pii` retention. `pii: []` is accepted and equals omission.
-- On beta.10, omitting `pii` with an uninitialized core is a deliberate behavior change: `CORE_FAILURE`/`NOT_INITIALIZED` instead of silently locking PII off. The release notes for the alpha that adopts beta.10 ([#41](https://github.com/redact-secret/redact-secret-reversible/issues/41), [#44](https://github.com/redact-secret/redact-secret-reversible/issues/44)) must call it out with the one-line migration: `createVault({ pii: [] })`, or await the core's `initialize` first.
+- On beta.10, omitting `pii` with an uninitialized core is a deliberate behavior change: `CORE_FAILURE`/`NOT_INITIALIZED` instead of silently locking PII off. The release notes for the alpha that adopts beta.10 ([#41](https://github.com/redact-secret/redact-secret-vault/issues/41), [#44](https://github.com/redact-secret/redact-secret-vault/issues/44)) must call it out with the one-line migration: `createVault({ pii: [] })`, or await the core's `initialize` first.
 
 ## Rationale
 

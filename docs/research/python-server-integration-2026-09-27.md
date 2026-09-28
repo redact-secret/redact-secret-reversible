@@ -1,6 +1,6 @@
 # Python server integration: inventory, boundary decision, and equivalence evidence
 
-**Status:** executed evidence, 2026-09-27. Written for [#17](https://github.com/redact-secret/redact-secret-reversible/issues/17) (roadmap S3), against [decision-define-server-authority-interface](../decisions/2026-09-27-define-server-authority-interface.md) (S1, #15). Leaves the breadcrumbs [#18](https://github.com/redact-secret/redact-secret-reversible/issues/18) (S4, JS/Python documentation and conformance) needs.
+**Status:** executed evidence, 2026-09-27. Written for [#17](https://github.com/redact-secret/redact-secret-vault/issues/17) (roadmap S3), against [decision-define-server-authority-interface](../decisions/2026-09-27-define-server-authority-interface.md) (S1, #15). Leaves the breadcrumbs [#18](https://github.com/redact-secret/redact-secret-vault/issues/18) (S4, JS/Python documentation and conformance) needs.
 
 ## 1. Inventory: is there a native Python core?
 
@@ -111,7 +111,7 @@ Pinned to `@redact-secret/core@0.1.0-beta.9`, identical to the pin in [qualifica
 
 ## 8. PII selection, activation identity, and retention (#40)
 
-**Status:** implemented and tested, unreleased, 2026-09-28. Implements §1 and §3 "Python bridge" of the [PII retention and activation decision record](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md) for [#40](https://github.com/redact-secret/redact-secret-reversible/issues/40), with the same rules `@redact-secret/vault` implements for #38 (`packages/vault/src/pii.ts`, ported as `src/redact_secret_vault_server/pii.py`). The pin stays `0.1.0-beta.9`. PII-on behavior was checked against a local build of the `0.1.0-beta.10` candidate, which is not on npm.
+**Status:** implemented and tested, unreleased, 2026-09-28. Implements §1 and §3 "Python bridge" of the [PII retention and activation decision record](../decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md) for [#40](https://github.com/redact-secret/redact-secret-vault/issues/40), with the same rules `@redact-secret/vault` implements for #38 (`packages/vault/src/pii.ts`, ported as `src/redact_secret_vault_server/pii.py`). The pin stays `0.1.0-beta.9`. PII-on behavior was checked against a local build of the `0.1.0-beta.10` candidate, which is not on npm.
 
 The issue text asked the bridge to report `"off"` on beta.9. The accepted decision record supersedes that: the bridge reports `piiActivation: null` and does not invent an identity string.
 

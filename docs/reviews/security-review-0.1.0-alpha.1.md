@@ -1,6 +1,6 @@
 # Security review: @redact-secret/vault 0.1.0-alpha.1
 
-**Issue:** [#21](https://github.com/redact-secret/redact-secret-reversible/issues/21). **Date:** 2026-09-27.
+**Issue:** [#21](https://github.com/redact-secret/redact-secret-vault/issues/21). **Date:** 2026-09-27.
 **Reviewer:** a separate review agent (Claude) with no part in writing the implementation. It worked read-only on the source, tests, corpus, specification, and ADRs, and confirmed findings by running throwaway scripts with synthetic values against the built package. This is an AI review, independent of the implementing agent; it is **not** a human or third-party audit.
 **Scope:** every public export, defaults, README examples, error/audit/stats paths, and misuse paths of the in-memory vault. Worker, server, and persistence modes were out of scope (unimplemented).
 

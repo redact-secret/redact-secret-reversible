@@ -3,7 +3,7 @@
 **Status:** proposed issue plan, 2026-09-27. This document does not claim packages or runtimes are implemented.
 **Release cadence:** independent of the core's beta milestones. A core release is a tested compatibility input, not this repository's release clock.
 
-The plan groups work by a security exit gate rather than by language alone. Epics [#1–#5](https://github.com/redact-secret/redact-secret-reversible/issues/1) and linked child issues #6–#22 are registered on GitHub. The initial release target is **0.1.0-alpha.1**: F1–F5, V1–V3, R1–R2. Worker V4, server S1–S4, and persistence P1–P2 are follow-up scopes unless they independently meet their gates before a later release. No fixed date is assigned.
+The plan groups work by a security exit gate rather than by language alone. Epics [#1–#5](https://github.com/redact-secret/redact-secret-vault/issues/1) and linked child issues #6–#22 are registered on GitHub. The initial release target is **0.1.0-alpha.1**: F1–F5, V1–V3, R1–R2. Worker V4, server S1–S4, and persistence P1–P2 are follow-up scopes unless they independently meet their gates before a later release. No fixed date is assigned.
 
 ## Phase 0 — security contract and evidence
 

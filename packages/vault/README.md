@@ -6,18 +6,18 @@
 npm install @redact-secret/vault@0.1.0-alpha.2 @redact-secret/core@0.1.0-beta.10
 ```
 
-Install exact versions. Until `0.1.0-alpha.2` is published, the npm `alpha` tag points at `0.1.0-alpha.1`, which peers `@redact-secret/core@0.1.0-beta.9` and conflicts with beta.10. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-reversible/blob/main/CHANGELOG.md).
+Install exact versions. The npm `alpha` tag points at `0.1.0-alpha.2`, but `latest` still points at the prerelease `0.1.0-alpha.1`, which peers `@redact-secret/core@0.1.0-beta.9` and conflicts with beta.10, so a bare `npm install @redact-secret/vault` gets the wrong version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
 
 ## Supported, and not
 
 | Runtime | Status in 0.1.0-alpha.2 |
 | --- | --- |
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
-| Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [alpha.1 qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-0.1.0-alpha.1.md); PII off and on in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)) |
-| Optional dedicated-Worker mode (`@redact-secret/vault/worker`), same three browser engines, CSP allowing `'wasm-unsafe-eval'` and `worker-src` | **Qualified, opt-in, separately from main-thread mode** — see [Worker mode](#worker-mode) and the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) |
+| Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [alpha.1 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-0.1.0-alpha.1.md); PII off and on in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)) |
+| Optional dedicated-Worker mode (`@redact-secret/vault/worker`), same three browser engines, CSP allowing `'wasm-unsafe-eval'` and `worker-src` | **Qualified, opt-in, separately from main-thread mode** — see [Worker mode](#worker-mode) and the [worker qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14)) |
 | `@redact-secret/core` | `0.1.0-beta.10` exactly (peer dependency; `0.1.0-alpha.1` pinned `0.1.0-beta.9`, and without PII support) |
 | `SharedWorker`, a Service Worker, or Node.js `worker_threads` | **Not supported** |
-| Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants. Use [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-reversible/blob/main/packages/vault-server/README.md) for principal and tenant authorization |
+| Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants. Use [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md) for principal and tenant authorization |
 | Persistence, Python, streaming, free-text `restore(text)` | **Not supported** |
 
 ## Usage
@@ -77,14 +77,14 @@ try {
 
 - **Code in your page or process.** Same-page scripts, XSS, compromised dependencies, and extensions can read the input before capture, call `restore`, or read its result. The vault shares their trust boundary.
 - **Relocation within a grant.** A model can move a valid token within a granted field, or into another path you granted for the same capture. Grant the narrowest paths. Keep `maxUses: 1`.
-- **Other users.** A vault shared across users or tenants will restore one user's value into another's granted field if you list both captures. Use one vault per user task, or [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-reversible/blob/main/packages/vault-server/README.md) for principal and tenant checks.
+- **Other users.** A vault shared across users or tenants will restore one user's value into another's granted field if you list both captures. Use one vault per user task, or [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md) for principal and tenant checks.
 - **Denial reasons.** `reason` tells your code which check failed, and so whether a token is live. Do not forward it to the model or to end users.
 - **Inspection tools.** Browser DevTools and debuggers can display private fields; `console.log(vault)` in a DevTools session can show retained values.
 - **Undetected secrets.** The core does not detect every secret. Treat `text` as "known findings removed", not "safe to send".
 - **Memory erasure.** Values are JavaScript strings; revoke and dispose drop references but cannot zeroize memory.
 - **Plaintext after return.** Once `restore` returns, rendering, logging, and forwarding are your responsibility.
 
-See the [threat model](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/specs/threat-model.md) for each mode's boundary and alternatives.
+See the [threat model](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/threat-model.md) for each mode's boundary and alternatives.
 
 ## Worker mode
 
@@ -111,10 +111,10 @@ startVaultWorkerHost({ pii: [] }); // PII off in this Worker realm; see PII find
 What changes from main-thread mode:
 
 - **Where the mapping lives.** The vault instance and every retained entry live in a closure private to the Worker's own module scope, not reachable by direct main-thread object access. The only interface is a validated message protocol: an out-of-protocol request (unrecognized operation, wrong shape, an unexpected key, a `__proto__`-bearing payload) is rejected explicitly (`WORKER_PROTOCOL_VIOLATION`), never silently ignored or coerced.
-- **What it does not add.** A dedicated Worker is not an authentication boundary. Code that already has a reference to the `Worker` (for example a compromised same-page script) can still call `capture`/`restore` through the same protocol a legitimate caller uses, and can still observe whatever that protocol legitimately returns. Worker mode narrows *accidental* main-thread reach to the mapping; it does not defend against a main thread that is already compromised. See the [Worker-mode ADR](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md)'s guarantee boundary.
+- **What it does not add.** A dedicated Worker is not an authentication boundary. Code that already has a reference to the `Worker` (for example a compromised same-page script) can still call `capture`/`restore` through the same protocol a legitimate caller uses, and can still observe whatever that protocol legitimately returns. Worker mode narrows *accidental* main-thread reach to the mapping; it does not defend against a main thread that is already compromised. See the [Worker-mode ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/2026-09-27-qualify-dedicated-worker-mode.md)'s guarantee boundary.
 - **The API shape.** `WorkerVault` mirrors `capture`/`restore`/`revoke`/`stats`/`dispose`, but every call returns a `Promise` — it is a message round trip, not an in-process call. `createWorkerVault(worker, { timeoutMs? })` never falls back to a main-thread vault: if the Worker fails to start, errors, or does not answer in time, the promise rejects with a fixed `VaultError`. Call `vault.terminate()` to stop the underlying Worker immediately.
 - **Capture options.** `policy`, `eligible`, and `displayFormatter` are functions and cannot cross the message boundary (and running main-thread-supplied code inside the Worker would defeat the isolation this mode exists to provide). Worker-mode `capture` accepts only `release`, `maxUses`, `unredacted`, `ruleset`, and the PII retention allowlist `pii` (see [PII findings](#pii-findings)); passing one of the unsupported options throws `INVALID_ARGUMENT` synchronously, before anything is sent.
-- **CSP.** The Worker's own script response needs the same `'wasm-unsafe-eval'` the main thread needs (it is not inherited from the page), plus a `worker-src` directive that allows creating it, plus — under `require-trusted-types-for 'script'` — a Trusted Types policy for the `new Worker(url)` sink. See the [worker qualification record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/research/qualification-worker-mode.md) for the exact policy used in qualification.
+- **CSP.** The Worker's own script response needs the same `'wasm-unsafe-eval'` the main thread needs (it is not inherited from the page), plus a `worker-src` directive that allows creating it, plus — under `require-trusted-types-for 'script'` — a Trusted Types policy for the `new Worker(url)` sink. See the [worker qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-worker-mode.md) for the exact policy used in qualification.
 
 ## Multi-turn conversations
 
@@ -124,7 +124,7 @@ If a capture fails with `UNREDACTED_FINDINGS`, the input contains values the cor
 
 ## PII findings
 
-The pinned core (`0.1.0-beta.10`) adds opt-in PII detection, whose finding types start with `pii_`. The vault detects that support at runtime, never by version, so a core without it (`0.1.0-beta.9`) gets the fail-closed rules below. See the [decision record](https://github.com/redact-secret/redact-secret-reversible/blob/main/docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
+The pinned core (`0.1.0-beta.10`) adds opt-in PII detection, whose finding types start with `pii_`. The vault detects that support at runtime, never by version, so a core without it (`0.1.0-beta.9`) gets the fail-closed rules below. See the [decision record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md).
 
 - **Your application owns PII activation.** In the core, PII activation applies to the whole process or page and can be set only once. The vault never chooses a selection for you. Pass `createVault({ pii: [...] })` and the vault forwards your selectors to the core's `initialize({ pii })` as given. `pii: []` means PII off. Omit `pii` and the vault adopts whatever your application already set with the core's own `initialize`, and calls no initializer itself. If nothing initialized the core, `createVault()` fails with `CORE_FAILURE` / `coreCode: "NOT_INITIALIZED"` rather than silently locking PII off. Fix it with `createVault({ pii: [] })`, or by awaiting the core's `initialize(...)` first. A different selection than the one already active fails with `CORE_FAILURE` / `coreCode: "PII_ACTIVATION_CONFLICT"`, and the active selection is left unchanged.
 - **Observed activation.** `vault.piiActivation` is the core's canonical activation identity, or `null` on a core without PII support. Pass `expectPiiActivation` to require an exact identity. Any difference fails with `PII_ACTIVATION_MISMATCH`.
@@ -133,7 +133,7 @@ The pinned core (`0.1.0-beta.10`) adds opt-in PII detection, whose finding types
 - **PII findings count toward `maxFindings`.** See Bounds under [What the vault enforces](#what-the-vault-enforces).
 - **Fail closed without PII support.** With a core that lacks PII support, a non-empty `pii`, any `expectPiiActivation`, or a capture's `pii` option fails with `PII_UNAVAILABLE` before the core is called. `pii: []` is accepted and equals omission. A capture's `pii` option also fails `PII_UNAVAILABLE` when the observed activation has `selectors=off`.
 
-**In Worker mode** ([#39](https://github.com/redact-secret/redact-secret-reversible/issues/39)) the Worker is its own realm with its own core, so the Worker script owns its activation, not the page:
+**In Worker mode** ([#39](https://github.com/redact-secret/redact-secret-vault/issues/39)) the Worker is its own realm with its own core, so the Worker script owns its activation, not the page:
 
 - `startVaultWorkerHost({ pii, expectPiiActivation })` behaves exactly like `createVault` inside the Worker realm, including adoption when the Worker script awaited the core's `initialize(...)` itself. A conflict surfaces as `createWorkerVault` rejecting with `CORE_FAILURE` / `coreCode: "PII_ACTIVATION_CONFLICT"`.
 - The page cannot choose or change the Worker's selection. No message the page can send carries selectors; a request that tries is rejected with `WORKER_PROTOCOL_VIOLATION`.
@@ -161,7 +161,7 @@ startVaultWorkerHost({ pii: ["pii"] });
 
 `vault.revoke(captureId) → number`, `vault.dispose()`, `vault.stats()`.
 
-Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED_FINDING`, `UNREDACTED_FINDINGS`, `TOKEN_LITERAL_IN_INPUT`, `LIMIT_EXCEEDED`, `TOKEN_GENERATION_FAILED`, `INVARIANT_VIOLATION`, `RESTORE_DENIED`, `BUSY`, `DISPOSED`, `PII_UNAVAILABLE` (a PII option on a core without PII support, or capture retention while PII detection is off), `PII_ACTIVATION_MISMATCH` (the observed activation differs from `expectPiiActivation`). Worker mode ([#14](https://github.com/redact-secret/redact-secret-reversible/issues/14)) also uses `WORKER_PROTOCOL_VIOLATION` (a message did not match the validated protocol) and `WORKER_UNAVAILABLE` (the Worker did not respond, errored, or was terminated).
+Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED_FINDING`, `UNREDACTED_FINDINGS`, `TOKEN_LITERAL_IN_INPUT`, `LIMIT_EXCEEDED`, `TOKEN_GENERATION_FAILED`, `INVARIANT_VIOLATION`, `RESTORE_DENIED`, `BUSY`, `DISPOSED`, `PII_UNAVAILABLE` (a PII option on a core without PII support, or capture retention while PII detection is off), `PII_ACTIVATION_MISMATCH` (the observed activation differs from `expectPiiActivation`). Worker mode ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14)) also uses `WORKER_PROTOCOL_VIOLATION` (a message did not match the validated protocol) and `WORKER_UNAVAILABLE` (the Worker did not respond, errored, or was terminated).
 
 ### Worker mode API
 
@@ -173,7 +173,7 @@ Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED
 
 ## Security reports
 
-Report vulnerabilities privately through [GitHub security advisories](https://github.com/redact-secret/redact-secret-reversible/security/advisories/new). Never include live credentials. See [SECURITY.md](https://github.com/redact-secret/redact-secret-reversible/blob/main/SECURITY.md).
+Report vulnerabilities privately through [GitHub security advisories](https://github.com/redact-secret/redact-secret-vault/security/advisories/new). Never include live credentials. See [SECURITY.md](https://github.com/redact-secret/redact-secret-vault/blob/main/SECURITY.md).
 
 ## License
 
