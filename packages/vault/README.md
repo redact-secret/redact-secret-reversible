@@ -1,16 +1,16 @@
 # @redact-secret/vault
 
-**Alpha.** An opt-in, bounded, in-memory vault for [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core). It replaces detected secrets with random tokens before text leaves your code, for example to an LLM. Later it puts the original values back, but only into fields your application names in advance.
+**Beta.** An opt-in, bounded, in-memory vault for [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core). It replaces detected secrets with random tokens before text leaves your code, for example to an LLM. Later it puts the original values back, but only into fields your application names in advance.
 
 ```bash
-npm install @redact-secret/vault@0.1.0-alpha.3 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault@0.1.0-beta.1 @redact-secret/core@0.1.0-beta.10
 ```
 
-The npm `latest` and `alpha` tags both point at `0.1.0-alpha.3`. Exact versions are still recommended while the package is alpha, because each release pins an exact `@redact-secret/core` version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
+The npm `latest` and `beta` tags both point at `0.1.0-beta.1`. Exact versions are still recommended while the package is beta, because each release pins an exact `@redact-secret/core` version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
 
 ## Supported, and not
 
-| Runtime | Status in 0.1.0-alpha.3 |
+| Runtime | Status in 0.1.0-beta.1 |
 | --- | --- |
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
 | Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [alpha.1 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-0.1.0-alpha.1.md); PII off and on in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)) |

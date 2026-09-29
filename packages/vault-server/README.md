@@ -1,16 +1,16 @@
 # @redact-secret/vault-server
 
-**Alpha.** Server authority for restoring values captured by [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault/README.md) across principals, tenants, sources, destinations, and purposes, with an in-memory storage backend. Implements the interface fixed by [the server authority ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/define-server-authority-interface.md) (S1, #15): `PrincipalResolver`, `ServerReleasePolicy`, `ServerDenialReason`, and `ServerAuditEvent`.
+**Beta.** Server authority for restoring values captured by [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault/README.md) across principals, tenants, sources, destinations, and purposes, with an in-memory storage backend. Implements the interface fixed by [the server authority ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/define-server-authority-interface.md) (S1, #15): `PrincipalResolver`, `ServerReleasePolicy`, `ServerDenialReason`, and `ServerAuditEvent`.
 
 ```bash
-npm install @redact-secret/vault-server@0.1.0-alpha.3 @redact-secret/vault@0.1.0-alpha.3 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault-server@0.1.0-beta.1 @redact-secret/vault@0.1.0-beta.1 @redact-secret/core@0.1.0-beta.10
 ```
 
-`0.1.0-alpha.2` was this package's first published version. The npm `latest` and `alpha` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-alpha.3`. Exact versions are still recommended while the packages are alpha, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
+`0.1.0-alpha.2` was this package's first published version. The npm `latest` and `beta` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-beta.1`. Exact versions are still recommended while the packages are beta, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
 
 ## Supported, and not
 
-| | Status in 0.1.0-alpha.3 |
+| | Status in 0.1.0-beta.1 |
 | --- | --- |
 | Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
 | Storage backend | In-memory only. `@redact-secret/store-*` persistent backends are a separate, later track ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) — this package does not implement or claim one |
