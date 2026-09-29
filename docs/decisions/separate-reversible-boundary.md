@@ -21,7 +21,7 @@ The core's trust contract returns sanitized text and safe metadata without stori
 - This repository owns its own threat model, release cadence, compatibility range, and security tests.
 - The core remains the single detector and redaction authority. This repository must not create a second detector or silently override `block`.
 - Benchmark detection claims do not depend on restore functionality; restore security evidence is assessed separately.
-- A language-neutral contract is specified in this repository, while runtime packages are added only after qualification. Browser and Node.js vault support, plus JavaScript and Python server support, are intended early targets; no runtime is supported by this design scaffold. See the [package decision](2026-09-27-name-vault-packages-and-language-contract.md).
+- A language-neutral contract is specified in this repository, while runtime packages are added only after qualification. Browser and Node.js vault support, plus JavaScript and Python server support, are intended early targets; no runtime is supported by this design scaffold. See the [package decision](name-vault-packages-and-language-contract.md).
 
 ## Alternatives considered
 

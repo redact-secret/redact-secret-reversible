@@ -18,7 +18,7 @@ The server's resolver returns a constant principal and its policy always allows,
 
 ## Why `revocationMemoryMs: 0`
 
-With the default (the entry TTL), every revoke leaves a tombstone, and every server call sweeps the tombstone map in O(recently revoked captures). The per-call cost then grows with the number of earlier iterations: in a full run (about 3,600 revokes on one server) the p50 capture boundary went from ~0.002 ms to ~0.08 ms and the revoke boundary from ~0.001 ms to ~0.24 ms. That is a scaling property for B4/B7 to measure, not the per-call boundary, so this metric forgets revoked captures at once.
+With the default (the entry TTL), every revoke leaves a tombstone, and before #87 every server call swept the tombstone map in O(recently revoked captures) (since #87 it visits only expired tombstones). The per-call cost then grows with the number of earlier iterations: in a full run (about 3,600 revokes on one server) the p50 capture boundary went from ~0.002 ms to ~0.08 ms and the revoke boundary from ~0.001 ms to ~0.24 ms. That is a scaling property for B4/B7 to measure, not the per-call boundary, so this metric forgets revoked captures at once.
 
 ## Gating
 

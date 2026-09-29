@@ -18,10 +18,10 @@ Assets, attacker capabilities, and the trust boundary of every mode (browser mai
 | --- | --- |
 | Fail-safe defaults | Nothing is retained until `capture` is called. Unredacted findings are rejected by default (`unredacted: "reject"`). PII is retained only when its exact type is allowlisted. A policy that throws, times out, or returns a malformed decision denies (`policy-evaluation-error`), never allows. Initialization failures fail closed (`CORE_FAILURE`). |
 | Complete mediation | Every token occurrence in every restore is checked against the grant (sink, exact path), expiry, revocation, use budget, and, on the server, principal, tenant, purpose, and policy, at the time of the restore. Nothing is cached from an earlier decision. |
-| Separation of privilege | Restoration needs both an issued token and an application grant. A token alone, or a visible type label, grants nothing ([decision](../decisions/2026-09-27-decouple-typed-placeholders-from-restoration.md)). |
+| Separation of privilege | Restoration needs both an issued token and an application grant. A token alone, or a visible type label, grants nothing ([decision](../decisions/decouple-typed-placeholders-from-restoration.md)). |
 | Least privilege | Grants name one sink and exact field paths. Entries have a TTL and a per-entry use budget; limits bound entries, bytes, findings, and fields (`DEFAULT_LIMITS` in `packages/vault/src/vault.ts`). |
 | Least common mechanism | One vault per session or task; tokens from one vault are unknown to another. Worker mode keeps the mapping in the Worker's private scope. |
-| Economy of mechanism | A small public API (`capture`, `restore`, `revoke`, `stats`, `dispose`); detection and policy are delegated to the core rather than reimplemented ([boundary decision](../decisions/2026-09-27-separate-reversible-boundary.md)). |
+| Economy of mechanism | A small public API (`capture`, `restore`, `revoke`, `stats`, `dispose`); detection and policy are delegated to the core rather than reimplemented ([boundary decision](../decisions/separate-reversible-boundary.md)). |
 | Open design | All code, decisions, and the threat model are public. Security relies on 128-bit tokens from the platform CSPRNG and on authorization checks, not on secrecy of the design. |
 | Psychological acceptability | Failures are typed errors with fixed codes, so the safe handling (keep the redacted text) is easy to write; the README shows it. |
 

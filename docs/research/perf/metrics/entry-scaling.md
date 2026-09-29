@@ -4,7 +4,7 @@ Status: **current** with PII off. Tracking issue: [#78](https://github.com/redac
 
 ## Why
 
-`#sweep` in `packages/vault/src/vault.ts` copies and walks the whole entry map on every capture and restore, so per-operation cost is expected to grow linearly with the number of entries the vault already holds. This metric draws that curve and reports its slope, so an optimization (or a regression) is judged by the slope, not by a single point.
+Before #86, `#sweep` in `packages/vault/src/vault.ts` copied and walked the whole entry map on every capture and restore, so per-operation cost grew linearly with the number of entries the vault already held. #86 replaced it with an expiry-ordered queue that visits only captures whose time has come, so the curve is now expected to be flat. This metric draws that curve and reports its slope, so an optimization (or a regression) is judged by the slope, not by a single point.
 
 ## What is measured
 
@@ -27,11 +27,11 @@ Each iteration's capture is revoked (untimed), and each restore consumes its fou
 
 Operations use `corpus-v1` (`capture1k`, `restore64`), unchanged. The fill is generated inside the metric, deterministically, and never returned: lines `key AKIASYNTHETIC<7 base-36 chars> retired`, one distinct synthetic AWS-key-shaped value each, which the pinned core (0.1.0-beta.10) detects as `aws_access_key_id` with action `redact` (checked by `bench/test/entry-scaling.test.mjs`).
 
-The fill is built once per size per `run()` from captures of 250 values each. Filling with one-finding captures would be O(N²) because of the sweep, and very large captures are also slow: the core's own scan and redact grow faster than linearly in findings per input (about 7 ms at 250 findings, 140 ms at 2000). With 250 per capture, a 100 000-entry fill takes about 4–5 seconds on an Apple M4.
+The fill is built once per size per `run()` from captures of 250 values each. Filling with one-finding captures was O(N²) before #86 because of the sweep, and very large captures are also slow: the core's own scan and redact grow faster than linearly in findings per input (about 7 ms at 250 findings, 140 ms at 2000). With 250 per capture, a 100 000-entry fill takes about 4–5 seconds on an Apple M4.
 
 ## Reference figures
 
-`[pii=off corpus-v1 candidate vault@0.1.0-alpha.3 core@0.1.0-beta.10/addon node@22.16.0 darwin-arm64]`, Apple M4, full mode, one run:
+Before #86 (`#sweep` copying the map) — `[pii=off corpus-v1 candidate vault@0.1.0-alpha.3 core@0.1.0-beta.10/addon node@22.16.0 darwin-arm64]`, Apple M4, full mode, one run:
 
 | n | capture p50 | vault overhead p50 | restore p50 |
 | --- | --- | --- | --- |
@@ -39,7 +39,11 @@ The fill is built once per size per `run()` from captures of 250 values each. Fi
 | 10 000 | 0.302 ms | 0.175 ms | 0.235 ms |
 | 100 000 | 4.47 ms | 4.31 ms | 7.19 ms |
 
-Slopes: capture overhead 0.044 ms per 1000 entries, restore 0.074 ms per 1000 entries; log-log exponents between 10 000 and 100 000 of 1.39 (capture overhead) and 1.48 (restore). The cost is at least linear in retained entries, confirming the sweep is the per-operation O(n) term; the exponent above 1 at 100 000 is consistent with the sweep's per-call copy of the whole map (allocation and GC pressure grow with it). Absolute figures are only comparable within one result file.
+Slopes: capture overhead 0.044 ms per 1000 entries, restore 0.074 ms per 1000 entries; log-log exponents between 10 000 and 100 000 of 1.39 (capture overhead) and 1.48 (restore). The cost is at least linear in retained entries, confirming the sweep is the per-operation O(n) term; the exponent above 1 at 100 000 is consistent with the sweep's per-call copy of the whole map (allocation and GC pressure grow with it).
+
+After #86, same environment (indicative, machine under other load): 100 000 entries capture 0.19 ms, vault overhead 0.022 ms, restore 0.071 ms; slopes ≈0 ms per 1000 entries and log-log exponents ≈ −0.08 (flat). An extended-tier `bench:compare` against 0.1.0-alpha.3 gave 100 000-entry ratios of 0.003 [CI95 0.002, 0.006] for capture overhead and 0.007 [0.006, 0.009] for restore.
+
+Absolute figures are only comparable within one result file.
 
 The whole metric takes about 8 seconds in full mode with `npm run bench -- --metrics entry-scaling` (extended tier), most of it the 100 000-entry fill and its 100 iterations; the standard tier takes about 2 seconds. `bench:compare` runs it once per round per side (20 times at the default 10 rounds): in the extended tier a full compare of this metric alone took 3.5 minutes on the same machine (all 16 comparisons `ok` in an A/A-equivalent run against 0.1.0-alpha.3).
 
