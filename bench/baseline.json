@@ -1,0 +1,4 @@
+{
+  "version": "0.1.0-alpha.3",
+  "note": "Default --baseline for bench/compare.mjs: the previous published @redact-secret/vault version. Bump after each release. 0.1.0-alpha.1 is not supported as a baseline (see docs/research/perf/README.md)."
+}

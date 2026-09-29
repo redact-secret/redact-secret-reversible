@@ -10,8 +10,13 @@
 //   export async function run(ctx) { return [RawMeasurement, ...]; }
 //
 //   RawMeasurement =
-//     | { name, kind: "latency", unit: "ms", samples: number[], params? }
-//     | { name, kind: "deterministic", unit, value: number, threshold?: { max?, maxRatio? }, params? }
+//     | { name, kind: "latency", unit: "ms", samples: number[], params?, gating? }
+//     | { name, kind: "deterministic", unit, value: number, threshold?: { max?, maxRatio? }, params?, gating? }
+//
+//   `gating: false` marks a measurement compare.mjs reports but does not
+//   count toward warn/fail (default true). `threshold` makes a deterministic
+//   measurement fail: `max` on the value (run and compare), `maxRatio` on
+//   candidate÷baseline (compare).
 //
 // run(ctx) must be repeatable: compare.mjs calls it once per round per side.
 // It creates and disposes its own vaults, never passes `pii` to createVault

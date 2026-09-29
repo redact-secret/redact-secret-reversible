@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { mulberry32 } from "../lib/rng.mjs";
-import { bootstrapRatio, median, quantile, summarize } from "../lib/stats.mjs";
+import { bootstrapRatio, median, medianInPlace, quantile, summarize } from "../lib/stats.mjs";
 import { sample, samplePaired } from "../lib/timing.mjs";
 
 test("quantile interpolates linearly (type 7)", () => {
@@ -25,6 +25,15 @@ test("summarize reports n, ordered percentiles, and extremes", () => {
   assert.equal(s.mean, 50.5);
   assert.throws(() => summarize([]), RangeError);
   assert.throws(() => summarize([1, Number.NaN]), TypeError);
+});
+
+test("medianInPlace matches median for odd, even, and tied samples", () => {
+  const random = mulberry32(7);
+  for (const n of [1, 2, 3, 10, 11, 101, 1000]) {
+    const values = Array.from({ length: n }, () => Math.round(random() * 20) / 4);
+    assert.equal(medianInPlace(Float64Array.from(values)), median(values), `n=${n}`);
+  }
+  assert.throws(() => medianInPlace(new Float64Array(0)), RangeError);
 });
 
 test("mulberry32 is deterministic per seed", () => {

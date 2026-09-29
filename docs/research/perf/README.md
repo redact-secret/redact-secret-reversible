@@ -23,6 +23,44 @@ Each run prints one line per measurement, always with its mode and environment, 
 [pii=off corpus-v1 candidate vault@0.1.0-alpha.3 core@0.1.0-beta.10/addon node@22.16.0 darwin-arm64 quick] op-latency capture.total p50=…ms p95=…ms p99=…ms n=20
 ```
 
+## A/B against a published version
+
+Status: **current** ([#76](https://github.com/redact-secret/redact-secret-vault/issues/76)).
+
+```bash
+npm run bench:compare                                  # candidate vs bench/baseline.json (0.1.0-alpha.3)
+npm run bench:compare -- --baseline 0.1.0-alpha.2      # any exact published version
+npm run bench:compare:smoke                            # quick: 4 rounds x 50 iterations
+npm run bench:compare -- --rounds 20 --fail-on-warn
+```
+
+`bench/compare.mjs` loads two sides in one Node.js process:
+
+- **candidate**: the workspace build (`packages/*/dist`) with the core installed at the repository root, recorded with its git commit.
+- **baseline**: the exact published `@redact-secret/vault` and, when that version exists, `@redact-secret/vault-server`, with the exact core that version pins as its peer. They are installed into `.bench-cache/vault-<version>/` (gitignored) with `npm install --ignore-scripts`. The root `package.json` and lockfile are never touched. Only exact versions are accepted. The resolved tarball URL and integrity of each baseline package, from that directory's lockfile, are recorded in the result. A cache that already matches is reused offline.
+
+Each side's vault uses its own core instance, initialized for the run's PII mode. Before measuring, the harness proves each vault resolves the core it initialized: `createVault()` without `pii` only succeeds on an initialized core.
+
+**Interleaving.** Each round runs every metric once per side, alternating which side runs first (candidate first in even rounds, baseline first in odd), so drift over the job lands on both sides. Default: 10 rounds of 1000 iterations after 200 warmup per side per round (quick: 4 × 50 after 10). A full `op-latency` comparison takes about 40 seconds on an Apple M4.
+
+**Ratios and CI.** For each measurement the result carries both sides' pooled summaries and the ratio of medians candidate÷baseline, with a 95% percentile bootstrap CI (2000 resamples, fixed seed). Each resample draws rounds with replacement, the same rounds for both sides, and then samples within each drawn round, so between-round drift widens the interval instead of being ignored. On a laptop, that drift dominates: A/A intervals of ±10–15% are normal, and a 10% change is only reliably flagged on a quiet machine or with more rounds.
+
+**Verdicts.**
+
+| Verdict | When |
+| --- | --- |
+| `warn` | latency ratio > 1.10 and CI lower bound > 1.0 |
+| `improved` | CI upper bound < 1.0 |
+| `fail` | a deterministic measurement exceeds its `threshold` (`max` on the value, `maxRatio` on the ratio) |
+| `inconclusive` | no ratio (a zero baseline) |
+| `ok` | otherwise |
+
+A measurement a metric marks `gating: false` is compared and reported but never counts toward the outcome: `capture` and `capture.core_ms` move with the pinned core, so `capture.vault_overhead_ms` is the release signal for capture. The command exits 1 on a gating `fail` or a failed metric, and on a gating `warn` only with `--fail-on-warn`. Quick-run ratios are smoke output, not evidence.
+
+If the two sides use different cores (version or artifact), the run says so; compare vault overhead, not totals.
+
+**Versions.** `0.1.0-alpha.2` and `0.1.0-alpha.3` work as baselines. `0.1.0-alpha.1` is out of scope: it pins core `0.1.0-beta.9`, and `0.1.0-alpha.2` changed `createVault` initialization (`pii: []` or an initialized core), so its figures would mix a core change and an API change. Retro-measuring it is not attempted.
+
 ## What is measured, and what is only input
 
 | | Measured | Input (held fixed) |
@@ -113,6 +151,8 @@ export async function run(ctx) {
 | Path | Role |
 | --- | --- |
 | `bench/run.mjs` | One side (the workspace build), one PII mode, writes a result |
+| `bench/compare.mjs`, `bench/lib/compare.mjs` | Interleaved A/B, ratios, CI, verdicts |
+| `bench/lib/published.mjs`, `bench/baseline.json` | Installing a published baseline into `.bench-cache/`; the default baseline version |
 | `bench/lib/timing.mjs` | `process.hrtime.bigint()` timing, warmup, fixed iterations, paired sampling |
 | `bench/lib/stats.mjs` | Percentiles and the bootstrap CI for ratios |
 | `bench/lib/env.mjs` | Environment capture |

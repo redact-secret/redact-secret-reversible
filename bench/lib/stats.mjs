@@ -41,13 +41,55 @@ export function summarize(samples) {
   };
 }
 
-function resampleRounds(rounds, indices, random) {
-  const pooled = [];
+/** k-th smallest element (0-based), partially reordering `a` in place (Hoare quickselect). */
+function selectInPlace(a, k) {
+  let left = 0;
+  let right = a.length - 1;
+  while (left < right) {
+    const pivot = a[(left + right) >> 1];
+    let i = left;
+    let j = right;
+    while (i <= j) {
+      while (a[i] < pivot) i += 1;
+      while (a[j] > pivot) j -= 1;
+      if (i <= j) {
+        const t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+        i += 1;
+        j -= 1;
+      }
+    }
+    if (k <= j) right = j;
+    else if (k >= i) left = i;
+    else return a[k];
+  }
+  return a[k];
+}
+
+/**
+ * Median in O(n) expected time; same value as `median` (the mean of the two
+ * middle elements for an even count). Reorders `a`.
+ */
+export function medianInPlace(a) {
+  const n = a.length;
+  if (n === 0) throw new RangeError("median of an empty sample");
+  const upper = selectInPlace(a, n >> 1);
+  if (n % 2 === 1) return upper;
+  // After selecting index n/2, every element left of it is <= upper.
+  let lower = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < n >> 1; i += 1) if (a[i] > lower) lower = a[i];
+  return (lower + upper) / 2;
+}
+
+function resampleRounds(rounds, indices, random, total) {
+  const pooled = new Float64Array(total);
+  let at = 0;
   for (const index of indices) {
     const round = rounds[index];
-    for (let i = 0; i < round.length; i += 1) pooled.push(round[randomInt(random, round.length)]);
+    for (let i = 0; i < round.length; i += 1) pooled[at++] = round[randomInt(random, round.length)];
   }
-  return pooled;
+  return pooled.subarray(0, at);
 }
 
 /**
@@ -62,23 +104,24 @@ function resampleRounds(rounds, indices, random) {
  * Returns `{ ratio, lo, hi, level, resamples }`. A non-positive baseline
  * median makes the ratio undefined, reported as `null` bounds.
  */
-export function bootstrapRatio(candidate, baseline, { resamples = 2000, level = 0.95, seed = 0x5eed, statistic = median } = {}) {
+export function bootstrapRatio(candidate, baseline, { resamples = 2000, level = 0.95, seed = 0x5eed } = {}) {
   const cand = Array.isArray(candidate[0]) ? candidate : [candidate];
   const base = Array.isArray(baseline[0]) ? baseline : [baseline];
   if (cand.length !== base.length) throw new RangeError("candidate and baseline must have the same number of rounds");
   if (cand.some((round) => round.length === 0) || base.some((round) => round.length === 0)) {
     throw new RangeError("every round needs at least one sample");
   }
-  const baselineStat = statistic(base.flat());
-  const ratio = baselineStat > 0 ? statistic(cand.flat()) / baselineStat : null;
+  const baselineStat = median(base.flat());
+  const ratio = baselineStat > 0 ? median(cand.flat()) / baselineStat : null;
   const random = mulberry32(seed);
   const ratios = [];
   const roundCount = cand.length;
+  const maxRound = Math.max(...cand.map((r) => r.length), ...base.map((r) => r.length));
   for (let b = 0; b < resamples; b += 1) {
     const indices = Array.from({ length: roundCount }, () => randomInt(random, roundCount));
-    const denominator = statistic(resampleRounds(base, indices, random));
+    const denominator = medianInPlace(resampleRounds(base, indices, random, roundCount * maxRound));
     if (!(denominator > 0)) continue;
-    ratios.push(statistic(resampleRounds(cand, indices, random)) / denominator);
+    ratios.push(medianInPlace(resampleRounds(cand, indices, random, roundCount * maxRound)) / denominator);
   }
   if (ratio === null || ratios.length < resamples / 2) return { ratio, lo: null, hi: null, level, resamples };
   ratios.sort((x, y) => x - y);

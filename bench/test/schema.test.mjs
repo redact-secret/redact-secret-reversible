@@ -116,6 +116,7 @@ test("comparisons only appear in compare results and are shape-checked", () => {
       ratio: 1.02,
       ci: { lo: 0.98, hi: 1.06, level: 0.95 },
       verdict: "ok",
+      gating: true,
       rule: "ratio > 1.10 and CI excludes 1.0 -> warn",
     },
   ];

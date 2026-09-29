@@ -58,8 +58,10 @@ async function measureCapture(ctx, vault) {
   });
   const params = { item: itemName, inputBytes: item.bytes, findings: expected };
   return [
-    { name: "capture", kind: "latency", unit: "ms", samples: paired.b, params },
-    { name: "capture.core_ms", kind: "latency", unit: "ms", samples: paired.a, params },
+    // The total and the core share move with the pinned core, so A/B reports
+    // them without gating on them; the overhead is the release signal.
+    { name: "capture", kind: "latency", unit: "ms", samples: paired.b, params, gating: false },
+    { name: "capture.core_ms", kind: "latency", unit: "ms", samples: paired.a, params, gating: false },
     { name: "capture.vault_overhead_ms", kind: "latency", unit: "ms", samples: paired.diff, params },
   ];
 }

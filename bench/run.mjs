@@ -54,7 +54,12 @@ async function main() {
     const entry = { id: metric.id, issue: metric.issue, title: metric.title, status: outcome.status, measurements: [] };
     if (outcome.reason !== undefined) entry.reason = outcome.reason;
     entry.measurements = outcome.raw.map((raw) => toResultMeasurement(raw, side.label));
-    if (outcome.status === "failed") failed += 1;
+    const over = outcome.raw.find((raw) => raw.kind === "deterministic" && raw.threshold?.max !== undefined && raw.value > raw.threshold.max);
+    if (over !== undefined) {
+      entry.status = "failed";
+      entry.reason = `${over.name} exceeds threshold.max`.slice(0, 80);
+    }
+    if (entry.status === "failed") failed += 1;
     result.metrics.push(entry);
   }
 

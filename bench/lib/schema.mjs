@@ -20,7 +20,7 @@
 // Latency     = { name, side, kind: "latency", unit: "ms", n, p50, p95, p99, mean, min, max, params? }
 // Deterministic = { name, side, kind: "deterministic", unit, value, threshold?, params? }
 // Comparison  = { metric, measurement, kind, unit, candidate, baseline, ratio: number | null,
-//                 ci: { lo, hi, level } (numbers or null), verdict, rule }
+//                 ci: { lo, hi, level } (numbers or null), verdict, gating: boolean, rule }
 //
 // `params` values are numbers, booleans, or strings of at most 80 characters
 // (input sizes, counts, labels) — never inputs or outputs.
@@ -33,7 +33,19 @@ export const VERDICTS = Object.freeze(["ok", "warn", "improved", "fail", "inconc
 
 const LATENCY_KEYS = new Set(["name", "side", "kind", "unit", "n", "p50", "p95", "p99", "mean", "min", "max", "params"]);
 const DETERMINISTIC_KEYS = new Set(["name", "side", "kind", "unit", "value", "threshold", "params"]);
-const COMPARISON_KEYS = new Set(["metric", "measurement", "kind", "unit", "candidate", "baseline", "ratio", "ci", "verdict", "rule"]);
+const COMPARISON_KEYS = new Set([
+  "metric",
+  "measurement",
+  "kind",
+  "unit",
+  "candidate",
+  "baseline",
+  "ratio",
+  "ci",
+  "verdict",
+  "gating",
+  "rule",
+]);
 const MAX_PARAM_STRING = 80;
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -125,6 +137,7 @@ function checkComparison(errors, where, c) {
     if (!(isFiniteNumber(c.ci.level) && c.ci.level > 0 && c.ci.level < 1)) errors.push(`${where}.ci.level must be in (0, 1)`);
   }
   if (!VERDICTS.includes(c.verdict)) errors.push(`${where}.verdict must be one of ${VERDICTS.join(", ")}`);
+  if (typeof c.gating !== "boolean") errors.push(`${where}.gating must be a boolean`);
 }
 
 /** Returns a list of schema errors; empty means valid. */
