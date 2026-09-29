@@ -60,6 +60,26 @@ Defined and validated in `bench/lib/schema.mjs`. A result has `schema`, `kind` (
 
 **No values in results.** Every result is validated and then checked by `bench/lib/leak-guard.mjs` before it is written. It is refused if it contains any corpus value, an issued-token marker (`rsv_`), or the `SYNTHETIC` marker. A metric that throws is recorded as `failed` with only its error code or name, since an arbitrary error message is not known to be value-free.
 
+## Metrics
+
+### `op-latency`: operation latency (B3, [#77](https://github.com/redact-secret/redact-secret-vault/issues/77))
+
+Status: **current** with PII off. PII on is **planned** under the same issue.
+
+| Measurement | What one sample times | Input |
+| --- | --- | --- |
+| `capture` | One `vault.capture` | `capture1k` (1 KiB, 4 findings, all retained) |
+| `capture.core_ms` | What capture asks of the core on the same input: `core.scan` then `core.redact` with the vault's default limits | same |
+| `capture.vault_overhead_ms` | `capture − capture.core_ms` of the same iteration | same |
+| `restore` | One `vault.restore` of 64 fields, one token occurrence each (16 per entry) | `restore64` over a fresh `capture1k` capture |
+| `revoke` | One `vault.revoke` of a capture holding 4 entries | `capture1k` |
+
+`core_ms` and the whole capture run back to back in alternating order within each iteration, so their difference is paired. Every operation runs on a vault holding no other entries: setup (a capture for restore and revoke) and cleanup (revoking the iteration's capture) are untimed. Each iteration checks its own outcome (findings, restored occurrences, revoked entries), so a denial or a changed detection fails the metric instead of timing an error path. Release-over-release comparison of capture uses `capture.vault_overhead_ms`, because each release pins its own exact core.
+
+Measuring PII on is one entry in `CAPTURE_INPUTS` in `bench/metrics/op-latency.mjs` (`capture1kPii` with `pii: { retain: ["pii_global_iban"] }`), run with `--pii on`.
+
+Default counts: 1000 iterations after 200 warmup (quick: 50 after 10). On an Apple M4 with Node.js 22 the whole metric takes under a second.
+
 ## Adding a metric
 
 Add one file, `bench/metrics/<id>.mjs`. The runner discovers it; there is no registry to edit.

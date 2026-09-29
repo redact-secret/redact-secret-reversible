@@ -33,8 +33,8 @@ export const METRICS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "
 
 /** Iteration settings: full runs and `--quick` (smoke) runs. */
 export const DEFAULT_SETTINGS = Object.freeze({
-  full: Object.freeze({ iterations: 200, warmup: 50, rounds: 10 }),
-  quick: Object.freeze({ iterations: 20, warmup: 5, rounds: 4 }),
+  full: Object.freeze({ iterations: 1000, warmup: 200, rounds: 10 }),
+  quick: Object.freeze({ iterations: 50, warmup: 10, rounds: 4 }),
 });
 
 /** Thrown by `ctx.skip(reason)`: the metric does not apply to this side or mode. */
