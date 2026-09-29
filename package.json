@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "test": "npm run test:vault && npm run test:vault-server",
     "build": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server",
     "typecheck": "npm run typecheck -w @redact-secret/vault && npm run build -w @redact-secret/vault && npm run typecheck -w @redact-secret/vault-server",
     "qualify:node": "node qualification/node.mjs",
