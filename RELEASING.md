@@ -38,6 +38,7 @@ The `bench` workflow (`.github/workflows/bench.yml`, [#83](https://github.com/re
 | `v0.1.0-alpha.2` (2026-09-28) | `@redact-secret/vault-server@0.1.0-alpha.2` (first publish) | Manually, from a maintainer machine (npm web 2FA) | None |
 | `v0.1.0-alpha.3` (2026-09-28, `bd01c06`) | `@redact-secret/vault@0.1.0-alpha.3`, `@redact-secret/vault-server@0.1.0-alpha.3` | `release.yml` run [36438298743](https://github.com/redact-secret/redact-secret-vault/actions/runs/36438298743), npm trusted publishing; the vault-server dependency check retried 9 times (about 2.5 minutes) before the vault version was visible | SLSA provenance on both; `npm audit signatures` verified both |
 | `v0.1.0-beta.1` (2026-09-29, `9212e4d`) | `@redact-secret/vault@0.1.0-beta.1`, `@redact-secret/vault-server@0.1.0-beta.1`, `redact-secret-vault@0.1.0b1` (PyPI) | `release.yml` run [36589858908](https://github.com/redact-secret/redact-secret-vault/actions/runs/36589858908), npm trusted publishing (dist-tag `beta`) and PyPI trusted publishing; the vault-server version took about 6 minutes to appear on the registry after `npm publish` | SLSA provenance on both npm packages (`npm audit signatures` verified); PEP 740 attestations on the wheel and sdist (`pypi-attestations verify pypi` OK) |
+| `v0.1.0-beta.2` (2026-09-29, `3462d8e`) | `@redact-secret/vault@0.1.0-beta.2`, `@redact-secret/vault-server@0.1.0-beta.2`, `redact-secret-vault@0.1.0b2` (PyPI) | `release.yml` run [36619621473](https://github.com/redact-secret/redact-secret-vault/actions/runs/36619621473), npm trusted publishing (dist-tag `beta`) and PyPI trusted publishing | SLSA provenance on both npm packages (`npm audit signatures` verified); PEP 740 attestations on the wheel (`pypi-attestations verify pypi` OK) |
 
 For `v0.1.0-alpha.2`, the tag was first pushed at `9f3524d`. That run's publish failed with `PUT 404` because no trusted publisher was configured yet. After the maintainer configured it and [#54](https://github.com/redact-secret/redact-secret-vault/pull/54) pointed the packages' `repository` URLs at the renamed repository, the still-unpublished tag was moved to `8b30ae5` and the release workflow published. Never move a tag once any package has been published from it.
 
@@ -64,10 +65,10 @@ npm dist-tag add @redact-secret/vault-server@<version> latest
 
 npm allows moving `latest` to any published version, prerelease included; what it refuses is deleting a package's `latest` tag. So a bare `npm install @redact-secret/vault` installs whatever `latest` names, and leaving `latest` on an older alpha is a real hazard: until 2026-09-28 it pointed at `@redact-secret/vault@0.1.0-alpha.1`, which peers core beta.9 and conflicts with core beta.10.
 
-Current tags (2026-09-29, after `0.1.0-beta.1`):
+Current tags (2026-09-29, after `0.1.0-beta.2`):
 
-- `@redact-secret/vault`: `latest` and `beta` → `0.1.0-beta.1`; `alpha` → `0.1.0-alpha.3`.
-- `@redact-secret/vault-server`: `latest` and `beta` → `0.1.0-beta.1`; `alpha` → `0.1.0-alpha.3`.
+- `@redact-secret/vault`: `latest` and `beta` → `0.1.0-beta.2`; `alpha` → `0.1.0-alpha.3`.
+- `@redact-secret/vault-server`: `latest` and `beta` → `0.1.0-beta.2`; `alpha` → `0.1.0-alpha.3`.
 
 For the first stable release, either keep this manual step or change each package's `publishConfig.tag` to `latest` and deliberately relax the workflow guard in the same reviewed change.
 
