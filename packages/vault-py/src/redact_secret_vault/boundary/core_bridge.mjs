@@ -5,25 +5,42 @@
  * `@redact-secret/core` detection engine.
  *
  * No Python core package exists (verified against the `redact-secret/redact-secret`
- * GitHub organization on 2026-09-27: only `packages/javascript` exists there;
- * see docs/research/python-server-integration-2026-09-27.md). Rather than
- * reimplementing detection in Python — forbidden by AGENTS.md and
- * CONVENTIONS.md — the Python package shells out to this script, which calls
- * only the core's documented public `initialize`/`scan`/`piiActivation` APIs
- * and returns its safe finding metadata
+ * GitHub organization on 2026-09-27: only `packages/javascript` exists there).
+ * Rather than reimplementing detection in Python — forbidden by AGENTS.md and
+ * CONVENTIONS.md — the Python package runs this script, which calls only the
+ * core's documented public `initialize`/`scan`/`piiActivation` APIs and
+ * returns its safe finding metadata
  * (id/type/detector/confidence/obfuscation/start/end/action) as JSON. It
  * never returns a matched value: `scan` never receives or reports one, and
  * each finding is projected to exactly those eight fields before it is
  * written.
  *
- * Protocol: one JSON object read from stdin —
- *   { "input": string, "pii": string[], "policy"?: {[type: string]: SecretAction, default?: SecretAction}, "limits"?: {maxInputBytes, maxFindings}, "nodeModules"?: string }
- * — one JSON object written to stdout —
- *   { "findings": SafeFinding[], "coreVersion": string, "artifact": string, "piiActivation": string | null }
- *   or { "error": { "message": string, "code"?: string } } on failure.
+ * Lifetime (#89): one process serves a sequence of requests from the single
+ * `NodeCoreBridge` that spawned it, one request at a time. The Python side
+ * bounds its lifetime (request count, age, idle time) and replaces it after
+ * any failure. This script also exits on its own:
+ * - at end of stdin (the owner closed it or died), so it never outlives its owner;
+ * - after writing any error response, so a process that failed once is never reused;
+ * - after `--idle-exit-ms=<n>` milliseconds without a request.
+ * It keeps no per-request state between requests: the request object, its
+ * input, and the policy built from it go out of scope once the response is
+ * written. The only state that outlives a request is the core's
+ * realm-global, one-shot activation, fixed by the first request.
  *
- * PII activation (docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md
- * §3 "Python bridge"): this process is a fresh realm with no other
+ * Protocol: newline-delimited JSON on stdin/stdout. Neither side writes a
+ * raw newline inside a frame (JSON escapes it). Each request is one line —
+ *   { "id": integer, "input": string, "pii": string[], "policy"?: {[type: string]: SecretAction, default?: SecretAction}, "limits"?: {maxInputBytes, maxFindings}, "nodeModules"?: string }
+ * — and gets exactly one response line carrying the same `id` —
+ *   { "id", "findings": SafeFinding[], "coreVersion": string, "artifact": string, "piiActivation": string | null }
+ *   or { "id", "error": { "message": string, "code"?: string } } on failure
+ * (`"id": null` when the request had no usable id). Ids count up from 1 by
+ * one; any other id is refused. A request line longer than
+ * `MAX_REQUEST_CHARS` is refused with `BRIDGE_REQUEST_TOO_LARGE`. `pii` and
+ * `nodeModules` configure the core on the first request; every later request
+ * must repeat them unchanged, or it is refused.
+ *
+ * PII activation (docs/decisions/decide-pii-retention-and-activation-ownership.md
+ * §3 "Python bridge"): this process is its own realm with no other
  * initializer, so the Python caller's `pii` list is the only selection.
  * - Core exports `piiActivation` (beta.10+): `initialize({ pii })` verbatim,
  *   then report `piiActivation()`.
@@ -32,7 +49,9 @@
  * - No PII surface and `pii` is non-empty: `{"error":{"code":"PII_UNAVAILABLE"}}`
  *   before the core is initialized or the input is scanned.
  * Selector grammar is the core's to judge (`PII_SELECTOR_*`); this script
- * only checks the request shape.
+ * only checks the request shape. `piiActivation()` is read again for every
+ * response, and the Python caller checks it on every response of every
+ * process.
  *
  * Core location: when the request carries `nodeModules` (an absolute path
  * the application chose, via `NodeCoreBridge(node_modules=...)` or
@@ -47,10 +66,10 @@
  * fails to load yields `BRIDGE_CORE_LOAD_FAILED`; neither echoes the path.
  * The Python caller still checks the reported `coreVersion` against its pin.
  *
- * This process is short-lived (one request per invocation) and trusted only
- * to run the pinned `@redact-secret/core` version from the location above;
- * it is not a network service and accepts no untrusted transport input
- * beyond stdin from its own Python caller.
+ * This process is trusted only to run the pinned `@redact-secret/core`
+ * version from the location above; it is not a network service and accepts
+ * no input beyond stdin from its own Python owner. It writes nothing to
+ * stderr itself, and its owner discards stderr.
  */
 
 import { readFile, stat } from "node:fs/promises";
@@ -65,17 +84,11 @@ const MAX_NODE_MODULES_LENGTH = 4096;
 const MAX_PII_SELECTORS = 64;
 const MAX_PII_SELECTOR_LENGTH = 128;
 
-function readStdin() {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => {
-      data += chunk;
-    });
-    process.stdin.on("end", () => resolve(data));
-    process.stdin.on("error", reject);
-  });
-}
+// Longest request line accepted, in UTF-16 code units, without its newline.
+// Equals MAX_REQUEST_FRAME_BYTES in core_client.py (requests are ASCII) and
+// stays below V8's maximum string length.
+const MAX_REQUEST_CHARS = 448 * 1024 * 1024;
+const MAX_IDLE_EXIT_MS = 24 * 60 * 60 * 1000;
 
 function makePolicy(spec) {
   if (spec === undefined || spec === null) return undefined;
@@ -101,10 +114,6 @@ function safeFinding(f) {
     end: f.end,
     action: f.action,
   };
-}
-
-function writeError(message, code) {
-  process.stdout.write(JSON.stringify({ error: code === undefined ? { message } : { message, code } }));
 }
 
 function coreError(code) {
@@ -181,73 +190,225 @@ async function loadCore(nodeModules) {
   }
 }
 
-async function main() {
-  const raw = await readStdin();
-  let request;
-  try {
-    request = JSON.parse(raw);
-  } catch (error) {
-    writeError("invalid request JSON");
-    return;
+// `--idle-exit-ms=<n>` is the only accepted argument; undefined when absent,
+// null when malformed.
+function parseIdleExitMs(argv) {
+  let idleExitMs;
+  for (const arg of argv) {
+    const match = /^--idle-exit-ms=([1-9][0-9]{0,8})$/.exec(arg);
+    if (match === null || idleExitMs !== undefined) return null;
+    idleExitMs = Number(match[1]);
   }
-  if (typeof request?.input !== "string") {
-    writeError("request.input must be a string");
-    return;
-  }
-  if (!isSelectorList(request.pii)) {
-    writeError("request.pii must be an array of selector strings");
-    return;
-  }
-  if (request.nodeModules !== undefined && typeof request.nodeModules !== "string") {
-    writeError("request.nodeModules must be a string");
-    return;
-  }
-  const pii = [...request.pii];
-  let core;
-  try {
-    core = await loadCore(request.nodeModules);
-  } catch (error) {
-    writeError(error.message, error.code);
-    return;
-  }
-  const hasPiiSurface = typeof core.piiActivation === "function";
-  if (!hasPiiSurface && pii.length > 0) {
-    writeError("core has no PII support", "PII_UNAVAILABLE");
-    return;
-  }
-
-  try {
-    let piiActivation = null;
-    if (hasPiiSurface) {
-      await core.initialize({ pii });
-      piiActivation = core.piiActivation();
-      if (typeof piiActivation !== "string") {
-        writeError("core reported a malformed PII activation");
-        return;
-      }
-    } else {
-      await core.initialize();
-    }
-    const findings = core.scan(request.input, {
-      ...(request.policy ? { policy: makePolicy(request.policy) } : {}),
-      ...(request.limits ? { limits: request.limits } : {}),
-    });
-    const artifact = core.artifact();
-    process.stdout.write(
-      JSON.stringify({
-        findings: findings.map(safeFinding),
-        coreVersion: core.VERSION,
-        artifact: artifact?.kind ?? String(artifact),
-        piiActivation,
-      }),
-    );
-  } catch (error) {
-    // Never echo the request text or selectors back; only the core's own error code.
-    writeError("core scan failed", typeof error?.code === "string" ? error.code : undefined);
-  }
+  if (idleExitMs !== undefined && idleExitMs > MAX_IDLE_EXIT_MS) return null;
+  return idleExitMs;
 }
 
-main().catch((error) => {
-  writeError("bridge failure", typeof error?.code === "string" ? error.code : undefined);
-  process.exitCode = 1;
-});
+function frame(id, body) {
+  return `${JSON.stringify({ id, ...body })}\n`;
+}
+
+function errorFrame(id, message, code) {
+  return frame(id, { error: code === undefined ? { message } : { message, code } });
+}
+
+function sameConfig(config, request) {
+  return (
+    config.nodeModules === request.nodeModules &&
+    config.pii.length === request.pii.length &&
+    config.pii.every((selector, i) => selector === request.pii[i])
+  );
+}
+
+function errorCode(error) {
+  return typeof error?.code === "string" ? error.code : undefined;
+}
+
+function main() {
+  const idleExitMs = parseIdleExitMs(process.argv.slice(2));
+  let stopped = false;
+  let busy = false;
+  let nextId = 1;
+  // Fixed by the first request: { pii, nodeModules, core }.
+  let config;
+  let pending = [];
+  let chunks = [];
+  let partialLength = 0;
+  let idleTimer;
+
+  function stop(exitCode) {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(idleTimer);
+    pending = [];
+    chunks = [];
+    process.exitCode = exitCode;
+    // Stop reading; the process exits once the last frame is flushed.
+    process.stdin.removeAllListeners("data");
+    process.stdin.destroy();
+  }
+
+  function armIdle() {
+    if (idleExitMs === undefined || stopped) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => stop(0), idleExitMs);
+  }
+
+  // Writes one frame. After an error the process stops: one that failed once
+  // is never asked again.
+  function respond(text, failed) {
+    process.stdout.write(text);
+    if (failed) stop(1);
+  }
+
+  async function configure(id, request) {
+    const pii = [...request.pii];
+    let core;
+    try {
+      core = await loadCore(request.nodeModules);
+    } catch (error) {
+      respond(errorFrame(id, error.message, error.code), true);
+      return false;
+    }
+    const hasPiiSurface = typeof core.piiActivation === "function";
+    if (!hasPiiSurface && pii.length > 0) {
+      respond(errorFrame(id, "core has no PII support", "PII_UNAVAILABLE"), true);
+      return false;
+    }
+    try {
+      if (hasPiiSurface) {
+        await core.initialize({ pii });
+      } else {
+        await core.initialize();
+      }
+    } catch (error) {
+      // Never echo the selectors back; only the core's own error code.
+      respond(errorFrame(id, "core initialize failed", errorCode(error)), true);
+      return false;
+    }
+    config = { pii, nodeModules: request.nodeModules, core };
+    return true;
+  }
+
+  async function handle(line) {
+    let request;
+    try {
+      request = JSON.parse(line);
+    } catch {
+      respond(errorFrame(null, "invalid request JSON"), true);
+      return;
+    }
+    if (request === null || typeof request !== "object" || Array.isArray(request)) {
+      respond(errorFrame(null, "request must be an object"), true);
+      return;
+    }
+    const { id } = request;
+    if (id !== nextId) {
+      respond(errorFrame(null, "request.id out of sequence"), true);
+      return;
+    }
+    nextId += 1;
+    if (typeof request.input !== "string") {
+      respond(errorFrame(id, "request.input must be a string"), true);
+      return;
+    }
+    if (!isSelectorList(request.pii)) {
+      respond(errorFrame(id, "request.pii must be an array of selector strings"), true);
+      return;
+    }
+    if (request.nodeModules !== undefined && typeof request.nodeModules !== "string") {
+      respond(errorFrame(id, "request.nodeModules must be a string"), true);
+      return;
+    }
+    if (config === undefined) {
+      if (!(await configure(id, request))) return;
+    } else if (!sameConfig(config, request)) {
+      respond(errorFrame(id, "request configuration changed"), true);
+      return;
+    }
+
+    const { core } = config;
+    try {
+      // Read for every response, so an activation that changed underneath
+      // this process is reported rather than masked by a cached value.
+      let piiActivation = null;
+      if (typeof core.piiActivation === "function") {
+        piiActivation = core.piiActivation();
+        if (typeof piiActivation !== "string") {
+          respond(errorFrame(id, "core reported a malformed PII activation"), true);
+          return;
+        }
+      }
+      const findings = core.scan(request.input, {
+        ...(request.policy ? { policy: makePolicy(request.policy) } : {}),
+        ...(request.limits ? { limits: request.limits } : {}),
+      });
+      const artifact = core.artifact();
+      respond(
+        frame(id, {
+          findings: findings.map(safeFinding),
+          coreVersion: core.VERSION,
+          artifact: artifact?.kind ?? String(artifact),
+          piiActivation,
+        }),
+        false,
+      );
+    } catch (error) {
+      // Never echo the request text or selectors back; only the core's own error code.
+      respond(errorFrame(id, "core scan failed", errorCode(error)), true);
+    }
+  }
+
+  // Requests are handled strictly one after another.
+  async function pump() {
+    if (busy) return;
+    busy = true;
+    clearTimeout(idleTimer);
+    try {
+      while (!stopped && pending.length > 0) {
+        await handle(pending.shift());
+      }
+    } catch (error) {
+      respond(errorFrame(null, "bridge failure", errorCode(error)), true);
+    } finally {
+      busy = false;
+      armIdle();
+    }
+  }
+
+  function tooLarge() {
+    respond(errorFrame(null, "request too large", "BRIDGE_REQUEST_TOO_LARGE"), true);
+  }
+
+  if (idleExitMs === null) {
+    respond(errorFrame(null, "invalid bridge arguments"), true);
+    return;
+  }
+
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    if (stopped) return;
+    let start = 0;
+    let newline = chunk.indexOf("\n");
+    while (newline !== -1) {
+      if (partialLength + (newline - start) > MAX_REQUEST_CHARS) return tooLarge();
+      chunks.push(chunk.slice(start, newline));
+      pending.push(chunks.join(""));
+      chunks = [];
+      partialLength = 0;
+      start = newline + 1;
+      newline = chunk.indexOf("\n", start);
+    }
+    if (start < chunk.length) {
+      partialLength += chunk.length - start;
+      if (partialLength > MAX_REQUEST_CHARS) return tooLarge();
+      chunks.push(chunk.slice(start));
+    }
+    void pump();
+  });
+  // End of stdin: the owner closed the pipe or exited. Never outlive it.
+  process.stdin.on("end", () => stop(0));
+  process.stdin.on("error", () => stop(1));
+  armIdle();
+}
+
+main();

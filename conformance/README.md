@@ -30,7 +30,7 @@ Case-level fields (since 1.2.0):
 | Field | Meaning |
 | --- | --- |
 | `piiActivation` | `"on"` (`selectors=pii:global`, from the selection `["pii"]`) or `"off"` (`selectors=off`). The case runs only under that core PII activation. A runner under a different activation reports it as **skipped**, never as passed. Cases without the field run under any activation. |
-| `requiresSharedRealm` | The case needs one realm-global, one-shot core activation shared by every vault in the process, as in JavaScript. A runner whose core boundary starts a fresh core per call (the Python bridge) reports it as skipped with that reason. |
+| `requiresSharedRealm` | The case needs one realm-global, one-shot core activation shared by every vault in the process, as in JavaScript. A runner whose core boundary gives each vault its own core realm (the Python bridge, where each `NodeCoreBridge` owns its own core process) reports it as skipped with that reason. |
 
 A Python-specific adapter rule: the bridge observes activation on its first core call. So for a `vault` step that expects an error, the Python runner makes one `scan("")` call, which must raise that error.
 

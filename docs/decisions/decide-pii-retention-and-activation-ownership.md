@@ -162,13 +162,15 @@ The Worker is its own realm with its own core instance, and the application writ
 
 Each `NodeCoreBridge.scan` spawns a fresh Node.js process whose realm has no other initializer. So the Python application's bridge configuration is the only owner of the selection. Adoption is meaningless here, and omission means PII off.
 
+> **Note 2026-09-29 ([#89](https://github.com/redact-secret/redact-secret-vault/issues/89)).** Each `NodeCoreBridge` now owns one long-lived process that serves many scans instead of one process per scan. The rules below are unchanged in effect. The process's realm still has no other initializer: the bridge's own `pii` initializes it on the first request, and the script refuses a later request with a different selection. Every response, from every process the bridge starts, still reports `piiActivation` and is checked against `expected_pii_activation` or the pinned identity, so a replacement process under a different core fails `PII_ACTIVATION_MISMATCH`. What changed is when a core swapped on disk is noticed: at the next process start (within the bridge's lifetime bounds), not at the next scan. See the threat model's [Python core bridge](../specs/threat-model.md#python-core-bridge-redact-secret-vault--research-grade-not-qualified) section.
+
 - **Python interface.** `NodeCoreBridge(…, pii: Sequence[str] = (), expected_pii_activation: str | None = None)`.
 - **Request.** The bridge request JSON gains `"pii": string[]`.
   - `core_bridge.mjs` calls `initialize({ pii })` when the core has `piiActivation`.
   - Otherwise it calls plain `initialize()` when `pii` is empty.
   - Otherwise, with a non-empty `pii` and no PII surface, it returns `{"error":{"code":"PII_UNAVAILABLE"}}`.
 - **Response.** A successful response gains `"piiActivation": string | null`, where `null` means no PII surface. The bridge does not invent an identity string for beta.9.
-- **Pinning.** `NodeCoreBridge` compares every response with `expected_pii_activation` when that is set. Otherwise it pins the identity from its first successful response and requires every later response to match. Each call is a new process, so this catches a core swapped underneath the server. A difference raises `VaultServerError(PII_ACTIVATION_MISMATCH)`. Bridge-reported core codes surface as `CORE_FAILURE` with `core_code`, as today.
+- **Pinning.** `NodeCoreBridge` compares every response with `expected_pii_activation` when that is set. Otherwise it pins the identity from its first successful response and requires every later response to match. Each call is a new process (since #89, each new bridge process is checked the same way), so this catches a core swapped underneath the server. A difference raises `VaultServerError(PII_ACTIVATION_MISMATCH)`. Bridge-reported core codes surface as `CORE_FAILURE` with `core_code`, as today.
 - **Retention.** `VaultServerErrorCode` gains `PII_UNAVAILABLE` and `PII_ACTIVATION_MISMATCH`. `CaptureOptions` gains `pii: PiiRetention | None = None` with `retain: tuple[str, ...]`, under §1's exact rules and order relative to `eligible`.
 
 ### 4. Compatibility with core beta.9

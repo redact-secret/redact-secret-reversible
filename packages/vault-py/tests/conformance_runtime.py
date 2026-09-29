@@ -25,8 +25,9 @@ A case's ``piiActivation`` restricts it to the matching lane; the runner
 raises ``CaseSkipped`` otherwise. Two adapter rules differ from the JS
 runner, where activation is realm-global and one-shot:
 
-- The bridge starts a fresh core per ``scan``, so an activation conflict
-  cannot arise. Cases marked ``requiresSharedRealm`` raise ``CaseSkipped``.
+- Each bridge owns its own core process, initialized only with that
+  bridge's selection, so an activation conflict cannot arise. Cases marked
+  ``requiresSharedRealm`` raise ``CaseSkipped``.
 - The bridge reports its activation only on its first core call, not at
   construction. A ``vault`` step whose ``expect`` names an error therefore
   makes one ``scan("")`` call right after construction, and that call must
@@ -106,7 +107,7 @@ class ConformanceFailure(AssertionError):
 
 
 class CaseSkipped(Exception):
-    """The case does not apply to this lane or to the per-call bridge realm."""
+    """The case does not apply to this lane or to the per-bridge core realm."""
 
 
 # lane name -> the PII selection every bridge in that lane forwards.
@@ -122,7 +123,7 @@ def case_skip_reason(case: dict[str, Any], lane: str) -> str | None:
     if case.get("requiresSharedRealm"):
         return (
             "needs one realm-global core activation shared by every vault; "
-            "NodeCoreBridge starts a fresh core per scan, so no activation conflict can arise"
+            "each NodeCoreBridge owns its own core process, so no activation conflict can arise"
         )
     return None
 
