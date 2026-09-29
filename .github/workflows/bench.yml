@@ -82,15 +82,19 @@ jobs:
           name: bench-pii-${{ matrix.pii }}
           path: .bench-results/*.json
           if-no-files-found: error
+          # Results live in dot-directories, which upload-artifact skips by default.
+          include-hidden-files: true
 
   # Builds the per-release archive (docs/research/perf/<version>.json) from
   # the compare results, as an artifact for the maintainer to commit. It
-  # refuses A/A runs (candidate version equal to the baseline), so a run on a
-  # commit whose version was not bumped fails here and archives nothing.
+  # refuses A/A runs (candidate version equal to the baseline), so it runs on
+  # release tags only.
   archive:
     name: archive
     needs: compare
-    if: ${{ !cancelled() }}
+    # Only a release tag has a bumped version to archive; a dispatch run on an
+    # unbumped commit is an A/A comparison that archive.mjs rightly refuses.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,3 +119,5 @@ jobs:
           name: bench-archive
           path: .bench-archive/*.json
           if-no-files-found: error
+          # Results live in dot-directories, which upload-artifact skips by default.
+          include-hidden-files: true
