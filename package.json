@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run test:vault && npm run test:vault-server",
+    "test": "npm run test:vault && npm run test:vault-server && npm run test:bench",
     "lint": "biome lint",
     "build": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server",
     "typecheck": "npm run typecheck -w @redact-secret/vault && npm run build -w @redact-secret/vault && npm run typecheck -w @redact-secret/vault-server",
@@ -15,7 +15,14 @@
     "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs",
     "test:vault": "npm run build -w @redact-secret/vault && npm run test -w @redact-secret/vault",
-    "test:vault-server": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server && npm run test -w @redact-secret/vault-server"
+    "test:vault-server": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server && npm run test -w @redact-secret/vault-server",
+    "test:bench": "npm run build && node --test bench/test/*.test.mjs",
+    "bench": "npm run build && node bench/run.mjs",
+    "bench:smoke": "npm run build && node bench/run.mjs --quick",
+    "bench:compare": "npm run build && node bench/compare.mjs",
+    "bench:compare:smoke": "npm run build && node bench/compare.mjs --quick",
+    "bench:worker": "npm run build && node bench/browser/worker-boundary.mjs",
+    "bench:archive": "node bench/archive.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
