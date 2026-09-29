@@ -124,6 +124,12 @@ interface ShadowEntry {
   readonly policyRevision: string | undefined;
 }
 
+/** A revoked capture: when it was revoked and the tokens that read as `"revoked"` while it is remembered. */
+interface Tombstone {
+  readonly revokedAt: number;
+  readonly tokens: readonly string[];
+}
+
 /**
  * Opens a server authority layer over one `@redact-secret/vault` in-memory
  * instance: `PrincipalResolver` and `ServerReleasePolicy` are enforced on
@@ -233,7 +239,15 @@ class ServerVaultImpl<Context> implements ServerVault<Context> {
 
   readonly #shadow = new Map<string, ShadowEntry>();
   readonly #captureTokens = new Map<string, Set<string>>();
-  readonly #tombstones = new Map<string, number>();
+  /**
+   * Revoked captures, kept in ascending `revokedAt` order so
+   * `#sweepTombstones` can stop at the first one still remembered. The
+   * order holds because `#revoke` is the only writer, reads the
+   * non-decreasing `#clock` and inserts with no `await` in between, runs
+   * one at a time on the FIFO chain, and re-inserts (delete, then set) a
+   * capture revoked again so it moves to the back.
+   */
+  readonly #tombstones = new Map<string, Tombstone>();
   readonly #tombstoneTokens = new Map<string, string>();
   #disposed = false;
 
@@ -600,15 +614,20 @@ class ServerVaultImpl<Context> implements ServerVault<Context> {
       throw new VaultServerError("INVARIANT_VIOLATION");
     }
 
+    // A capture revoked again keeps the tokens its earlier revocation
+    // retired (even one aged out but not yet swept), now remembered from `at`.
+    const retired = [...(this.#tombstones.get(captureId)?.tokens ?? [])];
     const tokens = this.#captureTokens.get(captureId);
     if (tokens !== undefined) {
       for (const token of tokens) {
         this.#shadow.delete(token);
         this.#tombstoneTokens.set(token, captureId);
+        retired.push(token);
       }
       this.#captureTokens.delete(captureId);
     }
-    this.#tombstones.set(captureId, at);
+    this.#tombstones.delete(captureId);
+    this.#tombstones.set(captureId, { revokedAt: at, tokens: retired });
     this.#sweepTombstones(at);
 
     this.#auditEvent({ operation: "revoke", outcome: "committed", at, entries: removed });
@@ -663,12 +682,20 @@ class ServerVaultImpl<Context> implements ServerVault<Context> {
     }
   }
 
+  /**
+   * Forgets every capture revoked at least `#revocationMemoryMs` before `at`.
+   * `#tombstones` is in ascending `revokedAt` order, so the first capture
+   * still remembered ends the sweep: the cost is the number forgotten, not
+   * the number remembered. A token stays remembered only while the capture
+   * it currently maps to does.
+   */
   #sweepTombstones(at: number): void {
-    for (const [captureId, revokedAt] of [...this.#tombstones]) {
-      if (at - revokedAt >= this.#revocationMemoryMs) this.#tombstones.delete(captureId);
-    }
-    for (const [token, captureId] of [...this.#tombstoneTokens]) {
-      if (!this.#tombstones.has(captureId)) this.#tombstoneTokens.delete(token);
+    for (const [captureId, tombstone] of this.#tombstones) {
+      if (at - tombstone.revokedAt < this.#revocationMemoryMs) return;
+      this.#tombstones.delete(captureId);
+      for (const token of tombstone.tokens) {
+        if (this.#tombstoneTokens.get(token) === captureId) this.#tombstoneTokens.delete(token);
+      }
     }
   }
 
