@@ -9,6 +9,14 @@
 //
 // Every operation runs on a vault holding no other entries: each iteration's
 // capture is revoked (untimed) before the next.
+//
+// PII on (`--pii on`, a separate process): capture uses `capture1kPii` (the
+// four credentials plus two IBANs) and retains the IBANs with
+// `pii: { retain: ["pii_global_iban"] }`, so all six findings become entries
+// and the core runs its PII detectors. Restore and revoke keep `capture1k` in
+// both modes: neither calls the core, so their PII-on figures show that an
+// active PII surface adds nothing to them, and they stay comparable across
+// modes.
 
 export const id = "op-latency";
 export const issue = 77;
@@ -17,10 +25,10 @@ export const title = "Operation latency with core/vault overhead split";
 const SINK = "bench-sink";
 
 // Per PII mode: which corpus item capture uses and the capture options that
-// go with it. Adding a mode here is the whole change to measure it; restore
-// and revoke use `capture1k` in every mode.
+// go with it. Restore and revoke use `capture1k` in every mode.
 const CAPTURE_INPUTS = {
   off: { item: "capture1k", options: {} },
+  on: { item: "capture1kPii", options: { pii: { retain: ["pii_global_iban"] } } },
 };
 
 export const piiModes = Object.keys(CAPTURE_INPUTS);
@@ -52,7 +60,8 @@ async function measureCapture(ctx, vault) {
     },
     teardown: (state) => {
       expectCount(state.coreFindings, expected, "core findings");
-      expectCount(state.captured.tokens.length + state.captured.unrestorable, expected, "capture findings");
+      expectCount(state.captured.tokens.length, expected, "capture entries");
+      expectCount(state.captured.unrestorable, 0, "unrestorable findings");
       vault.revoke(state.captured.captureId);
     },
   });
