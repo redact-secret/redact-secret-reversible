@@ -1,5 +1,5 @@
 import { createVault, DEFAULT_LIMITS, VaultError } from "@redact-secret/vault";
-import type { CaptureResult, ReleaseGrant, RestoreRequest, Vault } from "@redact-secret/vault";
+import type { CaptureResult, ReleaseGrant, RestoreRequest, RestoreResult, Vault } from "@redact-secret/vault";
 
 import { VaultServerError } from "./errors.js";
 import { countMatches, MARKER_PATTERN, TOKEN_PATTERN } from "./token-pattern.js";
@@ -544,7 +544,7 @@ class ServerVaultImpl<Context> implements ServerVault<Context> {
     // capture, same clock) and under this instance's own single-flight
     // queue, so this call re-validating and succeeding is expected, not
     // merely hoped for.
-    let result;
+    let result: RestoreResult;
     try {
       result = this.#vault.restore({ sink, captures: [...sources], fields } satisfies RestoreRequest);
     } catch {

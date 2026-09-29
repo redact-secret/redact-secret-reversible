@@ -51,12 +51,12 @@ export function newToken(fill: RandomFill): string {
     buffer &= (1 << bits) - 1;
   }
   bytes.fill(0);
-  return out + ">";
+  return `${out}>`;
 }
 
 /** Opaque identifier for a capture; same entropy, distinct grammar. */
 export function newCaptureId(fill: RandomFill): string {
-  return "cap_" + newToken(fill).slice(5, -1);
+  return `cap_${newToken(fill).slice(5, -1)}`;
 }
 
 export function countMatches(pattern: RegExp, text: string): number {

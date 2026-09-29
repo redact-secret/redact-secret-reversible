@@ -244,7 +244,7 @@ export function parseResponse(data: unknown): ParseResult<VaultWorkerResponse> {
   if (data.kind === "vault-ready") {
     if (!hasOnlyKeys(data, ["kind", "v", "piiActivation"]) || data.v !== PROTOCOL_VERSION) return { ok: false, id: undefined };
     // Required, not optional: a version-2 host always states what it observed.
-    if (!Object.prototype.hasOwnProperty.call(data, "piiActivation")) return { ok: false, id: undefined };
+    if (!Object.hasOwn(data, "piiActivation")) return { ok: false, id: undefined };
     const piiActivation = data.piiActivation;
     if (piiActivation !== null && !isPiiActivationIdentity(piiActivation)) return { ok: false, id: undefined };
     return { ok: true, value: { kind: "vault-ready", v: PROTOCOL_VERSION, piiActivation } };

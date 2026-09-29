@@ -24,6 +24,15 @@ Detection problems (a secret the core misses or misclassifies) belong to the cor
 
 Alpha releases may change their API between versions. Only the runtimes and core version listed in the [beta.10 qualification record](docs/research/qualification-core-0.1.0-beta.10.md) and the [Worker-mode record](docs/research/qualification-worker-mode.md) are supported: Node.js and browser main-thread use, the optional dedicated-Worker mode, and `@redact-secret/vault-server`'s single-process, in-memory server authority. Persistent-store modes and the research-grade Python package (`redact-secret-vault`, on PyPI as `0.1.0a3`) are unsupported, and reports about them are treated as design input.
 
+## Verifying releases
+
+Releases are signed with [Sigstore](https://www.sigstore.dev/) keyless signing: the release workflow ([`release.yml`](.github/workflows/release.yml)) publishes from GitHub Actions through OIDC, and the registries record a signed attestation tying each package to this repository, the workflow, and the commit it was built from. There is no long-lived signing key to obtain; the trust root is Sigstore's public-good instance, which the tools below fetch automatically.
+
+- **npm** (`@redact-secret/vault` and `@redact-secret/vault-server` from `0.1.0-alpha.3`, and `@redact-secret/vault@0.1.0-alpha.2`): after installing, run `npm audit signatures`. It verifies the registry signature and the provenance attestation of every installed package. The package page on npmjs.com also shows the provenance, including the source commit and the workflow run.
+- **PyPI** (`redact-secret-vault` from `0.1.0a3`): each file carries a [PEP 740](https://peps.python.org/pep-0740/) attestation, shown on the file's page on pypi.org. To verify a downloaded file: `pip install pypi-attestations`, then `pypi-attestations verify pypi --repository https://github.com/redact-secret/redact-secret-vault pypi:<file name>`, for example `pypi:redact_secret_vault-0.1.0a3-py3-none-any.whl`.
+
+`@redact-secret/vault@0.1.0-alpha.1` and `@redact-secret/vault-server@0.1.0-alpha.2` were published manually and carry no provenance ([RELEASING.md](RELEASING.md#provenance)). Neither is supported; upgrade.
+
 ## Scope
 
 In scope: plaintext disclosure through vault errors, audit events, stats, or returned objects; restoration into a sink, path, session, or budget that was not granted; bypass of the core action gate; partial capture or restore state; token predictability or collision; limit bypass.
