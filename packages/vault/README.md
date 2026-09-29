@@ -3,19 +3,19 @@
 **Beta.** An opt-in, bounded, in-memory vault for [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core). It replaces detected secrets with random tokens before text leaves your code, for example to an LLM. Later it puts the original values back, but only into fields your application names in advance.
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.1 @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/vault@0.1.0-beta.2 @redact-secret/core@0.1.0-beta.11
 ```
 
-The npm `latest` and `beta` tags both point at `0.1.0-beta.1`. Exact versions are still recommended while the package is beta, because each release pins an exact `@redact-secret/core` version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
+The npm `latest` and `beta` tags both point at `0.1.0-beta.2`. Exact versions are still recommended while the package is beta, because each release pins an exact `@redact-secret/core` version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
 
 ## Supported, and not
 
-| Runtime | Status in 0.1.0-beta.1 |
+| Runtime | Status in 0.1.0-beta.2 |
 | --- | --- |
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
 | Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [alpha.1 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-0.1.0-alpha.1.md); PII off and on in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)) |
 | Optional dedicated-Worker mode (`@redact-secret/vault/worker`), same three browser engines, CSP allowing `'wasm-unsafe-eval'` and `worker-src` | **Qualified, opt-in, separately from main-thread mode** — see [Worker mode](#worker-mode) and the [worker qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14)) |
-| `@redact-secret/core` | `0.1.0-beta.11` exactly on `main` (peer dependency; the published `0.1.0-beta.1` pins `0.1.0-beta.10`, `0.1.0-alpha.1` pinned `0.1.0-beta.9`, and without PII support) |
+| `@redact-secret/core` | `0.1.0-beta.11` exactly (peer dependency; `0.1.0-beta.1` pinned `0.1.0-beta.10`, `0.1.0-alpha.1` pinned `0.1.0-beta.9`, and without PII support) |
 | `SharedWorker`, a Service Worker, or Node.js `worker_threads` | **Not supported** |
 | Multi-user or multi-tenant server authorization | **Not supported**. This package does not know users or tenants. Use [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md) for principal and tenant authorization |
 | Persistence, Python, streaming, free-text `restore(text)` | **Not supported** |

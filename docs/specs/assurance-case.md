@@ -1,6 +1,6 @@
 # Assurance case
 
-**Status:** current for `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.1`. Persistent stores are out of scope (proposed only).
+**Status:** current for `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.2`. Persistent stores are out of scope (proposed only).
 
 This document argues why the packages' security requirements are met. It does not restate the evidence; it links to it.
 

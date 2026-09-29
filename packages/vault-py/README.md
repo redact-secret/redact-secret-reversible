@@ -14,8 +14,8 @@ PyPI. It provides trusted principal/tenant resolution, a source→sink/path/purp
 tuple, fail-closed policy evaluation, an extended denial vocabulary, and
 audit events with no field capable of carrying a restored value. Storage is
 in-memory only, matching `@redact-secret/vault`'s threat boundary — nothing
-here is persistent. Version `0.1.0b1` (PEP 440; the counterpart of the npm
-`0.1.0-beta.1` release) is published to PyPI from `release.yml` through
+here is persistent. Version `0.1.0b2` (PEP 440; the counterpart of the npm
+`0.1.0-beta.2` release) is published to PyPI from `release.yml` through
 trusted publishing (see [RELEASING.md](../../RELEASING.md#python)); `0.1.0a3`
 was the first version there.
 
@@ -39,16 +39,16 @@ The original service-boundary inventory is
 - Python 3.10+
 - For `NodeCoreBridge`: a `node` executable (Node.js 20, 22, or 24) on
   `PATH`, and `@redact-secret/core` at exactly the pinned version
-  (`PINNED_CORE_VERSION`, `0.1.0-beta.11` on `main`; the published `0.1.0b1` pins `0.1.0-beta.10`) installed with npm in a directory
+  (`PINNED_CORE_VERSION`, `0.1.0-beta.11`; `0.1.0b1` pinned `0.1.0-beta.10`) installed with npm in a directory
   your application owns. A consumer that supplies its own `CoreClient` does
   not need Node at all — the boundary is a `Protocol`, not a hard dependency.
 
 ## Install
 
 ```bash
-pip install redact-secret-vault==0.1.0a3
+pip install redact-secret-vault==0.1.0b2
 # In a directory of your choice, for example /srv/myapp/core:
-npm install @redact-secret/core@0.1.0-beta.10  # the pin of the published 0.1.0b1; main pins 0.1.0-beta.11
+npm install @redact-secret/core@0.1.0-beta.11  # the pin of 0.1.0b2
 ```
 
 Then tell the bridge where that `node_modules` is, either in code or through
