@@ -1,4 +1,4 @@
 {
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "note": "Default --baseline for bench/compare.mjs and the bench workflow: the previous published @redact-secret/vault version. After each release, bump it to the version just published (RELEASING.md step 7), in the change that commits that release's docs/research/perf/<version>.json. 0.1.0-alpha.1 is not supported as a baseline (see docs/research/perf/README.md)."
 }
