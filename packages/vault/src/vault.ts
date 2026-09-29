@@ -8,6 +8,7 @@ import { activateCore, installedCore } from "./core-module.js";
 import type { CoreModule } from "./core-module.js";
 import { coreCodeOf, VaultError } from "./errors.js";
 import type { DenialReason, VaultErrorCode } from "./errors.js";
+import { ExpiryQueue } from "./expiry-queue.js";
 import {
   isPiiActive,
   isPiiFindingType,
@@ -81,6 +82,17 @@ interface Entry {
   used: number;
   readonly expiresAt: number;
 }
+
+/** One committed capture's place in the expiry queue. */
+interface CaptureExpiry {
+  readonly expiresAt: number;
+  readonly captureId: string;
+  /** The capture's live token set, compared by identity to detect staleness. */
+  readonly tokens: Set<string>;
+}
+
+/** Stale queue items tolerated beyond the live captures before compacting. */
+const EXPIRY_QUEUE_SLACK = 64;
 
 interface Staged {
   readonly findingId: string;
@@ -257,6 +269,10 @@ class InMemoryVault implements Vault {
   readonly #expiresAt: number;
   readonly #entries = new Map<string, Entry>();
   readonly #captures = new Map<string, Set<string>>();
+  // Every tracked capture has an item here keyed by its entries' earliest
+  // expiry; items of revoked or fully consumed captures go stale and are
+  // skipped or compacted away. Holds tokens only, never values.
+  readonly #expiry = new ExpiryQueue<CaptureExpiry>();
   #retainedBytes = 0;
   #disposed = false;
   #busy = false;
@@ -560,7 +576,10 @@ class InMemoryVault implements Vault {
     }
     this.#retainedBytes += stagedBytes;
     // A capture that retained nothing has nothing to revoke; do not track it.
-    if (captureTokens.size > 0) this.#captures.set(captureId, captureTokens);
+    if (captureTokens.size > 0) {
+      this.#captures.set(captureId, captureTokens);
+      this.#expiry.push({ expiresAt, captureId, tokens: captureTokens });
+    }
     staged.clear();
 
     this.#audit({ operation: "capture", outcome: "committed", at, entries: tokens.length });
@@ -749,9 +768,34 @@ class InMemoryVault implements Vault {
     return removed;
   }
 
+  /**
+   * Removes every entry with `at >= expiresAt`, visiting only captures that
+   * are due: cost follows the expired entries plus a logarithmic queue step
+   * per due capture, not the number of retained entries.
+   */
   #sweep(at: number): void {
-    for (const [token, entry] of [...this.#entries]) {
-      if (at >= entry.expiresAt) this.#removeEntry(token, entry);
+    const queue = this.#expiry;
+    for (let next = queue.peek(); next !== undefined && at >= next.expiresAt; next = queue.peek()) {
+      queue.pop();
+      const { captureId, tokens } = next;
+      // Revoked or fully consumed since it was queued (or its id reissued).
+      if (this.#captures.get(captureId) !== tokens) continue;
+      let remaining = Number.POSITIVE_INFINITY;
+      // Deleting the visited element while iterating a Set is well defined.
+      for (const token of tokens) {
+        const entry = this.#entries.get(token);
+        if (entry === undefined) continue;
+        if (at >= entry.expiresAt) this.#removeEntry(token, entry);
+        else remaining = Math.min(remaining, entry.expiresAt);
+      }
+      // A capture's entries share one expiry today; requeue any survivor
+      // anyway so no live entry can drop out of later sweeps.
+      if (remaining !== Number.POSITIVE_INFINITY) {
+        queue.push({ expiresAt: remaining, captureId, tokens });
+      }
+    }
+    if (queue.size > 2 * this.#captures.size + EXPIRY_QUEUE_SLACK) {
+      queue.retain((item) => this.#captures.get(item.captureId) === item.tokens);
     }
   }
 
@@ -760,6 +804,7 @@ class InMemoryVault implements Vault {
     for (const entry of this.#entries.values()) entry.value = "";
     this.#entries.clear();
     this.#captures.clear();
+    this.#expiry.clear();
     this.#retainedBytes = 0;
     this.#disposed = true;
     return removed;
