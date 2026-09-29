@@ -89,7 +89,9 @@ function runPython(ctx, request) {
     }
     if (typeof data.error === "string") {
       if (SKIP_CODES.has(data.error)) ctx.skip(`python: ${data.error}`);
-      throw Object.assign(new Error("python driver error"), { code: data.error.slice(0, 80) });
+      const failure = new Error("python driver error");
+      failure.code = data.error.slice(0, 80);
+      throw failure;
     }
     return data;
   }

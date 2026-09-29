@@ -76,6 +76,13 @@
       "path": "bench/lib/published.mjs",
       "rationale": "EXACT_VERSION is a literal regex (not built from input) whose repeated groups `[0-9A-Za-z-]+` are separated by a mandatory `.` that the class excludes, so each input has a single parse and backtracking is linear. It validates a benchmark baseline version string from bench/baseline.json or the CLI, dev tooling only; nothing here ships in a package.",
       "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
+    },
+    "8ea13bb5ff3a6d34": {
+      "classification": "false_positive",
+      "line": 176,
+      "path": "bench/browser/worker-boundary.mjs",
+      "rationale": "Same pattern as 762bff0d2bdd5716 in the B5 Worker-boundary benchmark: APP is the benchmark's own temporary build directory passed to join() for writeFileSync, and the written index.html is a constant string literal with no interpolation reaching the <script> tag.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
     }
   },
   "known_errors": {}
