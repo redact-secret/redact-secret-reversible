@@ -37,7 +37,7 @@ const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
 check(pkg.dependencies === undefined || Object.keys(pkg.dependencies).length === 0, "vault must have no runtime dependencies");
 check(JSON.stringify(pkg.peerDependencies) === JSON.stringify({ "@redact-secret/core": "0.1.0-beta.10" }), "core peer must be pinned exactly");
 check(pkg.sideEffects === false, "package must declare sideEffects: false");
-check(pkg.publishConfig?.tag === "alpha", "publishConfig.tag must be alpha");
+check(pkg.publishConfig?.tag === "beta", "publishConfig.tag must be beta");
 check(!("scripts" in pkg) || !Object.keys(pkg.scripts).some((s) => /install|prepare|prepack|postpack/.test(s)), "no install-time scripts");
 
 const js = readdirSync(join(pkgDir, "dist")).filter((f) => f.endsWith(".js"));
