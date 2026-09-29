@@ -53,9 +53,14 @@ function anchorsOf(file) {
   for (const line of proseLines(readFileSync(join(root, file), "utf8"), false)) {
     const m = line.match(/^ {0,3}#{1,6}\s+(.*?)\s*#*\s*$/);
     if (m) {
-      const base = m[1]
-        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-        .replace(/<[^>]+>/g, "")
+      // Strip inline HTML tags until none remain (a single pass can leave a
+      // tag behind, e.g. "<<b>b>"). The slug is only compared, never rendered.
+      let text = m[1].replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1");
+      for (let prev = ""; prev !== text; ) {
+        prev = text;
+        text = text.replace(/<[^>]+>/g, "");
+      }
+      const base = text
         .toLowerCase()
         .replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, "")
         .replace(/\s/g, "-");
