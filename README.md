@@ -1,5 +1,7 @@
 # Redact Secret Vault
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15003/badge)](https://www.bestpractices.dev/projects/15003)
+
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret). This repository was formerly `redact-secret/redact-secret-reversible`.
 
 **Status: alpha.** [`@redact-secret/vault`](packages/vault/README.md) provides opt-in, bounded, in-memory whole-input capture and structured-field restoration for Node.js and browser main-thread runtimes, with an optional, separately qualified dedicated-Worker mode ([worker qualification record](docs/research/qualification-worker-mode.md), [#14](https://github.com/redact-secret/redact-secret-vault/issues/14)); Worker mode is not an implicit upgrade over main-thread use, and the two modes' guarantees are documented separately. [`@redact-secret/vault-server`](packages/vault-server/README.md) adds server authority — principal, tenant, source, sink/path, and purpose authorization on every restore, with an in-memory backend built on `@redact-secret/vault`. [`redact-secret-vault` (Python)](packages/vault-py/README.md) is a research-grade, in-memory implementation of the same [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) (S1) as `@redact-secret/vault-server` — not of the `@redact-secret/vault` API, passing the shared conformance corpus against the real core through a documented Node.js service boundary — see [its inventory and equivalence evidence](docs/research/python-server-integration-2026-09-27.md). Persistent stores and streaming remain design work; nothing here claims them.
@@ -73,6 +75,8 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 
 - [Architecture](ARCHITECTURE.md): trust boundaries and proposed components.
 - [Conventions](CONVENTIONS.md): documentation, implementation, and review rules.
+- [Contributing](CONTRIBUTING.md): reporting bugs, submitting changes, and the test policy.
+- [Security policy](SECURITY.md): private vulnerability reporting and response process.
 - [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) and [its in-memory implementation](docs/decisions/2026-09-27-implement-vault-server-in-memory.md), and the [persistent store contract](docs/decisions/2026-09-27-define-persistent-store-contract.md) (contract only; no implementation yet).
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
