@@ -8,7 +8,7 @@ decided_at: 2026-09-27
 ---
 # Qualify optional dedicated-Worker mode and its failure behavior
 
-> **Accepted 2026-09-27** for `@redact-secret/vault`'s optional Worker mode ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14), depends on [#12](https://github.com/redact-secret/redact-secret-vault/issues/12)/[#13](https://github.com/redact-secret/redact-secret-vault/issues/13)). This does not change, weaken, or extend what the main-thread mode already established ([qualification record](../research/qualification-0.1.0-alpha.1.md)); it is a second, separately qualified mode consumers opt into explicitly.
+> **Accepted 2026-09-27** for `@redact-secret/vault`'s optional Worker mode ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14), depends on [#12](https://github.com/redact-secret/redact-secret-vault/issues/12)/[#13](https://github.com/redact-secret/redact-secret-vault/issues/13)). This does not change, weaken, or extend what the main-thread mode already established ([qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md)); it is a second, separately qualified mode consumers opt into explicitly.
 
 ## Context
 
@@ -43,7 +43,7 @@ Real dedicated Workers in Chromium, Firefox, and WebKit (via Playwright), under 
 ## Resolved choices (Worker mode, `@redact-secret/vault`)
 
 - **Transport.** `postMessage`/`message` events between a main-thread client (`createWorkerVault`) and a Worker-side host (`startVaultWorkerHost`). A `MessagePort` satisfies the same minimal structural interface, so a consumer may route through one instead of a bare `Worker`.
-- **Protocol version.** Messages carry `v: 1`. A future incompatible protocol change bumps this; both sides already reject an unrecognized version rather than guess at compatibility. (Bumped to `v: 2` by [#39](https://github.com/redact-secret/redact-secret-vault/issues/39) under the [PII retention and activation ADR](2026-09-27-decide-pii-retention-and-activation-ownership.md) §3 "Worker mode".)
+- **Protocol version.** Messages carry `v: 1`. A future incompatible protocol change bumps this; both sides already reject an unrecognized version rather than guess at compatibility. (Bumped to `v: 2` by [#39](https://github.com/redact-secret/redact-secret-vault/issues/39) under the [PII retention and activation ADR](decide-pii-retention-and-activation-ownership.md) §3 "Worker mode".)
 - **Error codes.** Two additions to the shared `VaultErrorCode` set: `WORKER_PROTOCOL_VIOLATION` (a message did not match the protocol) and `WORKER_UNAVAILABLE` (the Worker did not respond, errored, or was terminated). Both carry the same fixed-message, no-payload shape every other vault error already does.
 - **Timeout.** `createWorkerVault` accepts an optional `timeoutMs` (default 15000) applied to the initial readiness handshake and to each individual call. There is no default-forever wait; a hung or hostile Worker fails a pending call explicitly rather than leaving a caller waiting indefinitely.
 - **Disposal.** `WorkerVault.dispose()` disposes the Worker-held vault (a round trip) and then fails fast locally on further calls; `WorkerVault.terminate()` calls the underlying `Worker.terminate()` immediately and fails every pending and future call with `WORKER_UNAVAILABLE`.

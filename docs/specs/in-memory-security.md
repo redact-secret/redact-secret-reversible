@@ -1,9 +1,9 @@
 # Browser in-memory vault security specification
 
-**Status:** implemented for the browser main thread by `@redact-secret/vault@0.1.0-alpha.1` (see the [threat model](threat-model.md) and [qualification record](../research/qualification-0.1.0-alpha.1.md)); the dedicated-Worker requirements in section 5 are implemented and qualified as of the follow-up release documented in the [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md) and [worker qualification record](../research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14)). `SharedWorker`, a Service Worker, and Node.js `worker_threads` remain unsupported.
+**Status:** implemented for the browser main thread by `@redact-secret/vault@0.1.0-alpha.1` (see the [threat model](threat-model.md) and [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md)); the dedicated-Worker requirements in section 5 are implemented and qualified as of the follow-up release documented in the [Worker-mode ADR](../decisions/qualify-dedicated-worker-mode.md) and [worker qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-worker-mode.md) ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14)). `SharedWorker`, a Service Worker, and Node.js `worker_threads` remain unsupported.
 **Scope:** `@redact-secret/vault` in a browser page or a dedicated Web Worker. This specification does not define server authorization or persistent storage.
 
-This document defines the security contract to validate before browser support is claimed. The [architecture](../../ARCHITECTURE.md) and [restore authority decision](../decisions/2026-09-27-restore-authority-and-lifecycle.md) define the repository-wide boundary. The core remains independent and does not retain original values.
+This document defines the security contract to validate before browser support is claimed. The [architecture](../../ARCHITECTURE.md) and [restore authority decision](../decisions/restore-authority-and-lifecycle.md) define the repository-wide boundary. The core remains independent and does not retain original values.
 
 ## Security objective and limits
 
@@ -71,7 +71,7 @@ The choices above are **not** interchangeable upgrades. Moving to a server chang
 
 ### 5. Optional Worker isolation
 
-**Implemented and qualified** (`@redact-secret/vault/worker` + `@redact-secret/vault/worker/host`; see the [Worker-mode ADR](../decisions/2026-09-27-qualify-dedicated-worker-mode.md)). Unlike sections 1–4, which describe the main-thread contract already shipped in 0.1.0-alpha.1, this section described proposed requirements for a not-yet-implemented mode when originally written; every MUST below is now verified by `qualification/worker.mjs` and `packages/vault/test/worker-suite.js`, not merely proposed.
+**Implemented and qualified** (`@redact-secret/vault/worker` + `@redact-secret/vault/worker/host`; see the [Worker-mode ADR](../decisions/qualify-dedicated-worker-mode.md)). Unlike sections 1–4, which describe the main-thread contract already shipped in 0.1.0-alpha.1, this section described proposed requirements for a not-yet-implemented mode when originally written; every MUST below is now verified by `qualification/worker.mjs` and `packages/vault/test/worker-suite.js`, not merely proposed.
 
 A dedicated Worker MAY hold the mapping and perform matching/restore operations behind a small message protocol. Its benefit is reducing direct access to the mapping from ordinary main-thread application code. It does not make the page a trusted caller.
 
@@ -104,7 +104,7 @@ The browser qualification suite MUST include at least:
 7. No plaintext in error strings, audit payloads, telemetry hooks, snapshots, or fixture output.
 8. A same-page hostile-script test demonstrating the **limit** of Worker isolation, so documentation does not claim XSS resistance it cannot provide. — Satisfied by `packages/vault/test/worker-suite.js`'s hostile-message cases: they bypass the safe client wrapper and talk to the Worker directly, showing both that out-of-protocol requests are rejected explicitly and that in-protocol requests (which a compromised page can also send) still succeed.
 
-Browser and Worker modes require separate runtime evidence. Passing this suite is a prerequisite to marking the relevant mode supported; it is not a proof of safety against compromised page code. Worker-mode evidence: `qualification/worker.mjs`, reproduced with `npm run qualify:worker`; results in the [worker qualification record](../research/qualification-worker-mode.md).
+Browser and Worker modes require separate runtime evidence. Passing this suite is a prerequisite to marking the relevant mode supported; it is not a proof of safety against compromised page code. Worker-mode evidence: `qualification/worker.mjs`, reproduced with `npm run qualify:worker`; results in the [worker qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-worker-mode.md).
 
 ## References
 

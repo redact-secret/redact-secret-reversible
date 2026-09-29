@@ -12,7 +12,7 @@ decided_at: 2026-09-27
 
 ## Context
 
-The public core's `redact` and `scanAndRedact` replace both `redact` and `block` findings; `warn` and `allow` leave the matched text unchanged. This was reproduced against npm `@redact-secret/core@0.1.0-beta.8` on a Node addon and the WASM artifact in Node. A placeholder in output therefore does not mean a `block` finding may be sent, and a returned `text` field does not imply all known sensitive spans were removed. The core cannot guarantee detection of every secret. [Verification](../research/verification-2026-09-27.md), [core public guide](https://github.com/redact-secret/redact-secret/blob/main/packages/javascript/README.md).
+The public core's `redact` and `scanAndRedact` replace both `redact` and `block` findings; `warn` and `allow` leave the matched text unchanged. This was reproduced against npm `@redact-secret/core@0.1.0-beta.8` on a Node addon and the WASM artifact in Node. A placeholder in output therefore does not mean a `block` finding may be sent, and a returned `text` field does not imply all known sensitive spans were removed. The core cannot guarantee detection of every secret. [Verification](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/verification-2026-09-27.md), [core public guide](https://github.com/redact-secret/redact-secret/blob/main/packages/javascript/README.md).
 
 ## Decision
 
@@ -36,7 +36,7 @@ The gate prevents a masked `block` output from being mistaken for approval and m
 
 ## Verification before acceptance
 
-Test action matrices under default and custom policies, multiple findings with a later `block`, `warn`/`allow` before and after eligible findings, partial formatter failure, Unicode ranges, and no published mapping/output on failure. Include consumer opt-in to passthrough and a runtime-specific browser WASM run. See [core integration research](../research/core-integration.md).
+Test action matrices under default and custom policies, multiple findings with a later `block`, `warn`/`allow` before and after eligible findings, partial formatter failure, Unicode ranges, and no published mapping/output on failure. Include consumer opt-in to passthrough and a runtime-specific browser WASM run. See [core integration research](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/core-integration.md).
 
 ## Resolved choices (alpha.1)
 
@@ -55,4 +55,4 @@ Test action matrices under default and custom policies, multiple findings with a
 | UTF-16 range, leading emoji | `[3, 43)` exact | same | same |
 | Reuse findings for a second `redact` | allowed | `INVALID_FINDINGS` | `INVALID_FINDINGS` |
 
-The reuse difference is why the vault never calls `redact` twice per `scan`. Corpus cases `action.*`, `capture.unicode.ranges`, and `capture.short-match`, plus runtime checks `display-formatter-failure-commits-nothing` and `unpaired-surrogate-input-rejected`, pass in all five runtime configurations. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).
+The reuse difference is why the vault never calls `redact` twice per `scan`. Corpus cases `action.*`, `capture.unicode.ranges`, and `capture.short-match`, plus runtime checks `display-formatter-failure-commits-nothing` and `unpaired-surrogate-input-rejected`, pass in all five runtime configurations. See the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md).

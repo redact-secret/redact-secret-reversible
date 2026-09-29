@@ -7,7 +7,7 @@ decided_at: 2026-09-27
 ---
 # Implement `@redact-secret/vault-server`'s in-memory backend and linearization point
 
-> **Accepted 2026-09-27** for `@redact-secret/vault-server` 0.1.0-alpha.1 ([#16](https://github.com/redact-secret/redact-secret-vault/issues/16), S2). Records the concrete choices this package makes where [the server authority interface ADR](2026-09-27-define-server-authority-interface.md) (S1, #15) deliberately left implementation open. Python ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) and persistent stores ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) are not covered and must each make and document their own equivalent choices.
+> **Accepted 2026-09-27** for `@redact-secret/vault-server` 0.1.0-alpha.1 ([#16](https://github.com/redact-secret/redact-secret-vault/issues/16), S2). Records the concrete choices this package makes where [the server authority interface ADR](define-server-authority-interface.md) (S1, #15) deliberately left implementation open. Python ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) and persistent stores ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) are not covered and must each make and document their own equivalent choices.
 
 ## Context
 
@@ -50,7 +50,7 @@ Unchanged from S1's own threat boundary and failure-behavior sections, with this
 
 ## Core compatibility
 
-Adds no direct dependency on `@redact-secret/core`. Depends on `@redact-secret/vault@0.1.0-alpha.1` unchanged, whose core peer range remains pinned exactly to `0.1.0-beta.9` (see the [qualification record](../research/qualification-0.1.0-alpha.1.md)). This ADR changes no core compatibility statement.
+Adds no direct dependency on `@redact-secret/core`. Depends on `@redact-secret/vault@0.1.0-alpha.1` unchanged, whose core peer range remains pinned exactly to `0.1.0-beta.9` (see the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md)). This ADR changes no core compatibility statement.
 
 ## Out of scope
 
