@@ -21,16 +21,23 @@ A pull request is merged only when the `ci` and `sast` workflows are green and a
 
 ## Requirements for acceptable contributions
 
-- **Tests.** New functionality must come with automated tests in the relevant suite (`packages/vault/test`, `packages/vault-server/test`, `packages/vault-py/tests`), and a bug fix should come with a test that fails without it. Security-sensitive changes need the negative tests listed in [CONVENTIONS.md](CONVENTIONS.md#security-sensitive-changes) (forged, expired, revoked, cross-session, cross-tenant, and policy-changed requests, including failure and cancellation).
+- **Tests.** New functionality must come with automated tests in the relevant suite (`packages/vault/test`, `packages/vault-server/test`, `packages/vault-py/tests`), and a bug fix must come with a regression test that fails without it. Keep statement coverage of each package at 80% or more (see [Test coverage](#test-coverage)). Security-sensitive changes need the negative tests listed in [CONVENTIONS.md](CONVENTIONS.md#security-sensitive-changes) (forged, expired, revoked, cross-session, cross-tenant, and policy-changed requests, including failure and cancellation).
 - **No warnings.** TypeScript compiles under `strict` with no errors; Python passes `ruff check`. The OpenGrep SAST gate (`scripts/run-sast.py`) must not report new findings.
 - **Boundaries.** Use only the core's documented public API; do not copy detector rules or policy logic (`npm run check:boundaries`).
 - **Documentation and decisions.** Update the README, threat model, or a decision record in `docs/decisions/` when behavior, token identity, capture, storage, authorization, or restore semantics change. Add a `CHANGELOG.md` entry under `Unreleased` for user-visible changes.
 - **No plaintext in diagnostics.** Errors, audit events, logs, and CI output must never contain original or restored values.
 
+## Coding standards
+
+- **TypeScript** (`packages/vault/src`, `packages/vault-server/src`): the TypeScript compiler in `strict` mode with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`, plus [Biome](https://biomejs.dev/)'s recommended lint rules (`biome.json`). CI enforces both (`npm run typecheck`, `npm run lint`).
+- **Python** (`packages/vault-py`): [PEP 8](https://peps.python.org/pep-0008/) as enforced by [Ruff](https://docs.astral.sh/ruff/) with the rules in `pyproject.toml`. CI enforces it (`ruff check`).
+- Match the style of the surrounding code, and keep comments to the why, not the what.
+
 ## Local checks
 
 ```bash
 npm ci
+npm run lint
 npm run typecheck
 npm run check:boundaries
 npm test                      # vault and vault-server unit tests
@@ -45,6 +52,18 @@ pip install -e ".[test,lint]"
 ruff check .
 pytest -q
 ```
+
+## Test coverage
+
+Statement coverage is measured with FLOSS tools: Node.js's built-in coverage and [coverage.py](https://coverage.readthedocs.io/) through pytest-cov. After `npm run build`:
+
+```bash
+cd packages/vault && node --test --experimental-test-coverage --test-coverage-include='dist/**' test/*.test.mjs
+cd packages/vault-server && node --test --experimental-test-coverage --test-coverage-include='dist/**'
+cd packages/vault-py && pip install pytest-cov && pytest -q --cov=redact_secret_vault
+```
+
+On 2026-09-29 (`main` at `23ed486`) line coverage was 88.6% for `@redact-secret/vault`, 91.9% for `@redact-secret/vault-server`, and 93% for `redact-secret-vault` (Python).
 
 ## License
 

@@ -17,6 +17,27 @@ npm's `latest` and `alpha` tags both point at `0.1.0-alpha.3` for both packages,
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
+## Quick start
+
+```bash
+npm install @redact-secret/vault@0.1.0-alpha.3 @redact-secret/core@0.1.0-beta.10
+```
+
+```ts
+import { createVault } from "@redact-secret/vault";
+
+const vault = await createVault({ pii: [] }); // initializes the core with PII detection off
+const captured = vault.capture("Rotate ghp_SYNTHETICxREVOKEDxTESTx0000000000000 today", {
+  release: [{ sink: "reply", paths: ["body"] }], // where values may come back
+});
+// captured.text === "Rotate <rsv_…> today" — send this to the model.
+const { fields } = vault.restore({ sink: "reply", captures: [captured.captureId], fields: { body: captured.text } });
+// fields.body is the original text again, restored only into the granted sink and path.
+vault.dispose();
+```
+
+The [`@redact-secret/vault` README](packages/vault/README.md#usage) shows the full pattern, including how to handle a denied restore. Server use: [`@redact-secret/vault-server`](packages/vault-server/README.md#usage). Python: [`redact-secret-vault`](packages/vault-py/README.md).
+
 ## Repository boundaries
 
 | Repository | Owns | Must not own |
@@ -76,7 +97,9 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Architecture](ARCHITECTURE.md): trust boundaries and proposed components.
 - [Conventions](CONVENTIONS.md): documentation, implementation, and review rules.
 - [Contributing](CONTRIBUTING.md): reporting bugs, submitting changes, and the test policy.
-- [Security policy](SECURITY.md): private vulnerability reporting and response process.
+- [Security policy](SECURITY.md): private vulnerability reporting, response process, and release verification.
+- [Code of conduct](CODE_OF_CONDUCT.md), [governance](GOVERNANCE.md), and [roadmap](ROADMAP.md).
+- [Assurance case](docs/specs/assurance-case.md): why the security requirements are met.
 - [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/2026-09-27-define-server-authority-interface.md) and [its in-memory implementation](docs/decisions/2026-09-27-implement-vault-server-in-memory.md), and the [persistent store contract](docs/decisions/2026-09-27-define-persistent-store-contract.md) (contract only; no implementation yet).
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
