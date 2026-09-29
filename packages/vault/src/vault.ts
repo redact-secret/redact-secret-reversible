@@ -17,6 +17,7 @@ import {
 } from "./pii.js";
 import {
   countMatches,
+  holdsExactlyOnce,
   MARKER_PATTERN,
   newCaptureId,
   newToken,
@@ -531,12 +532,9 @@ class InMemoryVault implements Vault {
 
     // Validate the output corresponds exactly to the staged tokens.
     if (formatterFault || formatted.size !== staged.size) throw new VaultError("INVARIANT_VIOLATION");
-    if (countMatches(MARKER_PATTERN, text) !== staged.size) throw new VaultError("INVARIANT_VIOLATION");
-    for (const entry of staged.values()) {
-      const first = text.indexOf(entry.token);
-      if (first === -1 || text.indexOf(entry.token, first + 1) !== -1) {
-        throw new VaultError("INVARIANT_VIOLATION");
-      }
+    // One pass over the output (#88): each staged token exactly once, no other marker.
+    if (stagedTokens.size !== staged.size || !holdsExactlyOnce(text, stagedTokens)) {
+      throw new VaultError("INVARIANT_VIOLATION");
     }
 
     // Commit.
