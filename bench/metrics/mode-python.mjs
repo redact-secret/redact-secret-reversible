@@ -1,22 +1,24 @@
 // B5 (#79), mode pair 2: Python ÷ JS on the same workload. The Python
 // package (`packages/vault-py`, `redact-secret-vault`) implements the server
 // authority contract natively but detects through `NodeCoreBridge`, which
-// spawns one Node.js process per scan (core_client.py, `subprocess.run`), so
-// its JS counterpart is `@redact-secret/vault-server` in-process.
+// keeps one long-lived Node.js bridge process per bridge (core_client.py,
+// #89), so its JS counterpart is `@redact-secret/vault-server` in-process.
 //
 // The Python side runs in one `python` process per run() call
 // (bench/python/mode_python_driver.py, with PYTHONPATH at the workspace
 // `packages/vault-py/src`, so no install is needed and an installed copy is
 // never measured). It returns timing samples only. Per iteration it times,
-// in rotating order, a bare `node -e ""` spawn, a bridge scan of an empty
-// string, a bridge scan of the input, and a whole server capture; then one
-// restore. From those, paired within each iteration:
+// in rotating order, a bare `node -e ""` spawn, a new bridge's first
+// scan("") (its process start), a scan of an empty string and of the input
+// on one long-lived bridge, and a whole server capture; then one restore.
+// From those, paired within each iteration:
 //
-//   python.bridge.startup_ms    scan("") − node_spawn: bridge script, core load and initialize
+//   python.bridge.startup_ms    start − node_spawn: bridge script, core load and initialize
 //   python.bridge.scan_work_ms  scan(input) − scan(""): the scan itself, seen from Python
 //   python.capture.native_ms    capture − scan(input): Python's own capture work
 //
-// so process spawn is reported apart from scan time (#79's acceptance).
+// so process start, paid once per bridge process, is reported apart from
+// the per-scan cost (#79's and #89's acceptance).
 // The JS side times `vaultServer.capture`, `vaultServer.restore`, and
 // `core.scan` on the same input in this process.
 //
@@ -25,7 +27,7 @@
 // no Python >= 3.10 is found or the package does not import; the harness
 // never fails for lack of Python. Interpreter: $BENCH_PYTHON, else
 // `.venv/bin/python` at the repository root or in packages/vault-py, else
-// `python3` on PATH. Python iterations are capped (subprocess per scan):
+// `python3` on PATH. Python iterations are capped (one process start each):
 // quick 5 after 1, full 30 after 3, or fewer if --iterations/--warmup are
 // lower. Nothing here gates: every measurement is `gating: false`.
 
@@ -183,7 +185,7 @@ export async function run(ctx) {
     restore: { fields: templates, usesPerToken },
   });
   const s = py.samples;
-  for (const name of ["node_spawn", "bridge_scan_empty", "bridge_scan", "capture", "restore"]) {
+  for (const name of ["node_spawn", "bridge_start", "bridge_scan_empty", "bridge_scan", "capture", "restore"]) {
     if (!(Array.isArray(s[name]) && s[name].length === pyIterations && s[name].every(Number.isFinite))) {
       throw Object.assign(new Error("python samples"), { code: "PYTHON_BAD_OUTPUT" });
     }
@@ -204,9 +206,10 @@ export async function run(ctx) {
 
   return [
     lat("python.node_spawn", s.node_spawn, pyParams),
+    lat("python.bridge.start", s.bridge_start, pyParams),
     lat("python.bridge.scan_empty", s.bridge_scan_empty, pyParams),
     lat("python.bridge.scan", s.bridge_scan, pyParams),
-    lat("python.bridge.startup_ms", diff(s.bridge_scan_empty, s.node_spawn), pyParams),
+    lat("python.bridge.startup_ms", diff(s.bridge_start, s.node_spawn), pyParams),
     lat("python.bridge.scan_work_ms", diff(s.bridge_scan, s.bridge_scan_empty), pyParams),
     lat("python.capture", s.capture, pyParams),
     lat("python.capture.native_ms", diff(s.capture, s.bridge_scan), pyParams),
@@ -217,6 +220,7 @@ export async function run(ctx) {
     ratio("capture.ratio", s.capture, js.capture, "p50 python capture / p50 js server capture", jsParams),
     ratio("scan.ratio", s.bridge_scan, js.scan, "p50 python bridge scan / p50 js core.scan", jsParams),
     ratio("restore.ratio", s.restore, js.restore, "p50 python restore / p50 js server restore", restoreParams),
-    ratio("capture.spawn_share", s.bridge_scan_empty, s.capture, "p50 bridge scan('') / p50 python capture", pyParams),
+    ratio("capture.roundtrip_share", s.bridge_scan_empty, s.capture, "p50 bridge scan('') / p50 python capture", pyParams),
+    ratio("bridge.start_in_scans", s.bridge_start, s.bridge_scan, "p50 bridge start / p50 bridge scan", pyParams),
   ];
 }

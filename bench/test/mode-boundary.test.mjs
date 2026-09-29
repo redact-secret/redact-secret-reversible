@@ -63,7 +63,7 @@ test("mode-python separates spawn from scan, or skips cleanly without Python", a
   assert.notEqual(run.outcome.status, "failed", run.outcome.reason);
   if (run.outcome.status === "ok") {
     const names = new Set(run.outcome.raw.map((m) => m.name));
-    for (const name of ["python.node_spawn", "python.bridge.startup_ms", "python.bridge.scan_work_ms", "python.capture", "capture.ratio"]) {
+    for (const name of ["python.node_spawn", "python.bridge.start", "python.bridge.startup_ms", "python.bridge.scan_work_ms", "python.capture", "capture.ratio"]) {
       assert.ok(names.has(name), name);
     }
     assert.ok(run.outcome.raw.every((m) => m.gating === false));

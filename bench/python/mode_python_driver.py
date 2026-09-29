@@ -12,9 +12,12 @@ Request: {"node": str, "nodeModules": str, "iterations": int, "warmup": int,
 
 Per iteration, in a rotating order so no step always runs first:
   node_spawn        subprocess.run([node, "-e", ""]): bare Node.js process start and exit
-  bridge_scan_empty NodeCoreBridge.scan(""): spawn + bridge script + core load and initialize, no scan work
-  bridge_scan       NodeCoreBridge.scan(input): the same, plus scanning the input
+  bridge_start      a new NodeCoreBridge's first scan(""): spawn + bridge script + core load and
+                    initialize, paid once per bridge process (#89); closing it is not timed
+  bridge_scan_empty NodeCoreBridge.scan("") on the long-lived bridge: one request round trip, no scan work
+  bridge_scan       NodeCoreBridge.scan(input) on the long-lived bridge
   capture           InMemoryVaultServer.capture(input): one bridge scan plus Python staging
+The long-lived bridge serves every step but bridge_start; it is started once, untimed, before warmup.
 Then, untimed, a capture for restore, and timed:
   restore           InMemoryVaultServer.restore of every restore field (pure Python, no subprocess)
 """
@@ -81,6 +84,14 @@ def main() -> None:
         if proc.returncode != 0:
             _fail("NODE_SPAWN_FAILED")
 
+    def bridge_start() -> None:
+        # Timed up to the first response; the loop closes the bridge after
+        # the timer stops.
+        fresh = NodeCoreBridge(node_executable=node, node_modules=req["nodeModules"])
+        _close_later.append(fresh)
+        if len(fresh.scan("", limits=limits).findings) != 0:
+            _fail("UNEXPECTED_FINDINGS")
+
     def scan_empty() -> None:
         if len(bridge.scan("", limits=limits).findings) != 0:
             _fail("UNEXPECTED_FINDINGS")
@@ -95,7 +106,14 @@ def main() -> None:
             _fail("UNEXPECTED_FINDINGS")
         server.revoke(result.capture_id)
 
-    steps = [("node_spawn", node_spawn), ("bridge_scan_empty", scan_empty), ("bridge_scan", scan_input), ("capture", capture)]
+    _close_later: list = []
+    steps = [
+        ("node_spawn", node_spawn),
+        ("bridge_start", bridge_start),
+        ("bridge_scan_empty", scan_empty),
+        ("bridge_scan", scan_input),
+        ("capture", capture),
+    ]
     samples: dict[str, list[float]] = {name: [] for name, _ in steps}
     samples["restore"] = []
 
@@ -130,15 +148,19 @@ def main() -> None:
                 elapsed = _ms(start)
                 if record:
                     samples[name].append(elapsed)
+                while _close_later:
+                    _close_later.pop().close()
             await restore_once(record)
 
     try:
+        bridge.scan("", limits=limits)  # start the long-lived bridge process, untimed
         asyncio.run(loop())
     except Exception as exc:  # report only a fixed code, never a message
         code = getattr(exc, "code", None)
         _fail(f"{type(exc).__name__}:{getattr(code, 'value', code)}"[:80])
     finally:
         server.dispose()
+        bridge.close()
 
     sys.stdout.write(
         json.dumps(
