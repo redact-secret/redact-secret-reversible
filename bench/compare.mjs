@@ -3,7 +3,7 @@
 // version, in one process, reported as candidate÷baseline ratios with a
 // bootstrap CI (#76).
 //
-//   node bench/compare.mjs [--baseline 0.1.0-alpha.3] [--metrics a,b] [--quick]
+//   node bench/compare.mjs [--baseline 0.1.0-beta.1] [--metrics a,b] [--quick]
 //                          [--pii off|on] [--rounds N] [--iterations N]
 //                          [--warmup N] [--tier standard|extended]
 //                          [--out file] [--fail-on-warn]

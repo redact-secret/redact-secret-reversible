@@ -35,7 +35,7 @@ Each run prints one line per measurement, always with its mode and environment, 
 Status: **current** ([#76](https://github.com/redact-secret/redact-secret-vault/issues/76)).
 
 ```bash
-npm run bench:compare                                  # candidate vs bench/baseline.json (0.1.0-alpha.3)
+npm run bench:compare                                  # candidate vs bench/baseline.json (0.1.0-beta.1)
 npm run bench:compare -- --baseline 0.1.0-alpha.2      # any exact published version
 npm run bench:compare:smoke                            # quick: 4 rounds x 50 iterations
 npm run bench:compare -- --rounds 20 --fail-on-warn
