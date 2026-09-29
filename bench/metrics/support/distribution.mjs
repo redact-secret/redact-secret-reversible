@@ -70,6 +70,10 @@ export function sideDirs(side) {
     vault: checked(vault, packages.vault.version, "vault"),
     vaultServer: packages.vaultServer === null ? null : checked(vaultServer, packages.vaultServer.version, "vault-server"),
     core: checked(core, packages.core.version, "core"),
+    // From core 0.1.0-beta.11 the wasm package ships four builds instead of
+    // two (redact-secret#937), so core.wasm.* jumps against a beta.10-pinned
+    // baseline. Core-caused and informational; see
+    // docs/research/perf/metrics/dist-size.md.
     wasm: findPackageDir(core, "@redact-secret/wasm"),
   };
 }

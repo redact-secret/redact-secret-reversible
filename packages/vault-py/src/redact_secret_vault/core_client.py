@@ -39,7 +39,7 @@ DEFAULT_BRIDGE_SCRIPT = Path(__file__).parent / "boundary" / "core_bridge.mjs"
 # The exact core release this boundary is qualified against, matching the
 # pin in this repository's root package.json. A response reporting a
 # different version is treated as CORE_FAILURE rather than silently trusted.
-PINNED_CORE_VERSION = "0.1.0-beta.10"
+PINNED_CORE_VERSION = "0.1.0-beta.11"
 
 #: Environment variable ``NodeCoreBridge`` reads when ``node_modules`` is not
 #: passed: the ``node_modules`` directory that holds ``@redact-secret/core``.

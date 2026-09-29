@@ -104,7 +104,7 @@ pip index versions redact-secret-vault --pre
 pip install --no-cache-dir "redact-secret-vault==<version>"
 python -c "import redact_secret_vault as m; print(m.__version__)"
 python -c "import importlib.resources as r; print(r.files('redact_secret_vault').joinpath('boundary/core_bridge.mjs').is_file())"
-mkdir -p /tmp/rsv-verify-core && npm install --prefix /tmp/rsv-verify-core --ignore-scripts @redact-secret/core@0.1.0-beta.10
+mkdir -p /tmp/rsv-verify-core && npm install --prefix /tmp/rsv-verify-core --ignore-scripts @redact-secret/core@<PINNED_CORE_VERSION>
 SMOKE_NODE_MODULES=/tmp/rsv-verify-core/node_modules python scripts/smoke-python-wheel.py  # from a checkout
 ```
 

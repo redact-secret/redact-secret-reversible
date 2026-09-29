@@ -11,8 +11,8 @@ docs/decisions/decide-pii-retention-and-activation-ownership.md,
    initialize/PII_UNAVAILABLE logic and finding projection.
 3. The real bridge against an installed core with no PII surface (beta.9):
    ``null`` identity and fail-closed options. Skipped on the pinned
-   ``0.1.0-beta.10``; layer 2 covers the same rules with a beta.9-shaped fake.
-4. The real bridge against a PII-capable core (the pinned ``0.1.0-beta.10``).
+   ``PINNED_CORE_VERSION``; layer 2 covers the same rules with a beta.9-shaped fake.
+4. The real bridge against a PII-capable core (the pinned ``PINNED_CORE_VERSION``).
    Skipped with a reason unless such a core is resolvable.
 
 Data is synthetic: repository ``*-synthetic*`` literals, and for layer 4 the

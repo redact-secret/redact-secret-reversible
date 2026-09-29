@@ -22,7 +22,7 @@ Optional, policy-gated restoration of values redacted by [Redact Secret](https:/
 | `@redact-secret/vault@0.1.0-beta.1`, `@redact-secret/vault-server@0.1.0-beta.1`, `redact-secret-vault` (Python) `0.1.0b1` | `@redact-secret/core@0.1.0-beta.10` exactly (Python: through the bridge) | Released 2026-09-29 from `release.yml` (npm `beta` tag, PyPI). First beta line; no breaking change from `0.1.0-alpha.3` / `0.1.0a3`. Adds constant-cost expiry sweeping, single-pass capture output validation, incremental revocation-tombstone sweeping, a long-lived Python Node.js bridge, and application-owned core location for the Python package. See the [changelog](CHANGELOG.md) |
 | `redact-secret-vault` (Python) `0.1.0a3` | `@redact-secret/core@0.1.0-beta.10` through the bridge | On PyPI: `pip install redact-secret-vault==0.1.0a3`, the first version published there, from `release.yml` through PyPI trusted publishing ([RELEASING.md](RELEASING.md#python)). `0.1.0a2` was never published |
 
-npm's `latest` and `beta` tags both point at `0.1.0-beta.1` for both packages, so a bare install gets the current release. Exact versions are still recommended while the packages are beta, because each release pins an exact core version (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
+npm's `latest` and `beta` tags both point at `0.1.0-beta.1` for both packages, so a bare install gets the current release. That release peers `@redact-secret/core@0.1.0-beta.10` exactly, while core's own `latest` is now `0.1.0-beta.11`: installing `@redact-secret/vault@0.1.0-beta.1` next to a bare `@redact-secret/core` fails with npm `ERESOLVE`. Name the core version as below until the next release, which pins `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)). Exact versions are still recommended while the packages are beta, because each release pins an exact core version (see [RELEASING.md](RELEASING.md#the-latest-dist-tag)).
 
 The core detects and redacts without storing matched plaintext. This repository will opt in to temporarily retaining an original-value mapping so an application can restore an approved value for an approved purpose. Installing or using the core alone must never create a recoverable mapping.
 
@@ -69,7 +69,7 @@ The agreed JavaScript package names describe two different responsibilities:
 | `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [contract](docs/decisions/define-persistent-store-contract.md) only) | None | Backend-specific server environments |
 | `redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0b1` (on PyPI) | Python 3.10+ server processes with a `node` executable available |
 
-All packages on `main` pin `@redact-secret/core@0.1.0-beta.10` exactly:
+All packages on `main` pin `@redact-secret/core@0.1.0-beta.11` exactly ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)); the first release to ship that pin is the next one, `0.1.0-beta.2` / `0.1.0b2`. The published `0.1.0-beta.1` peers `0.1.0-beta.10` exactly, so install it with that core:
 
 ```bash
 npm install @redact-secret/vault@0.1.0-beta.1 @redact-secret/core@0.1.0-beta.10

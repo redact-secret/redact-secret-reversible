@@ -39,7 +39,7 @@ The original service-boundary inventory is
 - Python 3.10+
 - For `NodeCoreBridge`: a `node` executable (Node.js 20, 22, or 24) on
   `PATH`, and `@redact-secret/core` at exactly the pinned version
-  (`PINNED_CORE_VERSION`, `0.1.0-beta.10`) installed with npm in a directory
+  (`PINNED_CORE_VERSION`, `0.1.0-beta.11` on `main`; the published `0.1.0b1` pins `0.1.0-beta.10`) installed with npm in a directory
   your application owns. A consumer that supplies its own `CoreClient` does
   not need Node at all — the boundary is a `Protocol`, not a hard dependency.
 
@@ -48,7 +48,7 @@ The original service-boundary inventory is
 ```bash
 pip install redact-secret-vault==0.1.0a3
 # In a directory of your choice, for example /srv/myapp/core:
-npm install @redact-secret/core@0.1.0-beta.10
+npm install @redact-secret/core@0.1.0-beta.10  # the pin of the published 0.1.0b1; main pins 0.1.0-beta.11
 ```
 
 Then tell the bridge where that `node_modules` is, either in code or through
@@ -203,8 +203,8 @@ if that matters for your deployment.
 ## PII selection and retention
 
 **Status: implemented since `0.1.0a2` (never published); `0.1.0a3` is the first PyPI release.** PII detection needs
-`@redact-secret/core@0.1.0-beta.10`, which this repository pins
-(`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
+`@redact-secret/core@0.1.0-beta.10` or later; this repository pins
+`0.1.0-beta.11` (`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
 fail-closed rules below. The rules are
 the [PII retention and activation decision record](../../docs/decisions/decide-pii-retention-and-activation-ownership.md)
 (§1 and §3 "Python bridge"), the same ones `@redact-secret/vault` follows.
@@ -232,7 +232,7 @@ the [PII retention and activation decision record](../../docs/decisions/decide-p
   reported no active PII detection, each raise `PII_UNAVAILABLE`.
 
 ```python
-bridge = NodeCoreBridge(pii=["pii"])  # the pinned beta.10
+bridge = NodeCoreBridge(pii=["pii"])  # the pinned core
 options = CaptureOptions(
     issued_tenant="tenant-acme-synthetic",
     release=(CaptureGrant(sink="reply", paths=("body",)),),
@@ -265,7 +265,7 @@ pytest
 ```
 
 `tests/test_pii_bridge.py` includes four cases that need a PII-capable core;
-they run against the pinned beta.10. `VAULT_SERVER_PY_PII_CORE_NODE_MODULES`
+they run against the pinned core. `VAULT_SERVER_PY_PII_CORE_NODE_MODULES`
 points them at another `node_modules` (for example a local core build). Four
 further cases need a core without PII support (beta.9) and skip with a reason;
 the fake-core cases in the same file cover those rules.
