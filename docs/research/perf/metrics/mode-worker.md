@@ -7,6 +7,8 @@ npm run bench:worker -- [--quick] [--out file] [--iterations N] [--warmup N]
 # same as: npm run build && node bench/browser/worker-boundary.mjs ...
 ```
 
+The `bench` workflow (`.github/workflows/bench.yml`) runs it in its PII-off job and uploads the result with the compare result.
+
 ## Why a separate script
 
 Worker mode is browser-only: `@redact-secret/vault/worker` talks to `/worker/host` over a real dedicated `Worker`, and Node's `worker_threads` is not a supported port. The harness runs metrics in-process in Node.js, so this is not a `bench/metrics/` file and is not part of `bench`, `bench:smoke`, or `bench:compare`. It writes the same `redact-secret-vault/bench-result@1` result (kind `run`, metric id `mode-worker`) through the harness's `writeResult`, so it is schema-validated and leak-checked. Default output: `.bench-results/worker-boundary-<time>.json`.

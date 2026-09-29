@@ -1,6 +1,6 @@
 # Vault performance measurement
 
-Status: **current** for the harness, corpus, and result schema ([#75](https://github.com/redact-secret/redact-secret-vault/issues/75)), the A/B runner ([#76](https://github.com/redact-secret/redact-secret-vault/issues/76)), and every metric below (B3–B8, [#77](https://github.com/redact-secret/redact-secret-vault/issues/77)–[#82](https://github.com/redact-secret/redact-secret-vault/issues/82)). The plan is tracked in the epic [#74](https://github.com/redact-secret/redact-secret-vault/issues/74).
+Status: **current** for the harness, corpus, and result schema ([#75](https://github.com/redact-secret/redact-secret-vault/issues/75)), the A/B runner ([#76](https://github.com/redact-secret/redact-secret-vault/issues/76)), every metric below (B3–B8, [#77](https://github.com/redact-secret/redact-secret-vault/issues/77)–[#82](https://github.com/redact-secret/redact-secret-vault/issues/82)), and the CI workflow and per-release archive ([#83](https://github.com/redact-secret/redact-secret-vault/issues/83)). The plan is tracked in the epic [#74](https://github.com/redact-secret/redact-secret-vault/issues/74).
 
 This measures **vault overhead**: capture, restore, lifecycle, mode boundaries, memory, and distribution cost. Detection accuracy and detector speed belong to [redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks), not here.
 
@@ -71,7 +71,7 @@ A deterministic measurement (sizes, heap figures, slopes, per-call ratios, singl
 | off | 8.5 min | `worst-case` 298 s (4 rounds), `entry-scaling` 62 s, `mode-server` 48 s, `op-latency` 26 s, `entry-memory` 24 s (3 rounds), `cold-init-browser` 23 s, `cold-init` 19 s, `mode-python` 7 s (candidate only, then skipped), `dist-size` 2 s (1 round) |
 | on | 1.3 min | `cold-init-browser` 26 s, `op-latency` 26 s, `cold-init` 21 s, `dist-size` 2 s; the PII-off-only metrics are skipped |
 
-The same PII-off comparison with every round of every metric and the extended shapes added up to about 24 minutes on a similarly loaded machine (from the per-metric figures in `metrics/*.md`: `worst-case` alone 17.4 min, `entry-scaling` 3.5 min, `entry-memory` 90 s). Run as one job per PII mode in parallel, the PII-off job sets the length. The extended tier adds roughly 20 × 6 s for `entry-scaling` at 100 000 entries, 8 × 13 s for `worst-case`'s full-size worst capture, and two single ceiling samples per side of about 10 s each.
+The same PII-off comparison with every round of every metric and the extended shapes added up to about 24 minutes on a similarly loaded machine (from the per-metric figures in `metrics/*.md`: `worst-case` alone 17.4 min, `entry-scaling` 3.5 min, `entry-memory` 90 s). The `bench` workflow runs the two PII modes as parallel jobs, so its length is the PII-off job: about 8.5 minutes of measuring here, which should stay well inside 15 minutes on `ubuntu-latest` including `npm ci` and the Chromium install. Each CI log carries the per-metric times, so a metric that grows past the budget shows up there. The extended tier adds roughly 20 × 6 s for `entry-scaling` at 100 000 entries, 8 × 13 s for `worst-case`'s full-size worst capture, and two single ceiling samples per side of about 10 s each.
 
 **Verdicts.**
 
@@ -199,13 +199,31 @@ Two kinds of input are allowed, and each is versioned by what defines it:
 
 Use a corpus item when an input is small and shared; generate it when it is large, sized from the packages' limits, or used by one metric only.
 
+## CI and the per-release archive
+
+Status: **current** ([#83](https://github.com/redact-secret/redact-secret-vault/issues/83)).
+
+`.github/workflows/bench.yml` runs `bench:compare` against the default baseline (`bench/baseline.json`) in the **standard tier**, one job per PII mode, on `ubuntu-latest` with Node.js 22 and Playwright's Chromium. It runs on every `v<version>` tag push (next to `release.yml`, against the tagged commit) and by hand with `workflow_dispatch`, whose inputs choose the baseline version, the PII mode (`both`, `off`, `on`), and the tier. It is not part of the `ci` workflow and not a required check. A job fails on a gating `fail` verdict or a failed metric; warnings are printed and do not fail it. Each job uploads its result JSON as `bench-pii-<mode>` (the PII-off job also carries the `bench:worker` result), and an `archive` job builds the release archive from both compare results and uploads it as `bench-archive`.
+
+**The archive.** Every release commits `docs/research/perf/<version>.json` (schema `redact-secret-vault/bench-archive@1`): the release's compare results against the previous release, one per PII mode, each a complete `bench-result@1`, plus a summary per mode (tier, corpus, runner, Node.js, rounds, and gating warn and fail counts). `bench/archive.mjs` (`npm run bench:archive -- <compare results>...`) builds it. It accepts only full (not quick) compare results of a clean workspace commit against a published baseline, run on GitHub Actions (`--allow-local` overrides that rule), all naming the same commit, candidate version, baseline version, and corpus. It refuses an A/A run (candidate version equal to the baseline), validates and leak-checks the archive, and does not overwrite an existing file without `--force`. `bench/test/archive.test.mjs` validates every committed archive.
+
+Procedure (also in [RELEASING.md](../../../RELEASING.md)):
+
+1. When the `v<version>` tag's `bench` run finishes, download its `bench-archive` artifact (`gh run download <run-id> -n bench-archive`) and commit the `<version>.json` in it to `docs/research/perf/`. Equivalently, download the `bench-pii-*` artifacts and run `npm run bench:archive -- compare-pii-off.json compare-pii-on.json`.
+2. Link the file from the release's qualification record and the GitHub pre-release notes. Every gating `warn` in its summary is explained there. A `fail` blocks the release unless the change is deliberate and explained.
+3. After the release is published, bump `bench/baseline.json` to the version just released, so the next release is compared against it.
+
+No archive exists for versions released before #83, and none is written for an unreleased version or an A/A comparison. Absolute figures in an archive are comparable only with figures in the same archive; quote any figure with its PII mode, corpus version, tier, and runner.
+
 ## Files
 
 | Path | Role |
 | --- | --- |
 | `bench/run.mjs` | One side (the workspace build), one PII mode, writes a result |
 | `bench/compare.mjs`, `bench/lib/compare.mjs` | Interleaved A/B, per-round aggregation, ratios, CI, verdicts |
+| `bench/archive.mjs`, `bench/lib/archive.mjs` | The per-release archive `docs/research/perf/<version>.json` |
 | `bench/browser/worker-boundary.mjs` | `mode-worker` in Chromium (`npm run bench:worker`) |
+| `.github/workflows/bench.yml` | Release-tag and on-demand compare in CI, result artifacts, archive |
 | `bench/lib/published.mjs`, `bench/baseline.json` | Installing a published baseline into `.bench-cache/`; the default baseline version |
 | `bench/lib/timing.mjs` | `process.hrtime.bigint()` timing, warmup, fixed iterations, paired sampling |
 | `bench/lib/stats.mjs` | Percentiles and the bootstrap CI for ratios |

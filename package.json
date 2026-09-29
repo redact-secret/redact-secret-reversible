@@ -21,7 +21,8 @@
     "bench:smoke": "npm run build && node bench/run.mjs --quick",
     "bench:compare": "npm run build && node bench/compare.mjs",
     "bench:compare:smoke": "npm run build && node bench/compare.mjs --quick",
-    "bench:worker": "npm run build && node bench/browser/worker-boundary.mjs"
+    "bench:worker": "npm run build && node bench/browser/worker-boundary.mjs",
+    "bench:archive": "node bench/archive.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
