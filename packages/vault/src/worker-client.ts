@@ -206,8 +206,7 @@ export function createWorkerVault(worker: VaultWorkerPort, options: CreateWorker
     function send<T>(build: (id: string) => VaultWorkerRequest): Promise<T> {
       if (disposed) return Promise.reject(new VaultError("DISPOSED"));
       if (terminated) return Promise.reject(new VaultError("WORKER_UNAVAILABLE"));
-      nextId += 1;
-      const id = `wreq_${nextId}`;
+      const id = `wreq_${++nextId}`;
       // May throw synchronously (e.g. INVALID_ARGUMENT) before anything is sent.
       const request = build(id);
       return new Promise<T>((resolve, reject) => {
