@@ -16,7 +16,7 @@ Each case is paired with the core's own scan and redact of the same input, as in
 | --- | --- | --- | --- | --- |
 | `capture.default.input-1MiB` | exactly `maxInputBytes` (1 MiB), 4 findings | 4 | 10 / 3 | overhead only |
 | `capture.default.findings-1024` | exactly `maxFindings` (1024) findings packed into 33 KiB | 256 (`maxEntries`, via `eligible`) | 30 / 5 | overhead only |
-| `capture.default.worst-1024f-1MiB` | 1024 findings spread through 1 MiB (quick: 128 KiB) | 256 | 3 / 2 | no |
+| `capture.default.worst-1024f-1MiB` | 1024 findings spread through 1 MiB (standard tier and quick: 128 KiB, named `worst-1024f-128KiB`) | 256 | 3 / 2 | no |
 
 The third shape is the slowest capture the defaults accept. The core's scan and redact each cost about a·bytes + b·findings·bytes, so the two edges together cost far more than either alone.
 
@@ -32,10 +32,10 @@ Rejected captures, one `vault.capture` that must fail with the named error:
 
 On a vault with `LIMIT_CEILINGS` for `maxInputBytes` (64 MiB), `maxFindings` (50 000), `maxEntries` (100 000), and `maxRetainedBytes` (64 MiB). One paired sample per side per process, reported as deterministic values `capture.ceiling.<shape>.ms`, `.core_ms`, `.vault_overhead_ms` (non-gating):
 
-- `input-64MiB` (quick: `input-4MiB`): exactly 64 MiB, 4 findings.
-- `findings-4096` (quick: `findings-2048`): packed into 132 KiB, all retained.
+- `input-64MiB` (standard tier and quick: `input-4MiB`): exactly 64 MiB, 4 findings.
+- `findings-4096` (standard tier and quick: `findings-2048`): packed into 132 KiB, all retained.
 
-`bench:compare` reads a deterministic value from round 0 only and needs every measurement in every round, so later rounds of the same side reuse the round-0 sample instead of paying for it again.
+Later rounds of the same side in one process reuse the round-0 sample instead of paying for it again, so `bench:compare`'s median over rounds of these values is the round-0 sample.
 
 The findings ceiling itself is not run: extrapolating from the model below, 50 000 findings take about a minute of core time in 1 MiB and about an hour in 64 MiB. Instead the run fits core_ms ≈ a·MiB + b·findings·MiB from the two default-limit shapes and reports:
 
@@ -77,6 +77,12 @@ Denial and committed restores gate in A/B; the max-size cases do not.
 With the default `revocationMemoryMs` (the entry TTL, 10 minutes), every revoked capture leaves a tombstone that every capture, restore, and revoke sweeps. `server.<op>.revoked-<n>` times one call with n tombstones alive, for n = 0, 1000, 10 000 (quick: 0, 250); `server.<op>.ms_per_1k_revoked` is the least-squares slope of the medians. All non-gating.
 
 The sweep cost depends on how many tombstones are alive, not on the memory length, so the level is held at exactly n with a rolling window on a fake clock: one revoke per 1 ms and `revocationMemoryMs` = n ms. With the default memory, n is the number of captures revoked in the last 10 minutes. The fill is n one-finding captures, each revoked. Timed captures are consumed by a restore (which leaves no tombstone) instead of revoked; each timed revoke first advances the clock one step, so the oldest tombstone ages out and the level is n − 1 before and n after. Every iteration checks `stats().revokedCaptures`. (The server's clock is monotonic, so the level cannot be held by moving time backwards.)
+
+## Tiers and compare rounds
+
+The full-size worst capture (about 13 s per call with its paired core sample) and the two ceiling samples (about 20 s) are too slow to repeat in every `bench:compare` round, so they run only in the extended tier (`npm run bench`'s default, or `--tier extended`). The standard tier (`bench:compare`'s default) uses the quick shapes for them: 1024 findings in 128 KiB, a 4 MiB input, and 2048 findings. Everything else is the same in both tiers. The model is fitted from whichever worst shape ran, so `capture.model.*` and the extrapolations are comparable only within one tier.
+
+The metric also sets `compareRounds = 4`: a standard-tier call still takes about 20 s on an Apple M4, and its heavy capture cases take several samples per call, so four interleaved rounds per side keep a full compare within a CI job.
 
 ## Input
 
@@ -130,7 +136,7 @@ vault-server revocation memory (p50):
 
 Slopes: 0.075 (capture), 0.071 (restore), 0.060 (revoke) ms per 1000 tombstones.
 
-Run time: `npm run bench -- --metrics worst-case` takes about 57 s in full mode (about 20 s of it the two ceiling samples) and 8 s in quick mode. A full `bench:compare -- --metrics worst-case` (10 rounds per side) took 17.4 minutes on the loaded machine. It was A/A-equivalent: identical vault code on both sides, all 63 comparisons `ok` or `improved`, 0 warn, 0 fail. The `improved` verdicts (ratios 0.77–0.89) came from load drift during the run.
+Run time: `npm run bench -- --metrics worst-case` takes about 57 s in full mode (extended tier; about 20 s of it the two ceiling samples) and 8 s in quick mode. A full `bench:compare -- --metrics worst-case` with the extended shapes and all 10 rounds per side took 17.4 minutes on the loaded machine, before the standard tier and `compareRounds = 4` existed. It was A/A-equivalent: identical vault code on both sides, all 63 comparisons `ok` or `improved`, 0 warn, 0 fail. The `improved` verdicts (ratios 0.77–0.89) came from load drift during the run.
 
 ## Findings
 

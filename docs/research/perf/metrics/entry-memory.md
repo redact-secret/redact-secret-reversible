@@ -31,9 +31,9 @@ Sizes: 256 (default `maxEntries`) and 10 000, in both full and quick mode.
 
 If more than 10% of the fill's heap growth is still live after `dispose()` and two full GCs at 10 000 entries, the metric fails. `npm run bench` then exits non-zero and `bench:compare` marks the comparison `fail`. At 10 000 entries the growth is about 3.3 MB, and after-GC noise is a few KiB, so 10% sits far above the noise and far below a real leak. A vault whose `dispose()` kept its entries would read about 1.0; this was checked by running a patched copy of the child that holds the vault's contents instead of disposing, which read 0.9996 (not committed). At 256 entries the growth is about 90 KiB and the same few KiB of noise are 5–10% of it, so the 256 dispose figure is reported without a threshold. The revoke path is informational: revoke-all leaves an empty but live vault, and the bounded-memory claim concerns `dispose()`.
 
-## Why deterministic, and the compare caveat
+## Why deterministic, and how compare aggregates it
 
-The result schema allows `unit: "ms"` only for latency samples, so these are deterministic-kind values in `bytes` and `ratio`. `bench:compare` compares deterministic values from round 0 only. The median over 7 cycles inside that one child is what makes a single round usable. Every round still runs `run()` (two children, about 4 s per call), so a full compare spends most of its time on rounds that are not compared.
+The result schema allows `unit: "ms"` only for latency samples, so these are deterministic-kind values in `bytes` and `ratio`. One call already reports the median over 7 cycles inside its child, so the metric sets `compareRounds = 3`: `bench:compare` runs it in three interleaved rounds per side (about 4 s per call) and compares the median of the three per-round values on each side. Earlier, all 10 rounds ran and only round 0 was compared.
 
 ## Reference figures
 
@@ -46,7 +46,7 @@ The result schema allows `unit: "ms"` only for latency samples, so these are det
 
 Each fill value is 20 bytes, so `retainedBytes` is 20 per entry, while the heap cost is about 330 bytes per entry. That covers the value, the token, the entry record, and its map and capture-set slots. `maxRetainedBytes` therefore bounds heap only up to a per-entry factor. For short values the heap is set by `maxEntries`, about 3.3 MB per 10 000 entries on this build. After `dispose()` more than 99.8% of the growth is reclaimed at 10 000 entries. The 256-entry remainder is the same absolute few KiB of noise.
 
-Run times on the same machine: `npm run bench -- --metrics entry-memory` about 4 s (quick about 2 s). `npm run bench:compare -- --metrics entry-memory` about 90 s at the default 10 rounds (quick about 18 s). The first compare adds the baseline install. In an A/A-equivalent compare against the published 0.1.0-alpha.3, all 8 comparisons were `ok`: 1.000 at 10 000 entries, and 0.82–1.02 on the noisy 256-entry reclaim ratios.
+Run times on the same machine: `npm run bench -- --metrics entry-memory` about 4 s (quick about 2 s). `npm run bench:compare -- --metrics entry-memory` about 90 s when it ran all 10 rounds; with `compareRounds = 3` about a third of that (quick about 18 s). The first compare adds the baseline install. In an A/A-equivalent compare against the published 0.1.0-alpha.3, all 8 comparisons were `ok`: 1.000 at 10 000 entries, and 0.82–1.02 on the noisy 256-entry reclaim ratios.
 
 ## Limits
 

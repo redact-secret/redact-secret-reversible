@@ -125,6 +125,19 @@ test("comparisons only appear in compare results and are shape-checked", () => {
   assert.match(validateResult(cmp).join(), /verdict/);
 });
 
+test("mode.tier and a metric's compare rounds are optional but checked", () => {
+  const r = sampleResult();
+  assert.deepEqual(validateResult(r), []);
+  r.mode.tier = "standard";
+  r.metrics[0].rounds = 3;
+  assert.deepEqual(validateResult(r), []);
+  r.mode.tier = "huge";
+  r.metrics[0].rounds = 0;
+  const errors = validateResult(r).join();
+  assert.match(errors, /mode\.tier/);
+  assert.match(errors, /rounds must be a positive integer/);
+});
+
 test("the leak guard flags corpus values and token markers without echoing them", () => {
   const secret = "SYNTHETICxREVOKED-example";
   const reasons = findLeaks(`{"x":"<rsv_abc>","y":"${secret}"}`, [secret]);

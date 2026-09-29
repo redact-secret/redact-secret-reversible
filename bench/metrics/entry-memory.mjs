@@ -70,6 +70,13 @@ export const issue = 80;
 export const title = "Heap per retained entry and reclaim after revoke and dispose";
 export const piiModes = ["off"];
 
+/**
+ * Each call already reports a median over REPEATS cycles in its own child, so
+ * bench:compare runs three rounds (the median of three medians) instead of
+ * every round at about 4 s per call.
+ */
+export const compareRounds = 3;
+
 export const SIZES = Object.freeze([256, 10_000]);
 export const REPEATS = Object.freeze({ full: 7, quick: 3 });
 /** Largest unreclaimed share of the fill's heap growth after dispose() (10 000 entries). */

@@ -31,6 +31,10 @@
 //    it again (the value is identical by construction).
 //    - `input-64MiB`: exactly 64 MiB, four findings.
 //    - `findings-4096`: 4096 findings packed into 132 KiB, all retained.
+//    The standard tier (bench:compare's default) uses the quick shapes here,
+//    `input-4MiB` and `findings-2048`, and the quick worst-case shape
+//    (1024 findings in 128 KiB) in section 1: the full shapes cost about
+//    20 s and 13 s per side per call. `--tier extended` restores them.
 //    The findings ceiling itself (50 000) is not run: at ~1.2 ms per
 //    finding·MiB for the core it would take minutes to hours. Instead the
 //    run fits core_ms ≈ a·MiB + b·findings·MiB from the default-limit cases
@@ -92,6 +96,12 @@ export const id = "worst-case";
 export const issue = 81;
 export const title = "Worst-case cost at configured limits and on denial";
 export const piiModes = ["off"];
+/**
+ * bench:compare rounds. One call takes about 20 s (standard tier, Apple M4),
+ * and the heavy capture cases already sample several times per call, so four
+ * interleaved rounds per side keep a full compare inside a CI job.
+ */
+export const compareRounds = 4;
 
 const SINK = "bench-sink";
 const PURPOSE = "bench-purpose";
@@ -113,9 +123,10 @@ const COUNTS = Object.freeze({
   denial: { full: [500, 100], quick: [50, 10] },
 });
 
-/** Shapes that differ between full and quick mode. */
+/** Shapes that differ between full (extended or standard tier) and quick mode. */
 const SHAPES = Object.freeze({
-  full: { worst: { findings: 1024, bytes: MIB }, ceilingInput: 64 * MIB, ceilingFindings: 4096, revoked: [0, 1000, 10_000] },
+  extended: { worst: { findings: 1024, bytes: MIB }, ceilingInput: 64 * MIB, ceilingFindings: 4096, revoked: [0, 1000, 10_000] },
+  standard: { worst: { findings: 1024, bytes: 128 * 1024 }, ceilingInput: 4 * MIB, ceilingFindings: 2048, revoked: [0, 1000, 10_000] },
   quick: { worst: { findings: 1024, bytes: 128 * 1024 }, ceilingInput: 4 * MIB, ceilingFindings: 2048, revoked: [0, 250] },
 });
 /** Iteration share per revoked-capture fill level. */
@@ -372,7 +383,7 @@ async function sampleCeilings(ctx, shapes) {
 }
 
 async function measureCeilings(ctx, shapes, model) {
-  const key = `${ctx.side.label}/${ctx.pii.mode}/${ctx.quick}`;
+  const key = `${ctx.side.label}/${ctx.pii.mode}/${ctx.quick}/${ctx.tier}`;
   if (ctx.round === 0 || !ceilingCache.has(key)) ceilingCache.set(key, await sampleCeilings(ctx, shapes));
   const cases = ceilingCache.get(key);
   const raw = [];
@@ -876,7 +887,7 @@ async function measureRevocationMemory(ctx, sizes) {
 }
 
 export async function run(ctx) {
-  const shapes = SHAPES[ctx.quick ? "quick" : "full"];
+  const shapes = SHAPES[ctx.quick ? "quick" : ctx.tier];
   const defaults = await measureDefaultCaptures(ctx, shapes);
   const raw = [...defaults.raw];
   raw.push(...(await measureCeilings(ctx, shapes, defaults.model)));

@@ -25,8 +25,9 @@
 // few percent per release unnoticed. Minified bytes and file counts track the
 // same growth as the gated figures and are informational.
 //
-// Everything is measured once per side per process and cached, so the A/B
-// runner's rounds reuse it. PII mode does not change sizes; the metric runs in
+// Everything is measured once per side per process and cached, and byte
+// counts do not vary, so the A/B runner runs one round (`compareRounds`).
+// Later rounds would only return the cached figures. PII mode does not change sizes; the metric runs in
 // both so either mode's job carries the gate.
 
 import { writeFileSync } from "node:fs";
@@ -38,6 +39,8 @@ import { B8_WORK_DIR, ensureDir, packInfo, sideDirs, sideKey } from "./support/d
 export const id = "dist-size";
 export const issue = 82;
 export const title = "Distribution size: npm tarball, unpacked, and browser bundle";
+
+export const compareRounds = 1;
 
 export const MAX_RATIO = 1.1;
 const GATE = Object.freeze({ maxRatio: MAX_RATIO });

@@ -2,16 +2,18 @@
 
 import { parseArgs } from "node:util";
 
-import { DEFAULT_SETTINGS } from "./harness.mjs";
+import { DEFAULT_SETTINGS, TIERS } from "./harness.mjs";
 import { PII_SELECTORS } from "./sides.mjs";
 
-export function parseCommonArgs(argv, extra = {}) {
+/** `defaultTier`: "extended" for bench/run.mjs, "standard" for bench/compare.mjs. */
+export function parseCommonArgs(argv, extra = {}, { defaultTier = "extended" } = {}) {
   const { values } = parseArgs({
     args: argv,
     options: {
       metrics: { type: "string" },
       quick: { type: "boolean", default: false },
       pii: { type: "string", default: "off" },
+      tier: { type: "string", default: defaultTier },
       out: { type: "string" },
       iterations: { type: "string" },
       warmup: { type: "string" },
@@ -21,6 +23,7 @@ export function parseCommonArgs(argv, extra = {}) {
     strict: true,
   });
   if (!(values.pii in PII_SELECTORS)) throw new Error(`--pii must be one of ${Object.keys(PII_SELECTORS).join(", ")}`);
+  if (!TIERS.includes(values.tier)) throw new Error(`--tier must be one of ${TIERS.join(", ")}`);
   const settings = { ...(values.quick ? DEFAULT_SETTINGS.quick : DEFAULT_SETTINGS.full) };
   for (const key of ["iterations", "warmup", "rounds"]) {
     if (values[key] === undefined) continue;

@@ -7,8 +7,10 @@
 // optimization baseline: a later change is judged by the reported slope.
 //
 // Sizes (retained entries at the time of the operation): 256 (the default
-// `maxEntries`), 10 000, and 100 000 (`LIMIT_CEILINGS.maxEntries`); quick
-// mode uses 256 and 2048. For each size, one vault with `maxEntries` = size
+// `maxEntries`), 10 000, and, in the extended tier only, 100 000
+// (`LIMIT_CEILINGS.maxEntries`); quick mode uses 256 and 2048. The 100 000
+// fill costs seconds per call, so bench:compare (standard tier by default)
+// leaves it out; `--tier extended` or `npm run bench` includes it. For each size, one vault with `maxEntries` = size
 // is filled once, untimed, to size − 4 entries, and then every timed
 // operation runs against that fill:
 //
@@ -49,7 +51,8 @@ export const title = "Scaling of capture and restore by retained entry count";
 export const piiModes = ["off"];
 
 const SINK = "bench-sink";
-const FULL_SIZES = Object.freeze([256, 10_000, 100_000]);
+const EXTENDED_SIZES = Object.freeze([256, 10_000, 100_000]);
+const STANDARD_SIZES = Object.freeze([256, 10_000]);
 const QUICK_SIZES = Object.freeze([256, 2048]);
 /** Fraction of ctx.iterations / ctx.warmup run at a size. */
 const ITERATION_SHARE = Object.freeze({ 256: 1, 2048: 0.5, 10000: 0.3, 100000: 0.1 });
@@ -229,7 +232,7 @@ function slopeMeasurements(prefix, sizes, medians) {
 }
 
 export async function run(ctx) {
-  const sizes = ctx.quick ? QUICK_SIZES : FULL_SIZES;
+  const sizes = ctx.quick ? QUICK_SIZES : ctx.tier === "extended" ? EXTENDED_SIZES : STANDARD_SIZES;
   const opEntries = ctx.corpus.items.capture1k.findings.piiOff;
   const raw = [];
   const overheadMedians = [];

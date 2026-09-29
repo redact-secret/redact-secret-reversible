@@ -17,7 +17,7 @@ Status: **current** with PII off. Tracking issue: [#78](https://github.com/redac
 | `capture.vault_overhead_ms.ms_per_1k_entries`, `restore.ms_per_1k_entries` | Least-squares slope of the per-size p50 against n, in ms per 1000 entries | no (informational) |
 | `capture.vault_overhead_ms.loglog_exponent`, `restore.loglog_exponent` | log(p50 ratio) ÷ log(n ratio) between the two largest sizes; ≈1 is O(n), ≈0 is flat | no (informational) |
 
-Sizes: 256 (default `maxEntries`), 10 000, and 100 000 (`LIMIT_CEILINGS.maxEntries`). Quick mode: 256 and 2048. Each size uses its own vault with `maxEntries` = n and `maxRetainedBytes` at its ceiling; other limits are defaults.
+Sizes: 256 (default `maxEntries`), 10 000, and, in the extended tier only, 100 000 (`LIMIT_CEILINGS.maxEntries`). Quick mode: 256 and 2048. `npm run bench` runs the extended tier by default; `bench:compare` runs the standard tier (256 and 10 000) unless given `--tier extended`, because the 100 000-entry fill and its iterations cost about 6 s per call. In the standard tier the log-log exponent is taken between 256 and 10 000, where the fixed cost still weighs in, so it reads lower than the extended tier's; compare it only within one tier. Each size uses its own vault with `maxEntries` = n and `maxRetainedBytes` at its ceiling; other limits are defaults.
 
 Iterations per size are a share of the run's counts: 1, 0.3, and 0.1 of `--iterations`/`--warmup` for 256, 10 000, and 100 000 (quick: 1 and 0.5), with at least 10 iterations. Full mode is 1000/300/100 iterations.
 
@@ -41,9 +41,9 @@ The fill is built once per size per `run()` from captures of 250 values each. Fi
 
 Slopes: capture overhead 0.044 ms per 1000 entries, restore 0.074 ms per 1000 entries; log-log exponents between 10 000 and 100 000 of 1.39 (capture overhead) and 1.48 (restore). The cost is at least linear in retained entries, confirming the sweep is the per-operation O(n) term; the exponent above 1 at 100 000 is consistent with the sweep's per-call copy of the whole map (allocation and GC pressure grow with it). Absolute figures are only comparable within one result file.
 
-The whole metric takes about 8 seconds in full mode with `npm run bench -- --metrics entry-scaling`, most of it the 100 000-entry fill and its 100 iterations. `bench:compare` runs it once per round per side (20 times at the default 10 rounds), so a full compare of this metric alone took 3.5 minutes on the same machine (all 16 comparisons `ok` in an A/A-equivalent run against 0.1.0-alpha.3).
+The whole metric takes about 8 seconds in full mode with `npm run bench -- --metrics entry-scaling` (extended tier), most of it the 100 000-entry fill and its 100 iterations; the standard tier takes about 2 seconds. `bench:compare` runs it once per round per side (20 times at the default 10 rounds): in the extended tier a full compare of this metric alone took 3.5 minutes on the same machine (all 16 comparisons `ok` in an A/A-equivalent run against 0.1.0-alpha.3).
 
 ## Limits
 
-- In `bench:compare`, a deterministic measurement is compared from each side's first round only, so the slope ratios there are single-round figures (0.81–0.95 in the run above, with identical vault code on both sides). Judge a change by the per-size `vault_overhead_ms` and `restore` ratios, which pool all rounds, and by the slopes of a full `npm run bench` on each side. Pooling slopes across rounds would need a change to `bench/lib/compare.mjs`.
+- In `bench:compare`, the slopes and exponents are deterministic values: each side's figure is the median of its per-round values. Earlier only round 0 was compared, and the slope ratios were single-round figures (0.81–0.95 in the run above, with identical vault code on both sides); an A/A-equivalent standard-tier compare with the median read 0.98–1.02. The per-size `vault_overhead_ms` and `restore` ratios, which pool every round's samples with a bootstrap CI, remain the gating signal.
 - PII on is not measured: the operations use `capture1k` as in B3.

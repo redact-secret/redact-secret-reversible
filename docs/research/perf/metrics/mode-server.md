@@ -12,7 +12,7 @@ Each iteration runs the same operation on a plain `createVault()` vault and on a
 | `restore.vault` / `restore.server` | one restore of 64 fields, one token occurrence each | `restore64` over a fresh `capture1k` capture |
 | `revoke.vault` / `revoke.server` | revoke of a 4-entry capture | `capture1k` |
 | `<op>.boundary_ms` | `server − vault` of the same iteration | |
-| `<op>.ratio` | p50 server ÷ p50 vault (deterministic, per side and round) | |
+| `<op>.ratio` | p50 server ÷ p50 vault (deterministic, per side and round; `bench:compare` reports the median over rounds) | |
 
 The server's resolver returns a constant principal and its policy always allows, so `boundary_ms` is the server's own floor: the FIFO queue hop, principal resolution, one policy call per token occurrence (each raced against its timeout), and the metadata shadow checks. An application's own resolver and policy cost comes on top.
 

@@ -3,7 +3,8 @@
 Status: **current**, PII off, Chromium only. File: `bench/browser/worker-boundary.mjs`.
 
 ```bash
-npm run build && node bench/browser/worker-boundary.mjs [--quick] [--out file] [--iterations N] [--warmup N]
+npm run bench:worker -- [--quick] [--out file] [--iterations N] [--warmup N]
+# same as: npm run build && node bench/browser/worker-boundary.mjs ...
 ```
 
 ## Why a separate script

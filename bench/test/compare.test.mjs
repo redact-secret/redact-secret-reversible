@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { compareMetric } from "../compare.mjs";
 import { loadCorpus } from "../corpus/v1/index.mjs";
-import { compareMeasurement, deterministicVerdict, latencyVerdict, WARN_RATIO } from "../lib/compare.mjs";
+import { aggregateRounds, compareMeasurement, deterministicVerdict, latencyVerdict, WARN_RATIO } from "../lib/compare.mjs";
 import { discoverMetrics } from "../lib/harness.mjs";
 import { assertExactVersion } from "../lib/published.mjs";
 import { mulberry32 } from "../lib/rng.mjs";
@@ -62,6 +62,25 @@ test("compareMeasurement flags a 30% latency regression and passes gating throug
   assert.equal(c.gating, false);
 });
 
+test("deterministic values are the median of every round, not round 0", () => {
+  const det = (value) => ({ name: "size", kind: "deterministic", unit: "bytes", value, threshold: { maxRatio: 1.1 } });
+  // Round 0 alone would read 5.0 and fail; the median of the rounds is 1.01.
+  const c = compareMeasurement({
+    metric: "m",
+    name: "size",
+    rounds: { candidate: [500, 101, 99, 101].map(det), baseline: [100, 100, 100, 100].map(det) },
+    labels: { candidate: "candidate", baseline: "baseline" },
+    seed: 1,
+  });
+  assert.equal(c.ratio, 1.01);
+  assert.equal(c.verdict, "ok");
+  assert.deepEqual([c.ci.lo, c.ci.hi], [1.01, 1.01]);
+  assert.equal(aggregateRounds([det(3), det(1), det(2)]).value, 2);
+  assert.deepEqual(aggregateRounds([det(3), det(1)]).threshold, { maxRatio: 1.1 });
+  const lat = (samples) => ({ name: "op", kind: "latency", unit: "ms", samples });
+  assert.deepEqual(aggregateRounds([lat([1, 2]), lat([3])]).samples, [1, 2, 3]);
+});
+
 test("baseline versions must be exact", () => {
   assert.equal(assertExactVersion("0.1.0-alpha.3", "v"), "0.1.0-alpha.3");
   for (const bad of ["^0.1.0", "latest", "0.1", "0.1.0 || 0.2.0", "alpha", "", undefined]) {
@@ -93,4 +112,34 @@ test("compareMetric interleaves rounds and reports both sides and a ratio per me
   assert.equal(comparisons.length, 1);
   assert.equal(comparisons[0].measurement, "roundtrip");
   assert.ok(comparisons[0].ratio > 0);
+});
+
+test("compareMetric runs a metric no more rounds than its compareRounds", async () => {
+  const candidate = await activateSide(await loadWorkspaceSide({ label: "candidate" }), "off");
+  const baseline = { ...candidate, label: "baseline" };
+  const [fixture] = await discoverMetrics({ dir: FIXTURES, only: ["fixture-roundtrip"] });
+  const tiers = [];
+  const metric = {
+    ...fixture,
+    compareRounds: 2,
+    run: (ctx) => {
+      tiers.push(ctx.tier);
+      return fixture.run(ctx);
+    },
+  };
+  const { entry } = await compareMetric(metric, {
+    sides: [candidate, baseline],
+    corpus: loadCorpus(),
+    piiMode: "off",
+    settings: { iterations: 5, warmup: 1 },
+    quick: true,
+    rounds: 5,
+  });
+  assert.equal(entry.status, "ok");
+  assert.equal(entry.rounds, 2);
+  assert.deepEqual(
+    entry.measurements.map((m) => m.n),
+    [10, 10],
+  );
+  assert.deepEqual(tiers, ["standard", "standard", "standard", "standard"]);
 });

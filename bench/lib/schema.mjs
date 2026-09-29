@@ -7,12 +7,13 @@
 //   schema: "redact-secret-vault/bench-result@1",
 //   kind: "run" | "compare",
 //   createdAt: ISO-8601 string,
-//   mode: { pii: "off" | "on", quick, iterations, warmup, rounds: int | null },
+//   mode: { pii: "off" | "on", quick, tier?: "standard" | "extended", iterations, warmup, rounds: int | null },
 //   corpus: { version: "corpus-vN", sha256 },
 //   environment: { node, v8, platform, arch, osRelease, cpuModel, cpuCount, totalMemoryBytes, runner },
 //   sides: [{ label, source: "workspace" | "npm", gitSha?, piiActivation: string | null,
 //             vault: Pkg, vaultServer: Pkg | null, core: Pkg & { artifact: string | null } }],
 //   metrics: [{ id, issue, title, status: "ok" | "skipped" | "failed", reason?,
+//               rounds?: int,            // kind "compare": rounds this metric ran
 //               measurements: [Latency | Deterministic] }],
 //   comparisons?: [Comparison]            // kind "compare" only
 // }
@@ -22,6 +23,11 @@
 // Comparison  = { metric, measurement, kind, unit, candidate, baseline, ratio: number | null,
 //                 ci: { lo, hi, level } (numbers or null), verdict, gating: boolean, rule }
 //
+// In a compare result, a latency measurement pools every round's samples and
+// a deterministic one carries the median of its per-round values. `tier` and
+// `rounds` are optional so results written before they existed stay valid; a
+// result without `tier` ran what is now the extended tier.
+//
 // `params` values are numbers, booleans, or strings of at most 80 characters
 // (input sizes, counts, labels) — never inputs or outputs.
 
@@ -30,6 +36,7 @@ export const RESULT_SCHEMA = "redact-secret-vault/bench-result@1";
 export const PII_MODES = Object.freeze(["off", "on"]);
 export const METRIC_STATUSES = Object.freeze(["ok", "skipped", "failed"]);
 export const VERDICTS = Object.freeze(["ok", "warn", "improved", "fail", "inconclusive"]);
+export const RESULT_TIERS = Object.freeze(["standard", "extended"]);
 
 const LATENCY_KEYS = new Set(["name", "side", "kind", "unit", "n", "p50", "p95", "p99", "mean", "min", "max", "params"]);
 const DETERMINISTIC_KEYS = new Set(["name", "side", "kind", "unit", "value", "threshold", "params"]);
@@ -153,6 +160,7 @@ export function validateResult(result) {
   else {
     if (!PII_MODES.includes(mode.pii)) errors.push(`mode.pii must be one of ${PII_MODES.join(", ")}`);
     if (typeof mode.quick !== "boolean") errors.push("mode.quick must be a boolean");
+    if (mode.tier !== undefined && !RESULT_TIERS.includes(mode.tier)) errors.push(`mode.tier must be one of ${RESULT_TIERS.join(", ")}`);
     if (!(Number.isInteger(mode.iterations) && mode.iterations > 0)) errors.push("mode.iterations must be a positive integer");
     if (!isCount(mode.warmup)) errors.push("mode.warmup must be a non-negative integer");
     if (!(mode.rounds === null || (Number.isInteger(mode.rounds) && mode.rounds > 0))) {
@@ -216,6 +224,9 @@ export function validateResult(result) {
       if (!METRIC_STATUSES.includes(metric.status)) errors.push(`${where}.status must be one of ${METRIC_STATUSES.join(", ")}`);
       if (metric.reason !== undefined && !(typeof metric.reason === "string" && metric.reason.length <= MAX_PARAM_STRING)) {
         errors.push(`${where}.reason must be a short string`);
+      }
+      if (metric.rounds !== undefined && !(Number.isInteger(metric.rounds) && metric.rounds > 0)) {
+        errors.push(`${where}.rounds must be a positive integer when present`);
       }
       if (!Array.isArray(metric.measurements)) errors.push(`${where}.measurements must be an array`);
       else {

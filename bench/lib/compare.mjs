@@ -10,7 +10,7 @@
 // which moves with the pinned core, not the vault) is still compared and
 // reported, but its verdict does not count toward the job's outcome.
 
-import { bootstrapRatio } from "./stats.mjs";
+import { bootstrapRatio, median } from "./stats.mjs";
 
 export const WARN_RATIO = 1.1;
 export const CI_LEVEL = 0.95;
@@ -42,6 +42,17 @@ export function deterministicVerdict(candidate, baseline, threshold) {
 }
 
 /**
+ * One side's rounds of a measurement as one raw measurement: latency samples
+ * pooled, a deterministic value replaced by the median of the rounds' values
+ * (so one noisy round cannot decide a ratio). Everything else is round 0's.
+ */
+export function aggregateRounds(rawRounds) {
+  const first = rawRounds[0];
+  if (first.kind === "latency") return { ...first, samples: rawRounds.flatMap((m) => m.samples) };
+  return { ...first, value: median(rawRounds.map((m) => m.value)) };
+}
+
+/**
  * Builds one comparison from the per-round raw measurements of both sides.
  * `rounds.candidate[r]` / `rounds.baseline[r]` are that round's raw
  * measurement objects for this name.
@@ -65,8 +76,8 @@ export function compareMeasurement({ metric, name, rounds, labels, seed }) {
       rule: LATENCY_RULE,
     };
   }
-  const candidate = rounds.candidate[0].value;
-  const baseline = rounds.baseline[0].value;
+  const candidate = aggregateRounds(rounds.candidate).value;
+  const baseline = aggregateRounds(rounds.baseline).value;
   const { ratio, verdict, rule } = deterministicVerdict(candidate, baseline, first.threshold);
   return { ...common, ratio, ci: { lo: ratio, hi: ratio, level: CI_LEVEL }, verdict, gating, rule };
 }

@@ -35,7 +35,7 @@ All are deterministic byte (or file) counts. `<pkg>` is `vault` or `vault-server
 
 ## Runtime
 
-Measured once per side per process and cached; the A/B runner's rounds reuse the figures. Two `npm pack --dry-run` calls per package side (about 0.4 s each) and one Vite build (about 0.1 s). A full `bench:compare` of the B8 metrics takes about 36 s on an Apple M4, almost all of it `cold-init` and `cold-init-browser`.
+Measured once per side per process and cached, and the metric sets `compareRounds = 1`: byte counts are identical in every round, so `bench:compare` runs it once per side. Two `npm pack --dry-run` calls per package side (about 0.4 s each) and one Vite build (about 0.1 s). A full `bench:compare` of the B8 metrics takes about 36 s on an Apple M4, almost all of it `cold-init` and `cold-init-browser`.
 
 ## Figures
 

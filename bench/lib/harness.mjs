@@ -7,6 +7,7 @@
 //   export const issue = 77;           // tracking issue number
 //   export const title = "...";
 //   export const piiModes = ["off"];   // optional; default ["off", "on"]
+//   export const compareRounds = 3;    // optional; cap on bench:compare rounds
 //   export async function run(ctx) { return [RawMeasurement, ...]; }
 //
 //   RawMeasurement =
@@ -18,7 +19,16 @@
 //   measurement fail: `max` on the value (run and compare), `maxRatio` on
 //   candidate÷baseline (compare).
 //
-// run(ctx) must be repeatable: compare.mjs calls it once per round per side.
+// run(ctx) must be repeatable: compare.mjs calls it once per round per side,
+// for at most `compareRounds` rounds (default: every round). A metric whose
+// values are deterministic or already aggregated inside one call (a median
+// over child processes, a byte count) sets a small cap so a full compare does
+// not repeat expensive work that adds no information.
+//
+// `ctx.tier` is "standard" or "extended". Shapes that are too slow to repeat
+// in every compare round (inputs at the configured ceilings, 100 000
+// retained entries) run only in the extended tier; bench:compare defaults to
+// standard, bench/run.mjs to extended.
 // It creates and disposes its own vaults, never passes `pii` to createVault
 // (the harness owns activation), and returns numbers only: raw samples are
 // summarized by the harness and never written to results.
@@ -30,7 +40,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { SENSITIVE_VALUES } from "../corpus/v1/index.mjs";
 import { assertNoLeaks } from "./leak-guard.mjs";
-import { RESULT_SCHEMA, validateResult } from "./schema.mjs";
+import { RESULT_SCHEMA, RESULT_TIERS, validateResult } from "./schema.mjs";
 import { summarize } from "./stats.mjs";
 import { sample, samplePaired } from "./timing.mjs";
 
@@ -41,6 +51,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   full: Object.freeze({ iterations: 1000, warmup: 200, rounds: 10 }),
   quick: Object.freeze({ iterations: 50, warmup: 10, rounds: 4 }),
 });
+
+/** Measurement tiers; see the contract above. */
+export const TIERS = RESULT_TIERS;
 
 /** Thrown by `ctx.skip(reason)`: the metric does not apply to this side or mode. */
 export class SkipMetric extends Error {
@@ -61,12 +74,16 @@ function checkMetricModule(module, file) {
   if (module.piiModes !== undefined && !(Array.isArray(module.piiModes) && module.piiModes.every((m) => m === "off" || m === "on"))) {
     problems.push('piiModes must be an array of "off" | "on"');
   }
+  if (module.compareRounds !== undefined && !(Number.isInteger(module.compareRounds) && module.compareRounds > 0)) {
+    problems.push("compareRounds must be a positive integer");
+  }
   if (problems.length > 0) throw new Error(`invalid metric ${file}: ${problems.join("; ")}`);
   return {
     id: module.id,
     issue: module.issue,
     title: module.title,
     piiModes: module.piiModes ?? ["off", "on"],
+    compareRounds: module.compareRounds,
     run: module.run,
   };
 }
@@ -95,7 +112,8 @@ export async function discoverMetrics({ dir = METRICS_DIR, only } = {}) {
 }
 
 /** The context a metric's run() receives for one side. */
-export function makeContext({ side, corpus, piiMode, settings, quick, round = 0 }) {
+export function makeContext({ side, corpus, piiMode, settings, quick, round = 0, tier = "extended" }) {
+  if (!TIERS.includes(tier)) throw new Error(`unknown tier ${tier}`);
   return Object.freeze({
     side: Object.freeze({ label: side.label, source: side.source, packages: side.packages, piiActivation: side.piiActivation }),
     vault: side.vault,
@@ -104,6 +122,7 @@ export function makeContext({ side, corpus, piiMode, settings, quick, round = 0 
     corpus,
     pii: Object.freeze({ mode: piiMode }),
     quick,
+    tier,
     iterations: settings.iterations,
     warmup: settings.warmup,
     round,
@@ -155,12 +174,12 @@ export function toResultMeasurement(raw, sideLabel) {
   return out;
 }
 
-export function newResult({ kind, piiMode, quick, settings, rounds = null, corpus, environment, sides }) {
+export function newResult({ kind, piiMode, quick, settings, rounds = null, tier = "extended", corpus, environment, sides }) {
   return {
     schema: RESULT_SCHEMA,
     kind,
     createdAt: new Date().toISOString(),
-    mode: { pii: piiMode, quick, iterations: settings.iterations, warmup: settings.warmup, rounds },
+    mode: { pii: piiMode, quick, tier, iterations: settings.iterations, warmup: settings.warmup, rounds },
     corpus: { version: corpus.version, sha256: corpus.sha256 },
     environment,
     sides,
@@ -185,7 +204,7 @@ const fmt = (ms) => (ms >= 1 ? ms.toFixed(3) : ms.toFixed(4));
 export function formatLine(result, metricId, m) {
   const side = result.sides.find((s) => s.label === m.side);
   const env = result.environment;
-  const tag = `[pii=${result.mode.pii} ${result.corpus.version} ${side.label} vault@${side.vault.version} core@${side.core.version}/${side.core.artifact} node@${env.node} ${env.platform}-${env.arch}${result.mode.quick ? " quick" : ""}]`;
+  const tag = `[pii=${result.mode.pii} ${result.corpus.version} ${side.label} vault@${side.vault.version} core@${side.core.version}/${side.core.artifact} node@${env.node} ${env.platform}-${env.arch}${result.mode.tier === "standard" ? " standard" : ""}${result.mode.quick ? " quick" : ""}]`;
   const figure =
     m.kind === "latency"
       ? `p50=${fmt(m.p50)}ms p95=${fmt(m.p95)}ms p99=${fmt(m.p99)}ms n=${m.n}`

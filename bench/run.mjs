@@ -3,7 +3,9 @@
 // writes a schema-valid result (#75).
 //
 //   node bench/run.mjs [--metrics a,b] [--quick] [--pii off|on] [--out file]
-//                      [--iterations N] [--warmup N]
+//                      [--iterations N] [--warmup N] [--tier standard|extended]
+//
+// The default tier here is extended (every shape); see bench/lib/harness.mjs.
 //
 // One process measures one PII mode: core activation is one-shot per process.
 
@@ -24,7 +26,8 @@ import {
 import { parseCommonArgs } from "./lib/cli.mjs";
 import { activateSide, describeSide, loadWorkspaceSide, REPO_ROOT } from "./lib/sides.mjs";
 
-const USAGE = "usage: node bench/run.mjs [--metrics a,b] [--quick] [--pii off|on] [--out file] [--iterations N] [--warmup N]";
+const USAGE =
+  "usage: node bench/run.mjs [--metrics a,b] [--quick] [--pii off|on] [--out file] [--iterations N] [--warmup N] [--tier standard|extended]";
 
 async function main() {
   const { values, settings, only } = parseCommonArgs(process.argv.slice(2));
@@ -42,6 +45,7 @@ async function main() {
     piiMode,
     quick: values.quick,
     settings,
+    tier: values.tier,
     corpus,
     environment: captureEnvironment(),
     sides: [describeSide(side)],
@@ -49,7 +53,7 @@ async function main() {
 
   let failed = 0;
   for (const metric of metrics) {
-    const ctx = makeContext({ side, corpus, piiMode, settings, quick: values.quick });
+    const ctx = makeContext({ side, corpus, piiMode, settings, quick: values.quick, tier: values.tier });
     const outcome = await runMetric(metric, ctx);
     const entry = { id: metric.id, issue: metric.issue, title: metric.title, status: outcome.status, measurements: [] };
     if (outcome.reason !== undefined) entry.reason = outcome.reason;
