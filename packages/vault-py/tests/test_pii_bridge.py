@@ -1,9 +1,9 @@
 """PII selection and activation identity through ``NodeCoreBridge`` (PII ADR §3).
 
-docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md,
+docs/decisions/decide-pii-retention-and-activation-ownership.md,
 §3 "Python bridge". Four layers:
 
-1. ``NodeCoreBridge`` against a faked subprocess: selector propagation,
+1. ``NodeCoreBridge`` against a faked bridge process: selector propagation,
    identity pinning, ``expected_pii_activation``, and strict response
    parsing. No Node.js needed.
 2. The real ``core_bridge.mjs`` against a fake ``@redact-secret/core``
@@ -70,26 +70,87 @@ def _ok(activation, findings=None, version=PINNED_CORE_VERSION) -> dict:
     }
 
 
-class FakeRun:
-    """Stands in for ``subprocess.run``: records each request payload and
-    replies with the next queued stdout."""
+class FakeBridge:
+    """Stands in for ``subprocess.Popen`` of the bridge script: every process
+    it starts records each request frame and answers with the next queued
+    response. A dict response gets the request's ``id``; a str is written
+    verbatim as the response line."""
 
     def __init__(self, *responses) -> None:
         self.responses = list(responses)
         self.requests: list[dict] = []
+        self.processes: list[FakeProcess] = []
 
-    def __call__(self, args, *, input, **_kwargs):
-        self.requests.append(json.loads(input))
-        reply = self.responses.pop(0)
-        stdout = reply if isinstance(reply, str) else json.dumps(reply)
-        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+    def __call__(self, args, **_kwargs):
+        process = FakeProcess(self, args)
+        self.processes.append(process)
+        return process
+
+
+class _FakeStdin:
+    def __init__(self, process: FakeProcess) -> None:
+        self._process = process
+        self._buffer = b""
+
+    def write(self, data: bytes) -> int:
+        self._buffer += data
+        return len(data)
+
+    def flush(self) -> None:
+        *lines, self._buffer = self._buffer.split(b"\n")
+        for line in lines:
+            self._process.answer(json.loads(line))
+
+    def close(self) -> None:
+        pass
+
+
+class _FakeStdout:
+    def __init__(self) -> None:
+        self.lines: list[bytes] = []
+
+    def readline(self, _limit: int = -1) -> bytes:
+        return self.lines.pop(0) if self.lines else b""
+
+    def close(self) -> None:
+        pass
+
+
+class FakeProcess:
+    _next_pid = 70000
+
+    def __init__(self, bridge: FakeBridge, args) -> None:
+        FakeProcess._next_pid += 1
+        self.pid = FakeProcess._next_pid
+        self.args = args
+        self.returncode = None
+        self._bridge = bridge
+        self.stdin = _FakeStdin(self)
+        self.stdout = _FakeStdout()
+
+    def answer(self, request: dict) -> None:
+        self._bridge.requests.append(request)
+        reply = self._bridge.responses.pop(0)
+        if isinstance(reply, str):
+            self.stdout.lines.append(reply.encode() + b"\n")
+        else:
+            self.stdout.lines.append(json.dumps({"id": request["id"], **reply}).encode() + b"\n")
+
+    def poll(self):
+        return self.returncode
+
+    def kill(self) -> None:
+        self.returncode = -9
+
+    def wait(self, timeout=None):
+        return self.returncode
 
 
 @pytest.fixture
 def fake_run(monkeypatch):
-    def install(*responses) -> FakeRun:
-        fake = FakeRun(*responses)
-        monkeypatch.setattr(core_client_module.subprocess, "run", fake)
+    def install(*responses) -> FakeBridge:
+        fake = FakeBridge(*responses)
+        monkeypatch.setattr(core_client_module.subprocess, "Popen", fake)
         return fake
 
     return install
@@ -99,7 +160,7 @@ def _bridge(**kwargs) -> NodeCoreBridge:
     return NodeCoreBridge(node_executable="node-fake-synthetic", **kwargs)
 
 
-# -- 1. NodeCoreBridge against a faked subprocess ------------------------------
+# -- 1. NodeCoreBridge against a faked bridge process ---------------------------
 
 
 def test_selectors_are_forwarded_verbatim_and_default_to_empty(fake_run):
@@ -317,10 +378,19 @@ def _fake_core_bridge(tmp_path: Path, source: str, **kwargs) -> NodeCoreBridge:
 
 
 def _raw_bridge(bridge: NodeCoreBridge, payload: str) -> dict:
+    """Sends one request line to a fresh bridge process and returns its one
+    response line; the process must then exit on its own."""
     proc = subprocess.run(
-        [bridge._node, str(bridge._script)], input=payload, capture_output=True, text=True, timeout=10, check=False
+        [bridge._node, str(bridge._script)],
+        input=payload + "\n",
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
     )
-    return json.loads(proc.stdout)
+    lines = proc.stdout.splitlines()
+    assert len(lines) == 1
+    return json.loads(lines[0])
 
 
 @needs_node
@@ -367,18 +437,19 @@ def test_bridge_refuses_a_selection_without_pii_surface_before_initializing(tmp_
 @pytest.mark.parametrize(
     "request_body",
     [
-        {"input": "text-synthetic"},  # pii missing
-        {"input": "text-synthetic", "pii": "pii"},
-        {"input": "text-synthetic", "pii": [""]},
-        {"input": "text-synthetic", "pii": [1]},
-        {"input": "text-synthetic", "pii": ["x" * 129]},
-        {"input": "text-synthetic", "pii": ["pii"] * 65},
+        {"id": 1, "input": "text-synthetic"},  # pii missing
+        {"id": 1, "input": "text-synthetic", "pii": "pii"},
+        {"id": 1, "input": "text-synthetic", "pii": [""]},
+        {"id": 1, "input": "text-synthetic", "pii": [1]},
+        {"id": 1, "input": "text-synthetic", "pii": ["x" * 129]},
+        {"id": 1, "input": "text-synthetic", "pii": ["pii"] * 65},
     ],
 )
 def test_bridge_rejects_a_malformed_pii_request_without_echoing_it(tmp_path, request_body):
     bridge = _fake_core_bridge(tmp_path, _FAKE_CORE_WITH_PII)
     reply = _raw_bridge(bridge, json.dumps(request_body))
-    assert set(reply) == {"error"}
+    assert set(reply) == {"id", "error"}
+    assert reply["id"] == 1
     assert "code" not in reply["error"]
     assert "text-synthetic" not in json.dumps(reply)
 
