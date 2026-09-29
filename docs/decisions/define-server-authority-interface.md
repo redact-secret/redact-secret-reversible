@@ -11,9 +11,9 @@ decided_at: 2026-09-27
 
 ## Context
 
-`@redact-secret/vault` 0.1.0-alpha.1 already models authorization, revocation, and denial for a single-process, single-principal, in-memory scope: [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md) (#9/F4) fixes a synchronous, all-or-nothing preflight that validates every occurrence in a restore request — marker, known entry, source, expiry, sink/path grant, budget, then a page-local `releasePolicy` — before any plaintext or budget change is visible, and [decision-restore-authority-and-lifecycle](2026-09-27-restore-authority-and-lifecycle.md) fixes that a token alone never grants authority. V3 (#13) implements this as `ReleaseGrant`, `ReleaseRequest`, `ReleasePolicy`, `DenialReason`, and `AuditEvent` in `packages/vault/src/types.ts` and `packages/vault/src/errors.ts`, enforced by `#restore` in `packages/vault/src/vault.ts:L529-L649` and audited by `#audit` at `packages/vault/src/vault.ts:L727-L734`. That model is explicitly browser/single-process scoped: ARCHITECTURE.md's "Storage and authorization" section and the [package and language decision](2026-09-27-name-vault-packages-and-language-contract.md) already name `@redact-secret/vault-server` as the layer that adds principal, tenant, source, destination, and value-path authorization across multiple principals, without mandating one identity provider or vendor.
+`@redact-secret/vault` 0.1.0-alpha.1 already models authorization, revocation, and denial for a single-process, single-principal, in-memory scope: [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md) (#9/F4) fixes a synchronous, all-or-nothing preflight that validates every occurrence in a restore request — marker, known entry, source, expiry, sink/path grant, budget, then a page-local `releasePolicy` — before any plaintext or budget change is visible, and [decision-restore-authority-and-lifecycle](restore-authority-and-lifecycle.md) fixes that a token alone never grants authority. V3 (#13) implements this as `ReleaseGrant`, `ReleaseRequest`, `ReleasePolicy`, `DenialReason`, and `AuditEvent` in `packages/vault/src/types.ts` and `packages/vault/src/errors.ts`, enforced by `#restore` in `packages/vault/src/vault.ts:L529-L649` and audited by `#audit` at `packages/vault/src/vault.ts:L727-L734`. That model is explicitly browser/single-process scoped: ARCHITECTURE.md's "Storage and authorization" section and the [package and language decision](name-vault-packages-and-language-contract.md) already name `@redact-secret/vault-server` as the layer that adds principal, tenant, source, destination, and value-path authorization across multiple principals, without mandating one identity provider or vendor.
 
-This ADR is S1 on the [issue roadmap](../plans/issue-roadmap.md): it defines that server authority interface and reference policy examples so #16 (JS implementation), #17 (Python integration), and #19 (persistent-store contract) have one unambiguous starting contract instead of each inventing their own shape. F4 (#9) and F5 (#10) are closed dependencies; this ADR generalizes their accepted model rather than replacing it.
+This ADR is S1 on the (archived) [issue roadmap](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/plans/issue-roadmap.md): it defines that server authority interface and reference policy examples so #16 (JS implementation), #17 (Python integration), and #19 (persistent-store contract) have one unambiguous starting contract instead of each inventing their own shape. F4 (#9) and F5 (#10) are closed dependencies; this ADR generalizes their accepted model rather than replacing it.
 
 ## Decision
 
@@ -61,7 +61,7 @@ export type PrincipalResolver<Context = unknown> = (
 ) => Principal | Promise<Principal>;
 ```
 
-The consuming application chooses `Context` — an HTTP request, an RPC call, a queue message — and wires its own authentication. This repository never bundles a login flow, token verifier, or user store, matching the [package and language decision](2026-09-27-name-vault-packages-and-language-contract.md)'s "must not force one vendor's vault or the consumer's identity provider."
+The consuming application chooses `Context` — an HTTP request, an RPC call, a queue message — and wires its own authentication. This repository never bundles a login flow, token verifier, or user store, matching the [package and language decision](name-vault-packages-and-language-contract.md)'s "must not force one vendor's vault or the consumer's identity provider."
 
 ### 2. Decision tuple — source→sink/path/purpose
 
@@ -135,7 +135,7 @@ Required evaluation order, mirroring `#restore` (`packages/vault/src/vault.ts:L5
 8. Budget → `budget`.
 9. `ServerReleasePolicy` → `policy`, or a more specific `ServerDenialReason` the policy itself returns (for example `rate-limited`).
 
-Every occurrence of every path in the whole request is checked before any plaintext is returned; one denial fails the complete request, per [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md)'s all-or-nothing preflight. No subset is ever returned.
+Every occurrence of every path in the whole request is checked before any plaintext is returned; one denial fails the complete request, per [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md)'s all-or-nothing preflight. No subset is ever returned.
 
 ### 4. Denial vocabulary
 
@@ -153,7 +153,7 @@ export type ServerDenialReason =
   | "policy-evaluation-error"; // the policy threw, rejected, or timed out — always a denial, never allow
 ```
 
-`"revoked"` deliberately diverges from the in-memory vault, which collapses pre-restore revocation into `"unknown-token"` because the entry is deleted outright (see [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md), "Revocation"). A server audit trail benefits from distinguishing "never existed / forged" from "existed, was revoked" for incident response. A qualified server store that retains a short-lived revocation tombstone MAY report `"revoked"`; a store that does not keep one MAY report `"unknown-token"` instead. Both are conformant — this ADR does not mandate tombstone retention, only that the vocabulary exists for stores that choose to keep one.
+`"revoked"` deliberately diverges from the in-memory vault, which collapses pre-restore revocation into `"unknown-token"` because the entry is deleted outright (see [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md), "Revocation"). A server audit trail benefits from distinguishing "never existed / forged" from "existed, was revoked" for incident response. A qualified server store that retains a short-lived revocation tombstone MAY report `"revoked"`; a store that does not keep one MAY report `"unknown-token"` instead. Both are conformant — this ADR does not mandate tombstone retention, only that the vocabulary exists for stores that choose to keep one.
 
 ### 5. Audit event shape — no plaintext-capable field, by construction
 
@@ -189,7 +189,7 @@ Every field is a fixed enum, a count, a timestamp, or an *identifier* the applic
 - `PrincipalResolver<Context>` — identity and session verification. No mandated provider.
 - `ServerReleasePolicy` — the authorization decision. No mandated rule engine, RBAC/ABAC model, or policy language.
 - `ServerAuditHook` — where audit events go. No mandated logging or SIEM sink.
-- Storage — deferred entirely to [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md)'s "qualified store" contract and P1/#19, #20. This ADR assumes that split unchanged and adds no new persistence requirement.
+- Storage — deferred entirely to [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md)'s "qualified store" contract and P1/#19, #20. This ADR assumes that split unchanged and adds no new persistence requirement.
 
 ## Reference policy examples
 
@@ -285,7 +285,7 @@ Explicitly **not** covered by this ADR:
 
 - A concrete `@redact-secret/vault-server` implementation, HTTP/RPC transport, or wire format (#16).
 - Native Python, or any non-JavaScript, server integration; this ADR states language-neutral *intent*, not a Python API (#17).
-- Persistent-store encryption, key ownership, backup, or the store's own linearization proof — unchanged from [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md)'s "qualified store" contract (#19, #20).
+- Persistent-store encryption, key ownership, backup, or the store's own linearization proof — unchanged from [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md)'s "qualified store" contract (#19, #20).
 - A specific identity provider, session library, RBAC/ABAC model, policy language, or rate-limiter implementation. The interface only names the injection points.
 - A concrete multi-process/distributed consistency proof for `ServerReleasePolicy` evaluation; that remains store-specific per the transaction-boundary ADR.
 - Arbitrary-text restore, streaming, and Worker-mode server use — still open per the [threat model](../specs/threat-model.md).
@@ -293,29 +293,29 @@ Explicitly **not** covered by this ADR:
 ## Threat boundary, failure behavior, and residual risk
 
 - **Threat boundary added over the in-memory vault:** a different authenticated principal, a cross-tenant request, a stale grant surviving a policy or revocation change, and a resolver or policy that is unreachable, slow, or throws.
-- **Failure behavior:** every injection point (`PrincipalResolver`, `ServerReleasePolicy`, `ServerAuditHook`) fails closed. An unresolved principal, a thrown, rejected, or timed-out policy, or any decision other than `{allow: true}` denies the entire restore request with no partial plaintext, mirroring the in-memory vault's all-or-nothing preflight ([decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md)). A `ServerAuditHook` exception never changes the outcome.
+- **Failure behavior:** every injection point (`PrincipalResolver`, `ServerReleasePolicy`, `ServerAuditHook`) fails closed. An unresolved principal, a thrown, rejected, or timed-out policy, or any decision other than `{allow: true}` denies the entire restore request with no partial plaintext, mirroring the in-memory vault's all-or-nothing preflight ([decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md)). A `ServerAuditHook` exception never changes the outcome.
 - **Residual risk:** this interface cannot verify that a consumer's `PrincipalResolver` actually authenticates the caller, that its `ServerReleasePolicy` is logically sound, or that its audit sink is durable — those remain the implementing package's (#16/#17) and the deploying application's responsibility, qualified independently. A policy bug that always returns `{allow: true}` is indistinguishable from `denyByDefault` at the type level; only #16's conformance corpus and adversarial tests can catch it. Multi-process policy-revision consistency is explicitly deferred to the store contract.
 
 ## Core compatibility
 
-This ADR adds no dependency on `@redact-secret/core` and does not change the pinned `0.1.0-beta.9` compatibility declared in the [qualification record](../research/qualification-0.1.0-alpha.1.md). It operates entirely downstream of vault-issued tokens and captures; the core's detection, policy, and placeholder-formatting surface is unaffected. The one-way dependency direction is preserved: this ADR is consumed by `redact-secret-reversible` packages only; the core, adapters, and detection benchmarks acquire no dependency on it.
+This ADR adds no dependency on `@redact-secret/core` and does not change the pinned `0.1.0-beta.9` compatibility declared in the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md). It operates entirely downstream of vault-issued tokens and captures; the core's detection, policy, and placeholder-formatting surface is unaffected. The one-way dependency direction is preserved: this ADR is consumed by `redact-secret-reversible` packages only; the core, adapters, and detection benchmarks acquire no dependency on it.
 
 ## Consequences
 
-- #16 (`vault-server`, JS, in-memory) implements `PrincipalResolver`, `ServerReleasePolicy` evaluation in the order given in §3, `ServerDenialReason`, and `ServerAuditEvent` against this contract and the shared conformance corpus, and coordinates concurrent restore/revoke per [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md).
+- #16 (`vault-server`, JS, in-memory) implements `PrincipalResolver`, `ServerReleasePolicy` evaluation in the order given in §3, `ServerDenialReason`, and `ServerAuditEvent` against this contract and the shared conformance corpus, and coordinates concurrent restore/revoke per [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md).
 - #17 (Python) implements the equivalent semantics natively; Python type names may differ, but the decision tuple, denial vocabulary, and fail-closed behavior must match.
-- #19 (persistent store) inherits [decision-define-restore-transaction-boundary](2026-09-27-define-restore-transaction-boundary.md)'s store contract unchanged; this ADR adds no new persistence requirement.
+- #19 (persistent store) inherits [decision-define-restore-transaction-boundary](define-restore-transaction-boundary.md)'s store contract unchanged; this ADR adds no new persistence requirement.
 - A future conformance corpus version adds the server-only case classes named in [conformance/README.md](../../conformance/README.md): principal-resolution failure, cross-tenant, missing/invalid purpose, revoked-vs-unknown-token, policy-evaluation-error/timeout, and policy-revision staleness.
 
 ## Alternatives considered
 
 - Reusing the in-memory vault's `ReleasePolicy` (`(request: ReleaseRequest) => boolean`) unchanged on the server: rejected. It is synchronous, returns a bare boolean with no denial reason, and has no principal/tenant/purpose fields — it cannot express *why* a server-side request was denied, which audit and incident-response need.
-- A single opaque `authorize(request): boolean` with no structured decision tuple: rejected for the same reason a universal `restore(text)` with no destination context was rejected in [decision-restore-authority-and-lifecycle](2026-09-27-restore-authority-and-lifecycle.md) — a boolean with no context is an unsafe default.
-- Mandating a specific identity provider (OAuth/OIDC) or policy engine (OPA, Cedar, ...) in the interface: rejected; this repository does not own identity or policy-engine choice for every consumer, per the [package and language decision](2026-09-27-name-vault-packages-and-language-contract.md)'s "must not force one vendor's vault or the consumer's identity provider."
+- A single opaque `authorize(request): boolean` with no structured decision tuple: rejected for the same reason a universal `restore(text)` with no destination context was rejected in [decision-restore-authority-and-lifecycle](restore-authority-and-lifecycle.md) — a boolean with no context is an unsafe default.
+- Mandating a specific identity provider (OAuth/OIDC) or policy engine (OPA, Cedar, ...) in the interface: rejected; this repository does not own identity or policy-engine choice for every consumer, per the [package and language decision](name-vault-packages-and-language-contract.md)'s "must not force one vendor's vault or the consumer's identity provider."
 - Collapsing `"revoked"` into `"unknown-token"` to keep exact parity with the in-memory vault: considered, but rejected as the one server-specific addition worth diverging on — see §4.
 
 ## Open questions
 
 - Whether `ServerReleasePolicy` needs a per-request timeout parameter in the type itself, or whether that is purely an implementation (#16) concern.
 - The exact multi-process/distributed linearization mechanism for policy-revision consistency, left to #19's store contract.
-- ~~Whether Python's equivalent (#17) should mirror these names one-to-one or adopt idiomatic Python naming while preserving the same fields — left for #17 to decide and document.~~ **Resolved by #17** (`packages/vault-server-py`, renamed `packages/vault-py` / `redact-secret-vault` by #56 before any PyPI publish): idiomatic Python (`dataclass`/`enum.Enum`/`typing.Protocol`, snake_case fields), not a one-to-one name mirror. Same decision-tuple fields, same nine-step preflight order, same `ServerDenialReason` string values, same audit event shape. Full inventory, boundary decision (no native Python core exists; capture uses a Node.js service boundary to `@redact-secret/core`), and candid JS/Python differences: [docs/research/python-server-integration-2026-09-27.md](../research/python-server-integration-2026-09-27.md).
+- ~~Whether Python's equivalent (#17) should mirror these names one-to-one or adopt idiomatic Python naming while preserving the same fields — left for #17 to decide and document.~~ **Resolved by #17** (`packages/vault-server-py`, renamed `packages/vault-py` / `redact-secret-vault` by #56 before any PyPI publish): idiomatic Python (`dataclass`/`enum.Enum`/`typing.Protocol`, snake_case fields), not a one-to-one name mirror. Same decision-tuple fields, same nine-step preflight order, same `ServerDenialReason` string values, same audit event shape. Full inventory, boundary decision (no native Python core exists; capture uses a Node.js service boundary to `@redact-secret/core`), and candid JS/Python differences: [docs/research/python-server-integration-2026-09-27.md](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/python-server-integration-2026-09-27.md).

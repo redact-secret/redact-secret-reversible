@@ -59,5 +59,5 @@ The Python distribution is `redact-secret-vault` (import package `redact_secret_
 
 - Python has one distribution. There is no authority-free portable vault in Python for a `-server` suffix to be distinguished from, so the suffix adds length without information.
 - The decision above fixes only the npm names and explicitly leaves exact language distribution names beyond npm open.
-- The Python package implements the same server-authority contract ([S1](2026-09-27-define-server-authority-interface.md)) as the JavaScript `@redact-secret/vault-server`, not the JavaScript `@redact-secret/vault` API. Its README states this in its first paragraph so the shorter name is not read as API parity with `@redact-secret/vault`.
+- The Python package implements the same server-authority contract ([S1](define-server-authority-interface.md)) as the JavaScript `@redact-secret/vault-server`, not the JavaScript `@redact-secret/vault` API. Its README states this in its first paragraph so the shorter name is not read as API parity with `@redact-secret/vault`.
 - If Python later gains an authority-free portable vault, that needs its own naming decision; this note does not reserve a name for it.

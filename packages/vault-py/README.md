@@ -3,11 +3,11 @@
 **Status: alpha / research-grade.** Native Python implementation of the same
 S1 server-authority contract as the JavaScript
 [`@redact-secret/vault-server`](../vault-server/README.md)
-([decision record](../../docs/decisions/2026-09-27-define-server-authority-interface.md)).
+([decision record](../../docs/decisions/define-server-authority-interface.md)).
 It does **not** implement the JavaScript `@redact-secret/vault` API: Python has
 no authority-free portable vault, so this single distribution is named
 `redact-secret-vault` without a `-server` suffix (see the
-[naming decision's 2026-09-28 note](../../docs/decisions/2026-09-27-name-vault-packages-and-language-contract.md)).
+[naming decision's 2026-09-28 note](../../docs/decisions/name-vault-packages-and-language-contract.md)).
 The distribution was called `redact-secret-vault-server` (module
 `redact_secret_vault_server`) before its first publish; that name was never on
 PyPI. It provides trusted principal/tenant resolution, a source→sink/path/purpose decision
@@ -29,7 +29,7 @@ shells out to a small Node.js script
 ([`boundary/core_bridge.mjs`](src/redact_secret_vault/boundary/core_bridge.mjs))
 that calls only the core's public `scan` API and returns its safe finding
 metadata (never a matched value). See
-[docs/research/python-server-integration-2026-09-27.md](../../docs/research/python-server-integration-2026-09-27.md)
+[docs/research/python-server-integration-2026-09-27.md](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/python-server-integration-2026-09-27.md)
 for the full inventory, the gap this leaves, and what "equivalent to the JS
 implementation" means here.
 
@@ -151,7 +151,7 @@ asyncio.run(main())
 `@redact-secret/core@0.1.0-beta.10`, which this repository pins
 (`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
 fail-closed rules below. The rules are
-the [PII retention and activation decision record](../../docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md)
+the [PII retention and activation decision record](../../docs/decisions/decide-pii-retention-and-activation-ownership.md)
 (§1 and §3 "Python bridge"), the same ones `@redact-secret/vault` follows.
 
 - **Selection.** `NodeCoreBridge(pii=[...])` forwards the selectors verbatim
@@ -224,7 +224,7 @@ repository root (`npm ci` from the repo root first).
 
 ## What "equivalent to `@redact-secret/vault-server` (JS)" means
 
-See [docs/research/python-server-integration-2026-09-27.md](../../docs/research/python-server-integration-2026-09-27.md)
+See [docs/research/python-server-integration-2026-09-27.md](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/python-server-integration-2026-09-27.md)
 for the full statement and the candid differences (token entropy source,
 marker-detection regex, capture's audit vocabulary, and the core-integration
 boundary itself). In short: the same decision tuple, the same nine-step

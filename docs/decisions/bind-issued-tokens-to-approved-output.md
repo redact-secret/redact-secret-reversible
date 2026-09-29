@@ -12,7 +12,7 @@ decided_at: 2026-09-27
 
 ## Context
 
-A core typed placeholder such as `<SSN_1>` is display-only. The reversible product issues its own unpredictable mapping identity, but a model can copy a valid issued token into a different sentence or field. A literal token-like string can also occur in source text. The [beta.8 verification](../research/verification-2026-09-27.md) produced two indistinguishable occurrences when a literal already matched the formatter's output. A random token prevents guessing; it does not prove the provenance of a particular occurrence.
+A core typed placeholder such as `<SSN_1>` is display-only. The reversible product issues its own unpredictable mapping identity, but a model can copy a valid issued token into a different sentence or field. A literal token-like string can also occur in source text. The [beta.8 verification](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/verification-2026-09-27.md) produced two indistinguishable occurrences when a literal already matched the formatter's output. A random token prevents guessing; it does not prove the provenance of a particular occurrence.
 
 ## Decision
 
@@ -35,7 +35,7 @@ OWASP recommends denying access by default and checking permissions at every acc
 
 ## Verification before acceptance
 
-Test literal collisions, copied/reordered/duplicated valid tokens, forged and cross-session tokens, wrong source/sink/path, policy changes, and all-or-nothing rejection without plaintext in errors. Run the corpus in each supported runtime. See [security research](../research/security-foundations-2026-09-27.md).
+Test literal collisions, copied/reordered/duplicated valid tokens, forged and cross-session tokens, wrong source/sink/path, policy changes, and all-or-nothing rejection without plaintext in errors. Run the corpus in each supported runtime. See [security research](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/security-foundations-2026-09-27.md).
 
 ## Resolved choices (alpha.1)
 
@@ -50,4 +50,4 @@ Test literal collisions, copied/reordered/duplicated valid tokens, forged and cr
 
 ## Evidence
 
-The [conformance corpus](../../conformance/v1/corpus.json) cases `literal.*`, `token.*`, `source.*`, `capture.repeated-values.*`, and `preflight.all-or-nothing`, plus runtime checks `random-source-failure-and-collision` and `tokens-unpredictable-and-unique-at-volume`, pass on Node.js (addon and WASM fallback) and in Chromium, Firefox, and WebKit. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).
+The [conformance corpus](../../conformance/v1/corpus.json) cases `literal.*`, `token.*`, `source.*`, `capture.repeated-values.*`, and `preflight.all-or-nothing`, plus runtime checks `random-source-failure-and-collision` and `tokens-unpredictable-and-unique-at-volume`, pass on Node.js (addon and WASM fallback) and in Chromium, Firefox, and WebKit. See the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md).
