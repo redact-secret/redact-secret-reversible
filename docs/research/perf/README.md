@@ -210,7 +210,7 @@ Status: **current** ([#83](https://github.com/redact-secret/redact-secret-vault/
 Procedure (also in [RELEASING.md](../../../RELEASING.md)):
 
 1. When the `v<version>` tag's `bench` run finishes, download its `bench-archive` artifact (`gh run download <run-id> -n bench-archive`) and commit the `<version>.json` in it to `docs/research/perf/`. Equivalently, download the `bench-pii-*` artifacts and run `npm run bench:archive -- compare-pii-off.json compare-pii-on.json`.
-2. Link the file from the release's qualification record and the GitHub pre-release notes. Every gating `warn` in its summary is explained there. A `fail` blocks the release unless the change is deliberate and explained.
+2. Link the file from the release's `CHANGELOG.md` entry and the GitHub pre-release notes. Every gating `warn` in its summary is explained there. A `fail` blocks the release unless the change is deliberate and explained.
 3. After the release is published, bump `bench/baseline.json` to the version just released, so the next release is compared against it.
 
 No archive exists for versions released before #83, and none is written for an unreleased version or an A/A comparison. Absolute figures in an archive are comparable only with figures in the same archive; quote any figure with its PII mode, corpus version, tier, and runner.

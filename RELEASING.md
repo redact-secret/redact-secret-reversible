@@ -11,7 +11,7 @@ Each package is versioned independently of the core. Every release pins an exact
 5. Verify: `npm view @redact-secret/vault dist-tags` and `npm view @redact-secret/vault-server dist-tags`, then a clean install of the published packages with the pinned core, a `node` import, and a browser load, all against the *registry* tarball rather than the working tree. Set `VAULT_SPEC=@redact-secret/vault@<version>` and run `npm run qualify:node` and `npm run qualify:browser`; `qualification/lib.mjs`'s `packVault()` returns that spec directly instead of building and packing the local source, so both qualification runners install the published package. Record the results in the qualification record (for `0.1.0-alpha.2`: [registry verification](docs/research/qualification-core-0.1.0-beta.10.md#registry-verification-010-alpha2)).
 
 6. After verification passes, move `latest` to the new version for each published package (`npm dist-tag add <package>@<version> latest`; see [the `latest` dist-tag](#the-latest-dist-tag)), then confirm with `npm view <package> dist-tags`.
-7. Archive the performance result and move the baseline: commit `docs/research/perf/<version>.json` from the tag's `bench` run, link it from the qualification record and the pre-release notes, and bump `bench/baseline.json` to `<version>` in the same change. See [Performance check](#performance-check).
+7. Archive the performance result and move the baseline: commit `docs/research/perf/<version>.json` from the tag's `bench` run, link it from its `CHANGELOG.md` entry and the pre-release notes, and bump `bench/baseline.json` to `<version>` in the same change. See [Performance check](#performance-check).
 
 ## Performance check
 
@@ -23,9 +23,9 @@ The `bench` workflow (`.github/workflows/bench.yml`, [#83](https://github.com/re
 - **Deterministic: fail.** A deterministic measurement over its threshold (package and bundle size above 1.10× the baseline, or the vault's heap not reclaimed after `dispose()`) is a `fail`, and so is a metric that errors. The job fails. Do not tag until it is fixed, or until the threshold is changed on purpose in a reviewed change that says why.
 - Non-gating measurements (for example `capture` totals and `core_ms`, which move with the pinned core) are reported and never decide the outcome.
 
-**Where results go.** Each run uploads its compare results (`bench-pii-off`, `bench-pii-on`) and the archive built from them (`bench-archive`). For every release, commit the tag run's `docs/research/perf/<version>.json` (`gh run download <run-id> -n bench-archive`, or `npm run bench:archive -- <compare results>`) and link it from the qualification record. The first archive is written for the first release after this check existed; none is back-filled for earlier versions.
+**Where results go.** Each run uploads its compare results (`bench-pii-off`, `bench-pii-on`) and the archive built from them (`bench-archive`). For every release, commit the tag run's `docs/research/perf/<version>.json` (`gh run download <run-id> -n bench-archive`, or `npm run bench:archive -- <compare results>`) and link it from the release's `CHANGELOG.md` entry. The first archive is written for the first release after this check existed; none is back-filled for earlier versions.
 
-**Stating figures.** A performance figure quoted anywhere (release notes, qualification record, PR) always states its PII mode, corpus version (`corpus-v1`), tier (`standard` in CI), and runner (`github-actions/Linux/X64/<image>` for the workflow), and is a ratio against the named baseline version, not an absolute time from another run.
+**Stating figures.** A performance figure quoted anywhere (release notes, CHANGELOG, PR) always states its PII mode, corpus version (`corpus-v1`), tier (`standard` in CI), and runner (`github-actions/Linux/X64/<image>` for the workflow), and is a ratio against the named baseline version, not an absolute time from another run.
 
 **After the release.** Bump `bench/baseline.json` to the version just published (step 7), so the next release is compared against this one.
 
