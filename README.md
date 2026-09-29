@@ -1,6 +1,14 @@
 # Redact Secret Vault
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15003/badge)](https://www.bestpractices.dev/projects/15003)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![SAST](https://github.com/redact-secret/redact-secret-vault/actions/workflows/sast.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/sast.yml)
+[![npm: @redact-secret/vault](https://img.shields.io/npm/v/@redact-secret/vault?label=%40redact-secret%2Fvault)](https://www.npmjs.com/package/@redact-secret/vault)
+[![npm: @redact-secret/vault-server](https://img.shields.io/npm/v/@redact-secret/vault-server?label=%40redact-secret%2Fvault-server)](https://www.npmjs.com/package/@redact-secret/vault-server)
+[![PyPI: redact-secret-vault](https://img.shields.io/pypi/v/redact-secret-vault?label=redact-secret-vault)](https://pypi.org/project/redact-secret-vault/)
+[![License: MIT](https://img.shields.io/github/license/redact-secret/redact-secret-vault)](./LICENSE)
+
 
 Optional, policy-gated restoration of values redacted by [Redact Secret](https://github.com/redact-secret/redact-secret). This repository was formerly `redact-secret/redact-secret-reversible`.
 
