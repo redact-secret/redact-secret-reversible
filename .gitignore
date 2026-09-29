@@ -24,3 +24,7 @@ __pycache__/
 # OpenGrep verified-binary cache and CI scan output
 /.cache/opengrep/
 /sast/reports/ci-latest.*
+
+# Benchmark harness (bench/): published-version installs and local results
+/.bench-cache/
+/.bench-results/

@@ -1,7 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "files": {
-    "includes": ["packages/vault/src/**", "packages/vault-server/src/**"]
+    "includes": ["packages/vault/src/**", "packages/vault-server/src/**", "bench/**"]
   },
   "formatter": { "enabled": false },
   "assist": { "enabled": false },
