@@ -378,7 +378,7 @@ test("block still rejects the whole capture for PII", async () => {
   assert.equal(vault.stats().entries, 0);
 });
 
-// --- the installed core (beta.10 in CI) -------------------------------------
+// --- the installed core (the pinned beta.11 in CI) -------------------------------------
 
 test("installed core without a PII surface: createVault() and pii: [] observe piiActivation === null", { skip: BETA9_ONLY }, async () => {
   const a = await createVault();

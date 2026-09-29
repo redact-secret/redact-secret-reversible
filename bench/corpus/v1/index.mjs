@@ -16,7 +16,7 @@ export const CORPUS_VERSION = "corpus-v1";
 export const CORPUS_SHA256 = "447f1e169df8e6beb70fd980c46591e224539b3240384156c1a1636ffbc6c37d";
 
 /**
- * Credential-shaped values the pinned core (0.1.0-beta.10) detects with a
+ * Credential-shaped values the pinned core (0.1.0-beta.11) detects with a
  * `redact` action and PII off. Four distinct types, so a capture exercises
  * four detectors and retains four entries.
  */

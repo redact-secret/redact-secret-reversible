@@ -70,7 +70,7 @@ jobs:
       - run: npm ci
       # Unit tests: PII retention/activation contract against a fake core
       # (PII-capable and beta.9-shaped) and real-core PII-on tests against the
-      # pinned beta.10; real-core beta.9-only checks skip with a stated reason.
+      # pinned beta.11; real-core beta.9-only checks skip with a stated reason.
       - run: npm run test:vault
       - run: npm run qualify:node
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

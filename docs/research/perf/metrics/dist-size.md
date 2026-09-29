@@ -22,6 +22,8 @@ All are deterministic byte (or file) counts. `<pkg>` is `vault` or `vault-server
 
 **Bundle.** A production Vite build (the repository's `vite` devDependency, default minifier, `target: es2022`) with `@redact-secret/core` external, so the figure is vault code only; the build fails the metric if any core or wasm module ends up in a chunk. The build is not written to disk.
 
+**Core size jump at core `0.1.0-beta.11`.** From core `0.1.0-beta.11` ([redact-secret#937](https://github.com/redact-secret/redact-secret/issues/937)) `@redact-secret/wasm` ships four builds (the default and `common` builds, each now with a separate PII variant) instead of two, so `core.wasm.*` jumps in the first comparison of a vault pinned to beta.11 against one pinned to beta.10 (the first is `0.1.0-beta.2` against `0.1.0-beta.1`, [#96](https://github.com/redact-secret/redact-secret-vault/issues/96)). The jump is caused by the core, not the vault, and those measurements are informational, so it cannot fail the check.
+
 **Core excluded from the vault's figures.** The core is a peer dependency that each release pins exactly, so its size is not the vault's. It is reported under `core.` with `gating: false`. The native addon packages (`@redact-secret/node-<platform>`) are platform-specific and are not reported.
 
 ## Thresholds

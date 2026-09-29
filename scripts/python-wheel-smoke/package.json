@@ -3,6 +3,6 @@
   "private": true,
   "description": "Consumer-side @redact-secret/core install for release.yml's Python wheel smoke test. Keep the version equal to PINNED_CORE_VERSION in packages/vault-py/src/redact_secret_vault/core_client.py.",
   "dependencies": {
-    "@redact-secret/core": "0.1.0-beta.10"
+    "@redact-secret/core": "0.1.0-beta.11"
   }
 }
