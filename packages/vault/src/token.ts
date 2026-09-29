@@ -66,3 +66,33 @@ export function countMatches(pattern: RegExp, text: string): number {
   pattern.lastIndex = 0;
   return count;
 }
+
+/**
+ * Whether `text` holds each of `expected` exactly once and no other token
+ * marker, checked in one pass over `text`.
+ *
+ * Every marker match must be the `rsv_` of an exact token in `expected` that
+ * has not been seen yet, and the number of matches must equal
+ * `expected.size`. Together these say each expected token occurs exactly
+ * once: an occurrence of a token always yields a marker match at its own
+ * `r` (the body alphabet has no `_`, so matches cannot overlap a token), a
+ * repeat is caught as already seen, and a missing token leaves the count
+ * short. A marker that is altered, forged, differs in case, or is split by
+ * format characters does not slice to an expected token and fails.
+ */
+export function holdsExactlyOnce(text: string, expected: ReadonlySet<string>): boolean {
+  const seen = new Set<string>();
+  MARKER_PATTERN.lastIndex = 0;
+  try {
+    for (let match = MARKER_PATTERN.exec(text); match !== null; match = MARKER_PATTERN.exec(text)) {
+      const start = match.index - 1;
+      if (start < 0) return false;
+      const token = text.slice(start, start + TOKEN_LENGTH);
+      if (!expected.has(token) || seen.has(token)) return false;
+      seen.add(token);
+    }
+  } finally {
+    MARKER_PATTERN.lastIndex = 0;
+  }
+  return seen.size === expected.size;
+}

@@ -36,7 +36,7 @@ Restoration combines lookup, fresh authorization, expiry, revocation, usage budg
 
 ## Verification before acceptance
 
-Run concurrent restore/restore and restore/revoke, multi-token failures, policy changes, store exceptions, timeout, commit-success/response-loss, retry, process restart, replica lag, and background expiry delay. Verify no partial plaintext and correct budget state at the declared boundary for each backend. See [security research](../research/security-foundations-2026-09-27.md).
+Run concurrent restore/restore and restore/revoke, multi-token failures, policy changes, store exceptions, timeout, commit-success/response-loss, retry, process restart, replica lag, and background expiry delay. Verify no partial plaintext and correct budget state at the declared boundary for each backend. See [security research](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/security-foundations-2026-09-27.md).
 
 ## Resolved choices (in-memory vault, alpha.1)
 
@@ -50,4 +50,4 @@ Run concurrent restore/restore and restore/revoke, multi-token failures, policy 
 
 ## Evidence
 
-Corpus cases `preflight.all-or-nothing`, `budget.*`, `lifecycle.*`, `policy.*`, and `token.duplicate-beyond-budget`, plus runtime checks `revoke-and-restore-race-in-microtasks`, `reentrant-policy-cannot-mutate-mid-restore`, `reentrant-core-policy-fails-capture`, `audit-hook-failure-and-reentry-do-not-change-outcome`, and `restore-request-snapshot-resists-getters`, pass on Node.js and in three browser engines. Deliberately broken builds (budget check removed, expiry check removed, partial commit on formatter failure) are caught by the suite. See the [qualification record](../research/qualification-0.1.0-alpha.1.md).
+Corpus cases `preflight.all-or-nothing`, `budget.*`, `lifecycle.*`, `policy.*`, and `token.duplicate-beyond-budget`, plus runtime checks `revoke-and-restore-race-in-microtasks`, `reentrant-policy-cannot-mutate-mid-restore`, `reentrant-core-policy-fails-capture`, `audit-hook-failure-and-reentry-do-not-change-outcome`, and `restore-request-snapshot-resists-getters`, pass on Node.js and in three browser engines. Deliberately broken builds (budget check removed, expiry check removed, partial commit on formatter failure) are caught by the suite. See the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md).

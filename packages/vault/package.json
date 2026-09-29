@@ -53,6 +53,6 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/pii.test.mjs test/pii-core.test.mjs test/worker-pii.test.mjs test/worker-pii-core.test.mjs"
+    "test": "node --test test/sweep.test.mjs test/capture-output.test.mjs test/pii.test.mjs test/pii-core.test.mjs test/worker-pii.test.mjs test/worker-pii-core.test.mjs"
   }
 }
