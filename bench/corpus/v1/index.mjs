@@ -89,9 +89,9 @@ function buildRestoreFields(seed, fieldCount, slots) {
   for (let i = 0; i < fieldCount; i += 1) {
     fields.push({
       path: `field_${String(i).padStart(2, "0")}`,
-      before: filler(random, 40).replace("\n", " "),
+      before: filler(random, 40).replaceAll("\n", " "),
       slot: i % slots,
-      after: filler(random, 24).replace("\n", ""),
+      after: filler(random, 24).replaceAll("\n", ""),
     });
   }
   return fields;

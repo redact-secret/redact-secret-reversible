@@ -69,6 +69,13 @@
       "path": "qualification/worker.mjs",
       "rationale": "Same pattern as 762bff0d2bdd5716: `dir` is the qualification runner's own temporary directory, and the written main.js is a constant template literal (the Worker-mode qualification harness bootstrap) with no interpolation of external input.",
       "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    },
+    "e0b5e43be9e86212": {
+      "classification": "false_positive",
+      "line": 23,
+      "path": "bench/lib/published.mjs",
+      "rationale": "EXACT_VERSION is a literal regex (not built from input) whose repeated groups `[0-9A-Za-z-]+` are separated by a mandatory `.` that the class excludes, so each input has a single parse and backtracking is linear. It validates a benchmark baseline version string from bench/baseline.json or the CLI, dev tooling only; nothing here ships in a package.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
     }
   },
   "known_errors": {}
