@@ -6,7 +6,7 @@
 npm install @redact-secret/vault@0.1.0-beta.3 @redact-secret/core@0.1.0-beta.12
 ```
 
-The npm `latest` and `beta` tags both point at `0.1.0-beta.3` once it is published and verified (until then, `0.1.0-beta.2`, which needs `@redact-secret/core@0.1.0-beta.11`). Exact versions are still recommended while the package is beta, because each release pins an exact `@redact-secret/core` version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
+The npm `latest` and `beta` tags both point at `0.1.0-beta.3`. Exact versions are still recommended while the package is beta, because each release pins an exact `@redact-secret/core` version. Upgrading from `0.1.0-alpha.1`? `createVault()` now needs `pii: []` or an already-initialized core; see the [changelog](https://github.com/redact-secret/redact-secret-vault/blob/main/CHANGELOG.md).
 
 ## Supported, and not
 

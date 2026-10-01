@@ -6,7 +6,7 @@
 npm install @redact-secret/vault-server@0.1.0-beta.3 @redact-secret/vault@0.1.0-beta.3 @redact-secret/core@0.1.0-beta.12
 ```
 
-`0.1.0-alpha.2` was this package's first published version. The npm `latest` and `beta` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-beta.3` once it is published and verified (until then, `0.1.0-beta.2`, which needs `@redact-secret/core@0.1.0-beta.11`). Exact versions are still recommended while the packages are beta, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
+`0.1.0-alpha.2` was this package's first published version. The npm `latest` and `beta` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-beta.3`. Exact versions are still recommended while the packages are beta, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
 
 ## Supported, and not
 
