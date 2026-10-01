@@ -1,0 +1,54 @@
+{
+  "name": "@redact-secret/store-memory",
+  "version": "0.1.0-alpha.1",
+  "description": "Ciphertext-only, non-durable, single-process reference Store for tests and development of a persistent Redact Secret vault. Not persistence.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@redact-secret/vault-contracts": "0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@redact-secret/vault-conformance": "0.1.0-alpha.1"
+  },
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-vault.git",
+    "directory": "packages/store-memory"
+  },
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-vault/issues"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/store-memory#readme",
+  "keywords": [
+    "redaction",
+    "secrets",
+    "vault",
+    "store",
+    "testing"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  }
+}
