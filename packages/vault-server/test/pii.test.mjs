@@ -91,3 +91,15 @@ test("coreCode is carried only for VAULT_FAILURE / CORE_FAILURE", () => {
   assert.equal(new VaultServerError("INVALID_ARGUMENT", { coreCode: "X" }).coreCode, undefined);
   assert.ok(!withCore.message.includes("PII_ACTIVATION_CONFLICT"), "message stays fixed");
 });
+
+test("an uninitialized core gets a fixed message that names the fix; other failures keep the generic one (#133)", () => {
+  const uninitialized = new VaultServerError("VAULT_FAILURE", { vaultCode: "CORE_FAILURE", coreCode: "NOT_INITIALIZED" });
+  assert.equal(
+    uninitialized.message,
+    "The redaction core is not initialized. Pass `pii: []` when creating the server vault to initialize it with PII detection off, or await the core's initialize() first.",
+  );
+  assert.equal(uninitialized.cause, undefined);
+  const generic = "The underlying vault rejected the operation.";
+  assert.equal(new VaultServerError("VAULT_FAILURE", { vaultCode: "CORE_FAILURE", coreCode: "PII_ACTIVATION_CONFLICT" }).message, generic);
+  assert.equal(new VaultServerError("VAULT_FAILURE", { vaultCode: "PII_UNAVAILABLE", coreCode: "NOT_INITIALIZED" }).message, generic);
+});
