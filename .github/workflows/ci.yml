@@ -143,6 +143,13 @@ jobs:
       - name: Create the serving role
         run: node packages/store-postgres/scripts/create-app-role.mjs
       - run: npm run test:postgres
+      # The persistent example (examples/persistent): setup twice to show it is
+      # idempotent, then capture in one process and restore in another.
+      - name: Persistent example
+        run: |
+          node examples/persistent/setup.mjs
+          node examples/persistent/setup.mjs
+          node examples/persistent/demo.mjs
       # Packed tarballs in clean projects outside the repository: the base
       # packages install no driver or SDK, and the persistent profile runs over
       # the reference store and this PostgreSQL.
