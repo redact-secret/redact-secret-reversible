@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Core peer `0.1.0-beta.12`.** `@redact-secret/vault` and `@redact-secret/vault-server` peer-depend on `@redact-secret/core` `0.1.0-beta.12` exactly, and the Python bridge's `PINNED_CORE_VERSION` is `0.1.0-beta.12`. The published `0.1.0-beta.2` / `0.1.0b2` pin `0.1.0-beta.11`. Root and wheel-smoke lockfiles, the qualification pins, and the docs that describe the pin on `main` are updated; no code change.
+
 ## @redact-secret/vault 0.1.0-beta.2, @redact-secret/vault-server 0.1.0-beta.2, redact-secret-vault 0.1.0b2 (Python)
 
 **Release date: 2026-09-29.** Tag `v0.1.0-beta.2` at `3462d8e`; [GitHub pre-release](https://github.com/redact-secret/redact-secret-vault/releases/tag/v0.1.0-beta.2). npm dist-tag `beta`. `@redact-secret/core` peer moves to `0.1.0-beta.11` exactly; `@redact-secret/vault-server` depends on `@redact-secret/vault` `0.1.0-beta.2` exactly. No API change from `0.1.0-beta.1` / `0.1.0b1`. Performance against `0.1.0-beta.1` (`corpus-v1`, `standard` tier, `github-actions/Linux/X64/ubuntu24`, PII off and on): 0 warn, 0 fail on the tag run; see [docs/research/perf/0.1.0-beta.2.json](docs/research/perf/0.1.0-beta.2.json). A manual pre-tag run showed one non-gating warn (`cold_init.browser.core_ms`, PII on, ratio 1.39), which moves with the pinned core and did not recur on the tag run.
