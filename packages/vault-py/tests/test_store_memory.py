@@ -293,25 +293,29 @@ def test_a_restart_loses_everything() -> None:
 
 
 @needs_orchestrator
-def test_the_store_level_schedules_pass_and_the_skips_are_listed() -> None:
-    report = run_schedules()
+def test_the_store_level_schedules_pass_and_none_is_skipped() -> None:
+    report = run_schedules(level="store")
     corpus = load_corpus()
     store_cases = [case for case in corpus["cases"] if case["level"] == "store"]
     by_id = {result["id"]: result for result in report["results"]}
-    assert len(by_id) == len(corpus["cases"])
+    assert set(by_id) == {case["id"] for case in store_cases}
     failed = [f"{result['id']}: {result.get('detail')}" for result in by_id.values() if result["status"] == "failed"]
     assert failed == []
-    # Every store-level case this store's capabilities allow ran: none is skipped.
+    # Every store-level case this store's capabilities allow ran: none is skipped, so none is passed by omission.
     assert [case["id"] for case in store_cases if by_id[case["id"]]["status"] != "passed"] == []
     assert len(store_cases) >= 100
-    # The skipped cases are exactly the server-level ones, with a reason: this module is a store, not a server.
-    skipped = {result["id"]: result["detail"] for result in by_id.values() if result["status"] == "skipped"}
-    assert set(skipped) == {case["id"] for case in corpus["cases"] if case["level"] == "server"}
-    assert all("does not serve level server" in reason for reason in skipped.values())
-    print(
-        f"store-level schedules: {len(store_cases)} passed; skipped {len(skipped)} server-level cases "
-        "(a Store is not a server: they run against the persistent server profile)"
-    )
+    print(f"store-level schedules: {len(store_cases)} passed, 0 skipped")
+
+
+@needs_orchestrator
+def test_a_driver_that_does_not_serve_a_level_skips_its_cases_with_that_reason() -> None:
+    """A level the driver cannot configure is skipped, never passed: the store driver answers UNSUPPORTED_LEVEL."""
+
+    report = run_schedules(level="server", store_options={"serveLevels": ["store"]})
+    server_cases = [case for case in load_corpus()["cases"] if case["level"] == "server"]
+    skipped = [r for r in report["results"] if r["status"] == "skipped"]
+    assert len(skipped) == len(server_cases) > 0
+    assert all("does not serve level server" in r["detail"] for r in skipped)
 
 
 @needs_orchestrator

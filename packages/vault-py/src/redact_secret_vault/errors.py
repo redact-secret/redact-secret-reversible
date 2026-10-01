@@ -30,6 +30,16 @@ class VaultServerErrorCode(str, Enum):
     # docs/decisions/2026-09-27-decide-pii-retention-and-activation-ownership.md §3.
     PII_UNAVAILABLE = "PII_UNAVAILABLE"
     PII_ACTIVATION_MISMATCH = "PII_ACTIVATION_MISMATCH"
+    # The persistent profile only (docs/specs/persistent-vault.md section 8.3). The in-memory server never raises them.
+    UNSUPPORTED_STORE = "UNSUPPORTED_STORE"
+    STORE_UNAVAILABLE = "STORE_UNAVAILABLE"
+    STORE_QUARANTINED = "STORE_QUARANTINED"
+    COMMIT_AMBIGUOUS = "COMMIT_AMBIGUOUS"
+    RESTORE_CONFLICT = "RESTORE_CONFLICT"
+    CLOCK_SKEW = "CLOCK_SKEW"
+    LIFECYCLE_DENIED = "LIFECYCLE_DENIED"
+    KEY_UNAVAILABLE = "KEY_UNAVAILABLE"
+    CLOSED = "CLOSED"
 
 
 class ServerDenialReason(str, Enum):
@@ -60,6 +70,12 @@ class ServerDenialReason(str, Enum):
     RATE_LIMITED = "rate-limited"
     POLICY_EVALUATION_ERROR = "policy-evaluation-error"
 
+    # The persistent profile only (docs/specs/persistent-vault.md section 8.3).
+    INTEGRITY_FAILURE = "integrity-failure"
+    KEY_UNAVAILABLE = "key-unavailable"
+    ATTEMPT_MISMATCH = "attempt-mismatch"
+    ATTEMPT_ALREADY_COMMITTED = "attempt-already-committed"
+
 
 class VaultServerError(Exception):
     """Mirrors ``VaultError`` (packages/vault/src/errors.ts). Never carries a
@@ -72,10 +88,13 @@ class VaultServerError(Exception):
         *,
         core_code: str | None = None,
         reason: ServerDenialReason | None = None,
+        attempt_id: str | None = None,
     ) -> None:
         self.code = code
         self.core_code = core_code
         self.reason = reason
+        #: Set only for ``COMMIT_AMBIGUOUS`` (persistent profile): the attempt to resolve with ``resolve_attempt``.
+        self.attempt_id = attempt_id
         detail = f" reason={reason.value}" if reason is not None else ""
         detail += f" core_code={core_code}" if core_code is not None else ""
         super().__init__(f"{code.value}{detail}")

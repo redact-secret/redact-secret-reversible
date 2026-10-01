@@ -18,7 +18,7 @@ import dataclasses
 import json
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +73,8 @@ _STORE_METHODS = {
     "quarantine": "quarantine",
     "invalidateRecovered": "invalidate_recovered",
 }
+
+_SERVER_OPERATIONS = frozenset({"capture", "restore", "revoke", "deleteCaptureCiphertext", "resolveAttempt"})
 
 _BOUNDS = {
     "maxClockSkewMs": "max_clock_skew_ms",
@@ -217,6 +219,8 @@ def encode(value: Any) -> Any:
         return {_camel(f.name): encode(getattr(value, f.name)) for f in dataclasses.fields(value)}
     if isinstance(value, (tuple, list)):
         return [encode(item) for item in value]
+    if isinstance(value, Mapping):
+        return {key: encode(item) for key, item in value.items()}
     return value
 
 
@@ -258,6 +262,7 @@ class Driver:
         self._clock: _Clock | None = None
         self._holds: dict[str, asyncio.Event] = {}
         self._holds_enabled = True
+        self._server: Any = None
 
     def _reset(self) -> None:
         for event in self._holds.values():
@@ -265,8 +270,22 @@ class Driver:
         self._holds.clear()
         if self._store is not None:
             self._store.release_all()
+        if self._server is not None:
+            asyncio.ensure_future(self._server.vault.close())  # noqa: RUF006
         self._store = None
         self._clock = None
+        self._server = None
+
+    async def _configure_server(self, message: dict[str, Any]) -> dict[str, Any]:
+        from schedule_server import FAULT_KINDS, open_server
+
+        self._server = await open_server(message["namespace"], clock_start=CLOCK_START_MS)
+        self._clock = self._server.clock
+        return {
+            "ok": True,
+            "capabilities": encode(self._server.store.capabilities()),
+            "features": {"testClock": True, "holds": [], "faults": list(FAULT_KINDS), "levels": ["server"]},
+        }
 
     def _configure(self, message: dict[str, Any]) -> dict[str, Any]:
         self._reset()
@@ -335,12 +354,27 @@ class Driver:
         operation = message.get("op")
         try:
             if operation == "configure":
+                served = (message.get("store") or {}).get("serveLevels")
+                if served is not None and message.get("level") not in served:
+                    self._reset()
+                    return {"ok": False, "error": "UNSUPPORTED_LEVEL"}
+                if message.get("level") == "server":
+                    self._reset()
+                    return await self._configure_server(message)
                 return self._configure(message)
             if operation == "reset":
                 self._reset()
                 return {"ok": True}
-            if self._store is None:
+            if self._server is not None and operation in _SERVER_OPERATIONS:
+                from schedule_server import server_call
+
+                return await server_call(self._server, message, _STORE_METHODS, encode)
+            if self._server is not None and operation == "capabilities":
+                return {"result": encode(self._server.store.capabilities())}
+            if self._store is None and self._server is None:
                 return {"error": "NOT_CONFIGURED"}
+            if self._store is None and operation != "clock" and operation != "release":
+                return {"error": "UNSUPPORTED_OPERATION"}
             if operation == "capabilities":
                 return {"result": encode(self._store.capabilities())}
             if operation == "clock":

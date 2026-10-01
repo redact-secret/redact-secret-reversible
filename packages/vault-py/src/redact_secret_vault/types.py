@@ -126,6 +126,10 @@ class ServerAuditOperation(str, Enum):
     RESTORE = "restore"
     REVOKE = "revoke"
     POLICY_ERROR = "policy-error"
+    # The persistent profile only. The in-memory server emits none of them: its capture is outside the audit vocabulary.
+    CAPTURE = "capture"
+    DELETE_CIPHERTEXT = "delete-ciphertext"
+    RESOLVE_ATTEMPT = "resolve-attempt"
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +152,10 @@ class ServerAuditEvent:
     entries: int | None = None
     policy_revision: str | None = None
     request_id: str | None = None
+    #: Persistent profile only: the opaque capture identifier of a capture or lifecycle operation.
+    capture_id: str | None = None
+    #: Persistent profile only: the opaque attempt identifier of a restore.
+    attempt_id: str | None = None
 
 
 ServerAuditHook = Callable[[ServerAuditEvent], None]
