@@ -12,12 +12,13 @@
 | `generate-schedules.mjs` | Writes `schedules.json` from `schedules/*.mjs`, which author the cases with loops for variant lists. `--check` compares without writing. |
 | `orchestrator.mjs` | Interprets the file. Node.js standard library only. Exports `runSchedules`; `node orchestrator.mjs --driver "<command>"` is the command line. |
 | `driver-js.mjs` | The JavaScript driver: `@redact-secret/store-memory` at the store level, a persistent server over it at the server level. |
+| [`packages/vault-py/tests/schedule_driver.py`](../../../packages/vault-py/tests/schedule_driver.py) | The Python driver: the Python reference store at the store level. It lives in the test tree and is not in the wheel. A level it does not serve answers `UNSUPPORTED_LEVEL` and those cases are skipped with that reason. |
 
 ```sh
 npm run build
 node conformance/persistent/v1/generate-schedules.mjs --check
 node conformance/persistent/v1/orchestrator.mjs --driver "node conformance/persistent/v1/driver-js.mjs"
-# options: --level store|server  --filter <text in the case id>  --seed <n>  --parallelism <n>
+# options: --level store|server  --filter <text in the case id>  --ids <id,id,…>  --seed <n>  --parallelism <n>
 #          --store-options '<json passed to the driver>'  --actor-driver B="<command>"  --json  --debug
 ```
 

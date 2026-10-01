@@ -17,5 +17,7 @@ def _no_ambient_core_location(monkeypatch):
 # The persistent modules need Python 3.11 or later (docs/decisions/python-persistence-api-and-packaging.md);
 # the rest of the package keeps its own floor, so their tests are not collected on 3.10.
 collect_ignore_glob = (
-    ["test_persistent_*.py", "test_crypto_*.py", "test_import_isolation.py"] if sys.version_info < (3, 11) else []
+    ["test_persistent_*.py", "test_crypto_*.py", "test_import_isolation.py", "test_store_memory.py"]
+    if sys.version_info < (3, 11)
+    else []
 )

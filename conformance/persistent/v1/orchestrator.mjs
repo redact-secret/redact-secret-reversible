@@ -260,7 +260,11 @@ class Run {
         fixtures: this.doc.fixtures,
       });
       if (response.ok !== true) {
-        throw new ScheduleSkip(`the driver cannot be configured for this case (${describe(response.error)})`);
+        throw new ScheduleSkip(
+          response.error === "UNSUPPORTED_LEVEL"
+            ? `the driver does not serve level ${this.schedule.level}`
+            : `the driver cannot be configured for this case (${describe(response.error)})`,
+        );
       }
       if (actor === [...this.drivers.keys()][0]) {
         this.features = { testClock: false, holds: [], faults: [], levels: [], ...(response.features ?? {}) };
@@ -1201,6 +1205,7 @@ function parseArgs(argv) {
       out.actorDrivers[actor] = rest.join("=");
     } else if (arg === "--level") out.level = value();
     else if (arg === "--filter") out.filter = value();
+    else if (arg === "--ids") out.ids = value().split(",");
     else if (arg === "--seed") out.seed = Number(value());
     else if (arg === "--parallelism") out.parallelism = Number(value());
     else if (arg === "--store-options") out.storeOptions = JSON.parse(value());
@@ -1240,7 +1245,7 @@ async function main() {
   const results = await runSchedules({
     doc,
     drivers,
-    options: { debug: args.debug, seed: args.seed, parallelism: args.parallelism, level: args.level, filter: args.filter, storeOptions: args.storeOptions },
+    options: { debug: args.debug, ids: args.ids, seed: args.seed, parallelism: args.parallelism, level: args.level, filter: args.filter, storeOptions: args.storeOptions },
   });
   for (const driver of made.values()) await driver.close();
   const counts = { passed: 0, failed: 0, skipped: 0 };
