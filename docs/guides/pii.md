@@ -1,0 +1,19 @@
+# PII findings
+
+How [`@redact-secret/vault`](../../packages/vault/README.md) handles the core's opt-in PII detection. [`@redact-secret/vault-server`](../../packages/vault-server/README.md) forwards `pii` and `expectPiiActivation` unchanged, so the same rules apply there.
+
+In short: PII detection is off unless your application turns it on, and a PII value is never retained unless a capture names its exact type in `pii: { retain: [...] }`.
+
+Core `0.1.0-beta.10` added opt-in PII detection, whose finding types start with `pii_`. The pin on `main` is `0.1.0-beta.12` (`0.1.0-beta.11` since [#96](https://github.com/redact-secret/redact-secret-vault/issues/96)), which loads its PII runtime only when `initialize({ pii })` selects PII; the vault uses only that public API, so nothing changes for it. The vault detects that support at runtime, never by version, so a core without it (`0.1.0-beta.9`) gets the fail-closed rules below. See the [decision record](../decisions/decide-pii-retention-and-activation-ownership.md).
+
+- **Your application owns PII activation.** In the core, PII activation applies to the whole process or page and can be set only once. The vault never chooses a selection for you. Pass `createVault({ pii: [...] })` and the vault forwards your selectors to the core's `initialize({ pii })` as given. `pii: []` means PII off. Omit `pii` and the vault adopts whatever your application already set with the core's own `initialize`, and calls no initializer itself. If nothing initialized the core, `createVault()` fails with `CORE_FAILURE` / `coreCode: "NOT_INITIALIZED"` rather than silently locking PII off. Fix it with `createVault({ pii: [] })`, or by awaiting the core's `initialize(...)` first. A different selection than the one already active fails with `CORE_FAILURE` / `coreCode: "PII_ACTIVATION_CONFLICT"`, and the active selection is left unchanged.
+- **Observed activation.** `vault.piiActivation` is the core's canonical activation identity, or `null` on a core without PII support. Pass `expectPiiActivation` to require an exact identity. Any difference fails with `PII_ACTIVATION_MISMATCH`.
+- **PII is never retained by default.** A `redact` finding whose type starts `pii_` is replaced by a display placeholder that cannot be restored, and counted in `unrestorable`. To retain a type, name it exactly in `capture(input, { pii: { retain: ["pii_global_iban"] } })`. `eligible` is consulted only for allowlisted PII types. It can narrow the allowlist but cannot widen it, so an allow-all `eligible` retains no PII. Retained PII uses the same grants, `maxUses`, TTLs, and limits as any other entry.
+- **Warn-level PII still fails the capture.** Medium- and Low-confidence PII defaults to the core's `warn` action, so such a capture fails with `UNREDACTED_FINDINGS` unless you map those types to `redact` with a core `policy` or choose `unredacted: "pass-through"`. For example, beta.10 rates a labeled seven-digit local phone number (`telephone=…`) as Medium `pii_global_phone`. `pii.retain` applies only to `redact` findings, so listing a warn-level type there does not retain it; with `"pass-through"` it stays as plaintext and appears in `passedThroughTypes`.
+- **PII findings count toward `maxFindings`.** See Bounds under [What the vault enforces](../reference/vault.md#what-the-vault-enforces).
+- **Fail closed without PII support.** With a core that lacks PII support, a non-empty `pii`, any `expectPiiActivation`, or a capture's `pii` option fails with `PII_UNAVAILABLE` before the core is called. `pii: []` is accepted and equals omission. A capture's `pii` option also fails `PII_UNAVAILABLE` when the observed activation has `selectors=off`.
+
+## Other runtimes
+
+- Worker mode: the Worker script owns its own activation. See [PII in a Worker](worker-mode.md#pii-in-a-worker).
+- Python: see [PII selection and retention](../reference/vault-py.md#pii-selection-and-retention).

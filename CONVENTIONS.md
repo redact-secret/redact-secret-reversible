@@ -26,7 +26,7 @@ Treat memory erasure, encryption-at-rest, one-time use, and exact TTL values as 
 
 ## Documentation and decisions
 
-Keep README concise for consumers, ARCHITECTURE.md for trust boundaries, and `docs/decisions/` for durable choices and rejected alternatives. Each decision records status, scope, consequences, and questions left open. Link to the core's canonical documentation instead of copying its API or detector inventory. Documentation and tests should change with behavior.
+Keep each README to what a consumer needs in five minutes: what the package is for, how to install it, one working example, and the rules that example depends on. Task walkthroughs go in `docs/guides/`, full API and operational detail in `docs/reference/`, and versions and qualified runtimes in `docs/status.md`. Keep ARCHITECTURE.md for trust boundaries, and `docs/decisions/` for durable choices and rejected alternatives. Each decision records status, scope, consequences, and questions left open. Link to the core's canonical documentation instead of copying its API or detector inventory. Documentation and tests should change with behavior.
 
 ## Releases
 
