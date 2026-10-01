@@ -1,6 +1,6 @@
 # redact-secret-vault (Python)
 
-Swap secrets for random tokens before text leaves your server (for example, to an LLM), then put the original values back, but only for the user, tenant, purpose, and field your policy allows. It is the Python counterpart of [`@redact-secret/vault-server`](../vault-server/README.md).
+Swap secrets for random tokens before text leaves your server (for example, to an LLM), then put the original values back, but only for the user, tenant, purpose, and field your policy allows. It is the Python counterpart of [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md).
 
 **Research-grade.** In-memory only; nothing is persistent. Detection runs in [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core), which has no Python build, so this package talks to it through a small Node.js child process.
 
@@ -124,9 +124,9 @@ Run `python -m redact_secret_vault doctor` first: it names the failing part and 
 
 ## More
 
-- [Reference](../../docs/reference/vault-py.md): how the core is located, the bridge process and its limits, PII, tests, and how this package compares with the JavaScript one.
-- [Threat model](../../docs/specs/threat-model.md#python-core-bridge-redact-secret-vault--research-grade-not-qualified) for the bridge.
-- [Release status](../../docs/status.md) and [RELEASING.md](../../RELEASING.md#python).
+- [Reference](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/reference/vault-py.md): how the core is located, the bridge process and its limits, PII, tests, and how this package compares with the JavaScript one.
+- [Threat model](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/threat-model.md#python-core-bridge-redact-secret-vault--research-grade-not-qualified) for the bridge.
+- [Release status](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/status.md) and [RELEASING.md](https://github.com/redact-secret/redact-secret-vault/blob/main/RELEASING.md#python).
 
 ## Development
 

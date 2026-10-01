@@ -30,6 +30,7 @@ jobs:
       - run: npm run check:boundaries
       - run: npm run check:persistence-boundaries
       - run: npm run check:links
+      - run: npm run test:scripts
       - name: Validate conformance corpus JSON
         run: node -e 'JSON.parse(require("fs").readFileSync("conformance/v1/corpus.json","utf8"))'
 

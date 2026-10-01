@@ -172,6 +172,12 @@ jobs:
         run: npm install -g npm@12.1.0
       - run: npm run build
 
+      # Every README published below links to this tag's documentation, not to
+      # `main` (#138, RELEASING.md "README links"). The checkout is discarded
+      # with the job, so nothing is restored.
+      - name: Pin README links to the release tag
+        run: node scripts/pin-readme-links.mjs pin
+
       # @redact-secret/vault-contracts first: every persistence package and the
       # vault-server depend on it at an exact version.
       - name: npm publish --provenance (vault-contracts)

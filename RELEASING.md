@@ -56,7 +56,7 @@ On `main`, the `ci` workflow runs the `persistence` matrix and `postgres 17` on 
 
 npm trusted publishing can be configured only for a package that already exists (see [Provenance](#provenance)). So the first version of each new package is published by hand by a maintainer, exactly as `@redact-secret/vault@0.1.0-alpha.1` and `@redact-secret/vault-server@0.1.0-alpha.2` were, and carries no provenance attestation. For each package, in this order — `vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `key-provider-aws-kms`:
 
-1. From a clean checkout of the commit to be tagged, with `ci` green on it: `npm ci && npm run build`.
+1. From a clean checkout of the commit to be tagged, with `ci` green on it: `npm ci && npm run build`. Then `npm run readme:pin`, so the README you publish links to the release tag ([README links](#readme-links)); run `npm run readme:restore` when you are done.
 2. `npm publish -w @redact-secret/<package> --tag alpha`, authenticated as a maintainer of the `@redact-secret` scope (web 2FA, or a granular token limited to that package). No `--provenance`: it is not available outside the workflow.
 3. `npm view @redact-secret/<package> dist-tags`. For `@redact-secret/vault-server`'s first publish the registry pointed `latest` as well as `alpha` at the new version; expect the same and leave it.
 4. On npmjs.com: the package → Settings → Trusted Publisher → add a GitHub Actions publisher for repository `redact-secret/redact-secret-vault`, workflow `release.yml`, environment none.
@@ -101,6 +101,17 @@ npm audit signatures   # provenance, for versions the workflow published
 ```
 
 Then run the consumer script's persistent flow (`exercise` in `qualification/persistence-consumer.mjs`) in that directory, and record what was run in the qualification record. A version published by hand has a registry signature and no provenance attestation.
+
+## README links
+
+A README on the registry stays as it was published, so a link to `main` in it would show a reader of an old version the documentation of a newer one. `release.yml` therefore runs `node scripts/pin-readme-links.mjs pin` after the build and before the first publish ([#138](https://github.com/redact-secret/redact-secret-vault/issues/138)). In every `packages/*/README.md` it rewrites:
+
+- `https://github.com/redact-secret/redact-secret-vault/blob/main/...` and `/tree/main/...` to the release tag;
+- relative links (`../../docs/...`) to absolute links at the release tag, because the registry does not resolve them.
+
+The tag is `v<version of @redact-secret/vault>`, the tag the workflow runs from. Links to an exact commit, to issues, and to other sites are left alone. The committed READMEs keep their `main` and relative links; only the packed copy changes.
+
+It is a step of the workflow and not a `prepack` script because package manifests carry no lifecycle script (`check:boundaries`). For a publish by hand, run `npm run readme:pin` before and `npm run readme:restore` after. A link pinned before the tag is pushed resolves once it is. `npm run test:scripts` covers the rewrite and a packed tarball. The Python README is not rewritten: it links to `main` with absolute URLs.
 
 ## Performance check
 
