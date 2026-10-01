@@ -4,7 +4,7 @@
 
 ## @redact-secret/vault 0.1.0-beta.3, @redact-secret/vault-server 0.1.0-beta.3, redact-secret-vault 0.1.0b3 (Python)
 
-**Release date: not yet released.** npm dist-tag `beta`. `@redact-secret/core` peer moves to `0.1.0-beta.12` exactly; `@redact-secret/vault-server` depends on `@redact-secret/vault` `0.1.0-beta.3` exactly. No API change from `0.1.0-beta.2` / `0.1.0b2`.
+**Release date: 2026-10-01.** Tag `v0.1.0-beta.3` at `b526492`; [GitHub pre-release](https://github.com/redact-secret/redact-secret-vault/releases/tag/v0.1.0-beta.3). npm dist-tag `beta`. `@redact-secret/core` peer moves to `0.1.0-beta.12` exactly; `@redact-secret/vault-server` depends on `@redact-secret/vault` `0.1.0-beta.3` exactly. No API change from `0.1.0-beta.2` / `0.1.0b2`. Performance against `0.1.0-beta.2` (`corpus-v1`, `standard` tier, `github-actions/Linux/X64/ubuntu24/20260927.320.1`, PII off and on): 0 fail on the tag run; PII on 0 warn; PII off 1 warn, `op-latency` `revoke` (ratio 1.13, CI 1.10 to 1.15), which is runner noise: the by-hand run on the same commit measured 0.90 (CI 0.88 to 0.92) with 0 warn and 0 fail in both modes, and the vault source did not change. See [docs/research/perf/0.1.0-beta.3.json](docs/research/perf/0.1.0-beta.3.json).
 
 - **Core peer `0.1.0-beta.12`.** `@redact-secret/vault` and `@redact-secret/vault-server` peer-depend on `@redact-secret/core` `0.1.0-beta.12` exactly, and the Python bridge's `PINNED_CORE_VERSION` is `0.1.0-beta.12`. The published `0.1.0-beta.2` / `0.1.0b2` pin `0.1.0-beta.11`. Root and wheel-smoke lockfiles, the qualification pins, and the docs that describe the pin on `main` are updated; no code change.
 
