@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## @redact-secret/vault 0.1.0-beta.3, @redact-secret/vault-server 0.1.0-beta.3, redact-secret-vault 0.1.0b3 (Python)
+
+**Release date: not yet released.** npm dist-tag `beta`. `@redact-secret/core` peer moves to `0.1.0-beta.12` exactly; `@redact-secret/vault-server` depends on `@redact-secret/vault` `0.1.0-beta.3` exactly. No API change from `0.1.0-beta.2` / `0.1.0b2`.
+
 - **Core peer `0.1.0-beta.12`.** `@redact-secret/vault` and `@redact-secret/vault-server` peer-depend on `@redact-secret/core` `0.1.0-beta.12` exactly, and the Python bridge's `PINNED_CORE_VERSION` is `0.1.0-beta.12`. The published `0.1.0-beta.2` / `0.1.0b2` pin `0.1.0-beta.11`. Root and wheel-smoke lockfiles, the qualification pins, and the docs that describe the pin on `main` are updated; no code change.
 
 ## @redact-secret/vault 0.1.0-beta.2, @redact-secret/vault-server 0.1.0-beta.2, redact-secret-vault 0.1.0b2 (Python)
