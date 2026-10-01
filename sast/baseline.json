@@ -105,13 +105,6 @@
       "rationale": "The same fixed operation name as the line-101 finding, applied to the store under test, whose methods are exactly the `Store` interface. No external value selects the method. Test-harness code.",
       "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
     },
-    "ba9e27184af94ec6": {
-      "classification": "false_positive",
-      "line": 84,
-      "path": "qualification/check-persistence-boundaries.mjs",
-      "rationale": "The pattern is an anchored allowlist for packed file names; each repeated group ends in a literal `/`, so alternatives cannot overlap and matching is linear. The input is the file list of a tarball this script just built, not external text. Development tooling, never published.",
-      "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
-    },
     "565ba857e070d946": {
       "classification": "false_positive",
       "line": 238,
@@ -146,6 +139,34 @@
       "path": "packages/store-postgres/qualification/run.mjs",
       "rationale": "Builds a `<details>` line of the Markdown qualification report from this run's own test names and counts. It is written to a file in the repository, not served or injected into a page. Qualification tooling, not published.",
       "rule_id": "sast.rules.javascript.lang.security.html-in-template-string"
+    },
+    "ff0a3c1f533246e3": {
+      "classification": "false_positive",
+      "line": 88,
+      "path": "qualification/check-persistence-boundaries.mjs",
+      "rationale": "The pattern is an anchored allowlist for packed file names; each repeated group ends in a literal `/`, so alternatives cannot overlap and matching is linear. The input is the file list of a tarball this script just built, not external text. Development tooling, never published.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
+    },
+    "63e1623582dcbc84": {
+      "classification": "false_positive",
+      "line": 71,
+      "path": "packages/store-sqlite/support/process-worker.mjs",
+      "rationale": "Test worker process: `run` is looked up in the `operations` object literal defined a few lines above, by an operation name the parent test sends over IPC. An unknown name yields `undefined` and is answered UNKNOWN_OPERATION. Never request data, and the file is not part of the published package (`files` ships `dist` only).",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "2d6c60e90dc28d4a": {
+      "classification": "false_positive",
+      "line": 81,
+      "path": "packages/store-sqlite/support/process-worker.mjs",
+      "rationale": "Test worker process: `method` arrives over IPC from the parent test in the same run, which sends only `Store` operation names. It is never request data and the file is not part of the published package (`files` ships `dist` only).",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "428e50822b971005": {
+      "classification": "false_positive",
+      "line": 21,
+      "path": "packages/store-sqlite/support/store-worker.mjs",
+      "rationale": "Test worker thread: `method` is a `Store` operation name the conformance harness calls on its second-connection proxy in the same process. It is never request data and the file is not part of the published package (`files` ships `dist` only).",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
     }
   },
   "known_errors": {}
