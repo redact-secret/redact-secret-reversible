@@ -55,9 +55,10 @@ export interface PgClientLike {
   release(destroy?: boolean | Error): void;
   /**
    * Optional, as on a `pg` client. When both are present the adapter listens
-   * for `error` on a client for as long as it holds it: `pg` emits that event
-   * when a checked-out connection fails, and Node.js turns an `error` event
-   * nobody listens for into an uncaught exception.
+   * on a client for as long as it holds it: for `error`, which `pg` emits
+   * when a checked-out connection fails and which Node.js turns into an
+   * uncaught exception when nobody listens; and for `notice`, to see a COMMIT
+   * that PostgreSQL completed with a warning.
    */
   on?(event: string, listener: (...args: unknown[]) => void): unknown;
   removeListener?(event: string, listener: (...args: unknown[]) => void): unknown;
@@ -107,6 +108,18 @@ export interface PostgresStore extends Store {
 }
 
 const NOW_MS = "(extract(epoch from clock_timestamp()) * 1000)::bigint";
+
+/**
+ * The timeline this primary is writing WAL on: the first eight hexadecimal
+ * digits of the current WAL file name. It changes the moment a standby is
+ * promoted or a point-in-time recovery ends. The timeline in
+ * `pg_control_checkpoint()` does not: it is the last checkpoint's, and after
+ * a promotion it keeps the old value until the next checkpoint completes,
+ * which the qualification run measured in minutes. On a standby the WAL
+ * functions raise, so the expression yields NULL there.
+ */
+const TIMELINE_SQL =
+  "CASE WHEN pg_is_in_recovery() THEN NULL ELSE ('x' || substr(pg_walfile_name(pg_current_wal_insert_lsn()), 1, 8))::bit(32)::int END";
 
 /** Thrown inside a transaction body to roll back and return a result. */
 class Rollback<T> {
@@ -167,14 +180,30 @@ function boundedOption(value: number | undefined, fallback: number, ceiling: num
  * caller only as the rejected statement that follows, never as an unhandled
  * `error` event. A client that is destroyed keeps the listener: late events
  * of a discarded connection must not escape either.
+ *
+ * Server warnings are counted, so the transaction can tell a clean COMMIT
+ * from one PostgreSQL completed with a warning.
  */
-function hold(client: PgClientLike): { release(destroy: boolean): void } {
+function hold(client: PgClientLike): { warnings(): number; release(destroy: boolean): void } {
   const listening = typeof client.on === "function" && typeof client.removeListener === "function";
+  let warnings = 0;
   const ignore = (): void => {};
-  if (listening) client.on?.("error", ignore);
+  const notice = (message: unknown): void => {
+    const code = typeof message === "object" && message !== null ? (message as { code?: unknown }).code : undefined;
+    // Class 00 is a plain NOTICE. Anything else, or a message without a code, is a warning.
+    if (typeof code !== "string" || !code.startsWith("00")) warnings += 1;
+  };
+  if (listening) {
+    client.on?.("error", ignore);
+    client.on?.("notice", notice);
+  }
   return {
+    warnings: () => warnings,
     release(destroy: boolean): void {
-      if (listening && !destroy) client.removeListener?.("error", ignore);
+      if (listening) {
+        client.removeListener?.("notice", notice);
+        if (!destroy) client.removeListener?.("error", ignore);
+      }
       client.release(destroy ? true : undefined);
     },
   };
@@ -381,7 +410,7 @@ class PostgresStoreImpl implements PostgresStore {
       const facts = await client.query(
         `SELECT ${this.#nowSql} AS now, pg_is_in_recovery() AS standby,
                 (SELECT system_identifier::text FROM pg_control_system()) AS sysid,
-                (SELECT timeline_id FROM pg_control_checkpoint()) AS timeline`,
+                ${TIMELINE_SQL} AS timeline`,
       );
       const row = facts.rows[0] ?? {};
       // A connection that has landed on a standby is not the authority.
@@ -405,13 +434,20 @@ class PostgresStoreImpl implements PostgresStore {
       if (state === "40001" || state === "40P01" || state === "55P03") throw new Contention();
       throw new StoreError("STORE_UNAVAILABLE");
     }
+    const warningsBefore = held.warnings();
     try {
       await client.query("COMMIT");
     } catch {
       held.release(true);
       throw new StoreError(mode === "write" ? "STORE_AMBIGUOUS" : "STORE_UNAVAILABLE");
     }
+    const warned = held.warnings() !== warningsBefore;
     held.release(false);
+    // PostgreSQL answers COMMIT successfully, with a warning, when a wait for
+    // the synchronous standby was cancelled: the transaction is committed
+    // here and may be missing there. That is not the durability this store
+    // declares, so the caller is told the outcome is not confirmed.
+    if (warned && mode === "write") throw new StoreError("STORE_AMBIGUOUS");
     return value;
   }
 
