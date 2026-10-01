@@ -102,9 +102,20 @@ def _resolve_session(context: Any) -> str | None:
     return context.get("session") if isinstance(context, dict) else None
 
 
-async def open_server(namespace: str, *, clock_start: int, core: Any | None = None) -> ServerRig:
-    clock = _Clock(clock_start)
-    inner = ScheduleStore(now=clock.now)
+async def open_server(
+    namespace: str, *, clock_start: int, core: Any | None = None, backend: str = "memory"
+) -> ServerRig:
+    clock: Any
+    if backend == "postgres":
+        # The server over the PostgreSQL adapter: the store reads its clock from a row this driver moves, and the
+        # server's own clock is the same one.
+        import pg_support
+
+        clock = pg_support.DbClock(start=clock_start)
+        inner: Any = await pg_support.open_store(pg_support.HookedPool(), clock=clock)
+    else:
+        clock = _Clock(clock_start)
+        inner = ScheduleStore(now=clock.now)
     await inner.initialize_namespace(namespace, 1)
     store = FaultStore(inner)
     crypto = create_record_crypto(

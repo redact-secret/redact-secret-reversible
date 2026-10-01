@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import os
 import re
 import sys
 from collections.abc import Callable, Mapping
@@ -205,6 +206,18 @@ def _call(store: ScheduleStore, operation: str, data: dict[str, Any]) -> Any:
     raise KeyError(operation)
 
 
+def _debug() -> None:
+    """With ``RSV_DRIVER_DEBUG=1``, an unexpected failure's traceback goes to ``RSV_DRIVER_DEBUG_FILE``.
+
+    A test aid: the protocol itself never carries it."""
+
+    if os.environ.get("RSV_DRIVER_DEBUG") == "1":
+        import traceback
+
+        with open(os.environ.get("RSV_DRIVER_DEBUG_FILE", os.devnull), "a", encoding="utf-8") as sink:
+            traceback.print_exc(file=sink)
+
+
 def _camel(name: str) -> str:
     head, *rest = name.split("_")
     return head + "".join(part.capitalize() for part in rest)
@@ -263,15 +276,22 @@ class Driver:
         self._holds: dict[str, asyncio.Event] = {}
         self._holds_enabled = True
         self._server: Any = None
+        #: Set for ``store: {"backend": "postgres"}``: the pool the adapter runs over (and the clock it reads, if any).
+        self._pg_pool: Any = None
+        self._pg_clock: Any = None
 
     def _reset(self) -> None:
         for event in self._holds.values():
             event.set()
         self._holds.clear()
-        if self._store is not None:
+        if self._store is not None and hasattr(self._store, "release_all"):
             self._store.release_all()
         if self._server is not None:
             asyncio.ensure_future(self._server.vault.close())  # noqa: RUF006
+        if self._pg_clock is not None:
+            asyncio.ensure_future(self._pg_clock.dispose())  # noqa: RUF006
+        self._pg_pool = None
+        self._pg_clock = None
         self._store = None
         self._clock = None
         self._server = None
@@ -279,8 +299,11 @@ class Driver:
     async def _configure_server(self, message: dict[str, Any]) -> dict[str, Any]:
         from schedule_server import FAULT_KINDS, open_server
 
-        self._server = await open_server(message["namespace"], clock_start=CLOCK_START_MS)
+        backend = (message.get("store") or {}).get("backend", "memory")
+        self._server = await open_server(message["namespace"], clock_start=CLOCK_START_MS, backend=backend)
         self._clock = self._server.clock
+        if backend == "postgres":
+            self._pg_clock = self._server.clock
         return {
             "ok": True,
             "capabilities": encode(self._server.store.capabilities()),
@@ -299,6 +322,35 @@ class Driver:
             "capabilities": encode(self._store.capabilities()),
             "features": {
                 "testClock": self._clock is not None,
+                "holds": list(HOLD_POINTS) if self._holds_enabled else [],
+                "faults": list(FAULTS),
+                "levels": ["store"],
+            },
+        }
+
+    async def _configure_postgres(self, message: dict[str, Any]) -> dict[str, Any]:
+        """The Python PostgreSQL adapter over a real database (``RSV_PG_APP_URL``), through hooked connections."""
+
+        import pg_support
+
+        self._reset()
+        options = message.get("store") or {}
+        bounds = {_BOUNDS[key]: value for key, value in options.items() if key in _BOUNDS and key != "maxClockSkewMs"}
+        pool = pg_support.HookedPool()
+        controllable = options.get("realClock") is not True
+        clock = pg_support.DbClock() if controllable else None
+        extra: dict[str, Any] = dict(bounds)
+        if "maxClockSkewMs" in options:
+            extra["max_clock_skew_ms"] = options["maxClockSkewMs"]
+        self._store = await pg_support.open_store(pool, clock=clock, **extra)
+        self._pg_pool, self._pg_clock, self._clock = pool, clock, clock
+        self._holds_enabled = options.get("noHolds") is not True
+        return {
+            "ok": True,
+            "pid": os.getpid(),
+            "capabilities": encode(self._store.capabilities()),
+            "features": {
+                "testClock": clock is not None,
                 "holds": list(HOLD_POINTS) if self._holds_enabled else [],
                 "faults": list(FAULTS),
                 "levels": ["store"],
@@ -324,20 +376,33 @@ class Driver:
                 emit({"event": "held", "holdId": hold_id})
                 await released.wait()
 
-            store.hold(_STORE_METHODS[operation], pause)
+            if self._pg_pool is not None:
+                import pg_support
+
+                pg_support.HOLD.set(pause)
+            else:
+                store.hold(_STORE_METHODS[operation], pause)
         code: str | None = None
         result: Any = None
         try:
-            if fault in ("unavailable", "before-first-write"):
-                raise StoreError("STORE_UNAVAILABLE")
-            if fault == "drop-connection":
-                raise StoreError("STORE_AMBIGUOUS")
-            result = await _call(store, operation, message.get("input") or {})
-            if fault == "after-commit-before-ack":
-                raise StoreError("STORE_AMBIGUOUS")
+            if self._pg_pool is not None:
+                # The real adapter fails in the named way, through its real connections.
+                import pg_support
+
+                pg_support.FAULT.set(fault)
+                result = await _call(store, operation, message.get("input") or {})
+            else:
+                if fault in ("unavailable", "before-first-write"):
+                    raise StoreError("STORE_UNAVAILABLE")
+                if fault == "drop-connection":
+                    raise StoreError("STORE_AMBIGUOUS")
+                result = await _call(store, operation, message.get("input") or {})
+                if fault == "after-commit-before-ack":
+                    raise StoreError("STORE_AMBIGUOUS")
         except StoreError as error:
             code = error.code
         except Exception:  # noqa: BLE001 - a foreign failure is reported by shape only
+            _debug()
             code = "INTERNAL"
         if code is not None:
             return {"error": code}
@@ -361,6 +426,8 @@ class Driver:
                 if message.get("level") == "server":
                     self._reset()
                     return await self._configure_server(message)
+                if message.get("level") == "store" and (message.get("store") or {}).get("backend") == "postgres":
+                    return await self._configure_postgres(message)
                 return self._configure(message)
             if operation == "reset":
                 self._reset()
@@ -387,6 +454,9 @@ class Driver:
                     self._clock.ms = message["ms"]
                 elif action != "now":
                     return {"error": "UNSUPPORTED_CLOCK"}
+                push = getattr(self._clock, "push", None)
+                if push is not None and action != "now":
+                    await push()
                 return {"result": {"now": self._clock.now()}}
             if operation == "release":
                 event = self._holds.pop(message["holdId"], None)
@@ -397,6 +467,7 @@ class Driver:
                 return await self._store_call(message, emit)
             return {"error": "UNSUPPORTED_OPERATION"}
         except Exception:  # noqa: BLE001 - never carry a foreign message
+            _debug()
             return {"error": "INTERNAL"}
 
 

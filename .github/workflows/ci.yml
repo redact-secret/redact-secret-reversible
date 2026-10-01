@@ -309,3 +309,75 @@ jobs:
         run: python ../../scripts/verify-python-dist.py
       - name: Import isolation in clean virtualenvs
         run: python scripts/check-python-isolation.py packages/vault-py/dist/*.whl
+
+  # The Python PostgreSQL adapter (redact_secret_vault.stores.postgres, #126)
+  # against a real PostgreSQL server, modeled on the `postgres 17` job above:
+  # service container, a serving role that is not a superuser, the schema owned
+  # by @redact-secret/store-postgres (the Python adapter creates no table), and
+  # synthetic runner-local passwords. The schedule corpus runs through the
+  # Python driver (control clock, database clock, with and without holds), then
+  # the two-process cases with real processes, disconnects around COMMIT, the
+  # malicious-row cases, and the DEBUG-log leak test.
+  #
+  # This is the only job that installs psycopg (the `postgres` extra, with the
+  # binary build and the pool used by one test); the `python` job installs
+  # neither, so the tests of the adapter are skipped there with their reason.
+  # RSV_REQUIRE_POSTGRES=1 turns a missing database into a failure here: a run
+  # without a database proves nothing and must not look like a pass.
+  python-postgres:
+    name: python postgres ${{ matrix.postgres }} (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["17"]
+        python: ["3.11", "3.12"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: synthetic-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RSV_PG_ADMIN_URL: postgres://postgres:synthetic-ci-only@127.0.0.1:5432/postgres
+      RSV_PG_APP_URL: postgres://rsv_app:synthetic-ci-only@127.0.0.1:5432/postgres
+      RSV_REQUIRE_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The schema, the serving role, and the Node.js orchestrator of the schedule
+      # corpus come from the JavaScript side.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @redact-secret/vault-contracts -w @redact-secret/store-postgres
+      - name: Create the serving role and apply the schema
+        run: |
+          node packages/store-postgres/scripts/create-app-role.mjs
+          node packages/vault-py/tests/pg_prepare.mjs
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: packages/vault-py/pyproject.toml
+      - name: Install the package with the postgres extra
+        run: pip install -e ".[test,lint,crypto,postgres]" "psycopg[binary]" psycopg-pool
+        working-directory: packages/vault-py
+      - name: Record the tested versions
+        run: python -c "import psycopg, psycopg_pool, cryptography; print('psycopg', psycopg.__version__, 'libpq', psycopg.pq.version(), 'impl', psycopg.pq.__impl__, 'pool', psycopg_pool.__version__, 'cryptography', cryptography.__version__)"
+      - run: ruff check .
+        working-directory: packages/vault-py
+      - name: PostgreSQL adapter, two-process, and diagnostics tests
+        run: pytest -q -s tests/test_stores_postgres.py tests/test_stores_postgres_processes.py
+        working-directory: packages/vault-py
