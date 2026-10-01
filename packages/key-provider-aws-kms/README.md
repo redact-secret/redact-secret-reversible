@@ -1,6 +1,6 @@
 # @redact-secret/key-provider-aws-kms
 
-**Status: alpha, unpublished.** An optional `KeyProvider` for the [persistent vault specification](../../docs/specs/persistent-vault.md) (§6) that generates, unwraps, and re-wraps capture data keys with AWS KMS. The specification is proposed and nothing here is a support claim.
+**Status: alpha, unpublished.** An optional `KeyProvider` for the [persistent vault specification](../../docs/specs/persistent-vault.md) (§6) that generates, unwraps, and re-wraps capture data keys with AWS KMS. The specification is implemented on `main` as alpha, and nothing here is a support claim.
 
 It is the only package in this repository that names the AWS SDK. It depends on [`@redact-secret/vault-contracts`](../vault-contracts/README.md) and has `@aws-sdk/client-kms` as a peer dependency. No other package depends on it.
 

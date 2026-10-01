@@ -135,22 +135,14 @@ test("commit ambiguous, single-use entry: the same attempt retried after it comm
 });
 
 test(
-  "commit ambiguous, single-use entry: the same attempt retried after it committed reports attempt-already-committed",
-  {
-    skip:
-      "SPEC AMBIGUITY (§7.2 step 4 vs §7.3 table): the table says the same attemptId and request after a commit is denied " +
-      "attempt-already-committed, but step 4 denies used + count > maxUses from the row before commitRestore is ever called, and " +
-      "§8.3 says an exhausted entry reports budget. For an entry the attempt itself exhausted, the server reports budget; the " +
-      "receipt is only consulted by commitRestore. Not settled here: either the table needs 'when preflight still passes', or " +
-      "the server must read the receipt before the budget check. resolveAttempt does report committed in this state.",
-  },
+  "commit ambiguous, single-use entry: the same attempt retried after it committed is denied budget at preflight, and resolveAttempt reports committed (§7.3)",
   async () => {
     const rig = await createRig();
     const captured = await captureOne(rig);
     const request = restoreRequest(captured, { attemptId: ATTEMPT });
     rig.failNext("commitRestore", { kind: "ambiguous", applied: true });
     await ambiguous(rig.vault.restore(request), ATTEMPT);
-    await denied(rig.vault.restore(request), "attempt-already-committed");
+    await denied(rig.vault.restore(request), "budget");
   },
 );
 

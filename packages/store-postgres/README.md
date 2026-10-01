@@ -2,7 +2,7 @@
 
 **Status: alpha, unpublished.** A ciphertext-only `Store` on PostgreSQL for the persistent Redact Secret vault server. It implements the store contract of the [persistent vault specification](../../docs/specs/persistent-vault.md) (§4, §5) with the types and validators of [`@redact-secret/vault-contracts`](../vault-contracts/README.md).
 
-It stores envelopes, wrapped keys, counters, and receipts as it is given them. It never decrypts, holds no data key, resolves no principal, and evaluates no policy. The specification is proposed and nothing here is a support claim beyond the two profiles below, on the versions below, as recorded in the [qualification report](qualification/report/report.md).
+It stores envelopes, wrapped keys, counters, and receipts as it is given them. It never decrypts, holds no data key, resolves no principal, and evaluates no policy. The specification is implemented on `main` as alpha, and nothing here is a support claim beyond the two profiles below, on the versions below, as recorded in the [qualification report](qualification/report/report.md).
 
 ## Qualified deployment profiles
 
@@ -26,7 +26,7 @@ Each of these is unsupported. The first was tested and shown to be unsafe; the r
 - **`synchronous_commit` weaker than `on`.** The adapter overrides a weaker session or database default in every write transaction, so this cannot be configured through it.
 - **Connection poolers** (PgBouncer, Pgpool-II, cloud proxies), in any pooling mode. Not tested. The adapter depends on one connection for the whole transaction, on transaction-local settings, on server warnings reaching the client, and on reading `pg_is_in_recovery()` from the server it writes to.
 - **Managed PostgreSQL services and forks** whose storage or failover differ from stock PostgreSQL. The restore tripwire reads `pg_control_system()` and the WAL file name; a service that hides or changes either is not covered.
-- **PostgreSQL versions other than 17.11**, Node.js versions other than 22.16.0, and `pg` versions other than 8.23.1. The `engines` field lists Node.js 20 and 24 because the repository targets them; this package's tests have not been run on them.
+- **PostgreSQL versions other than 17.11**, Node.js versions other than 22 (22.16.0 for the full qualification run; the repository's `postgres` CI job runs the single-node suites on the Node.js 22 of its Linux runner), and `pg` versions other than 8.23.1. The `engines` field lists Node.js 20 and 24 because the repository targets them; this package's tests have not been run on them.
 - **TLS.** The qualification connected over loopback TCP without TLS. The adapter does not open connections, so TLS is a property of the pool the application passes.
 
 ## Use

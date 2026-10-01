@@ -8,7 +8,7 @@ supersedes: decision-define-persistent-store-contract (sections listed below)
 ---
 # Supersede the persistent store contract with ciphertext-only stores and independent key providers
 
-> **Accepted 2026-10-01** as a design, after an [independent review](../research/persistent-vault-design-review.md), for [#104](https://github.com/redact-secret/redact-secret-vault/issues/104), [#105](https://github.com/redact-secret/redact-secret-vault/issues/105), and [#107](https://github.com/redact-secret/redact-secret-vault/issues/107), under epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4). The interfaces, bytes, and semantics are in the [persistent vault specification](../specs/persistent-vault.md). This record states what was decided, what it replaces, and why. It is a design decision; no package implements it yet, and the specification stays **proposed** until packages are qualified against it.
+> **Accepted 2026-10-01** as a design, after an [independent review](../research/persistent-vault-design-review.md), for [#104](https://github.com/redact-secret/redact-secret-vault/issues/104), [#105](https://github.com/redact-secret/redact-secret-vault/issues/105), and [#107](https://github.com/redact-secret/redact-secret-vault/issues/107), under epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4). The interfaces, bytes, and semantics are in the [persistent vault specification](../specs/persistent-vault.md). This record states what was decided, what it replaces, and why. It is a design decision. The packages on `main` implement it as alpha; what is qualified, and for which profiles, is in the [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md).
 
 ## Context
 

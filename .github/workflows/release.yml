@@ -143,8 +143,8 @@ jobs:
   # `id-token: write` grant scoped to this job only, and `--provenance` for a
   # signed build provenance attestation. Requires a trusted publisher
   # configured on npmjs.com pointing at this workflow for EACH package
-  # (@redact-secret/vault and @redact-secret/vault-server; manual npmjs.com
-  # steps — see RELEASING.md, issues #24 and #55). Until that is configured,
+  # (vault, vault-server, and every persistence package; manual npmjs.com
+  # steps — see RELEASING.md, issues #24, #55 and #112). Until that is configured,
   # the affected package's publish step fails with an auth error; it does not
   # fall back to a token. The vault is published before the vault-server,
   # which depends on it at an exact version.

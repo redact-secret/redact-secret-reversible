@@ -41,7 +41,7 @@ These are the defaults in `packages/vault-server/src/persistent/server.ts`:
 
 - **Demonstrated:** a receipt's stored expiry was exactly its capture's expiry + 2000 ms + 3 600 000 ms. It was still present after its capture and entry were swept, `resolveAttempt` still answered `committed`, a sweep at the millisecond of its expiry left it, and a sweep one millisecond later removed it. A tombstone was kept until exactly its capture's expiry + 24 hours, and its identifier stayed fenced against reuse ([sweep test](../../packages/store-postgres/test/sweep-concurrency.test.mjs)).
 - `used` is stored on the entry, not on the receipt. Removing a receipt never makes a consumed use available again (specification §7.5).
-- **Stated limit:** the store refuses a receipt more than 48 hours past its clock. The server accepts a configuration that exceeds it: 24-hour captures with a 24-hour grace. Every restore then fails `INVARIANT_VIOLATION` and consumes nothing. This is a defect in `vault-server`, pinned down by a test in [outside-findings](../../packages/store-postgres/test/outside-findings.test.mjs) and not fixed here. Until it is, keep `limits.entryTtlMs + receiptGraceMs + maxClockSkewMs` under 48 hours.
+- **Enforced:** the store refuses a receipt more than 48 hours past its clock, so the server refuses, at creation, a configuration whose capture lifetime, skew bound, and receipt grace together pass that horizon (`INVALID_ARGUMENT`). The qualification report's `outside` suite recorded the earlier behavior, before this check existed: the configuration was accepted and every restore failed closed with `INVARIANT_VIOLATION`.
 
 ### 2.4 Cleanup bounds
 
