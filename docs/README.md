@@ -16,6 +16,7 @@ New here? Start with the [repository README](../README.md), then the README of t
 - [`@redact-secret/vault-server`](reference/vault-server.md): evaluation order, concurrency, audit, API.
 - [`redact-secret-vault` (Python)](reference/vault-py.md): bridge process, PII, tests.
 - [`@redact-secret/store-postgres`](reference/store-postgres.md): profiles, schema, grants, transactions, recovery.
+- [`@redact-secret/store-sqlite`](reference/store-sqlite.md): the `sqlite-local-wal` profile, startup checks, transactions, restore detection and its blind spot, backup and recovery.
 - [`@redact-secret/key-provider-aws-kms`](reference/key-provider-aws-kms.md): keys, IAM, rotation, cache, failures.
 - [`@redact-secret/vault-conformance`](reference/vault-conformance.md): harness factories, case groups, fault injection.
 
@@ -35,6 +36,7 @@ New here? Start with the [repository README](../README.md), then the README of t
 - [Decisions](decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](decisions/define-server-authority-interface.md) and [its in-memory implementation](decisions/implement-vault-server-in-memory.md), the earlier [persistent store contract](decisions/define-persistent-store-contract.md) (partly superseded), and the [ciphertext-only store decision](decisions/supersede-persistent-store-contract.md) that replaces it (implemented on `main`, unpublished).
 - [Persistent vault specification](specs/persistent-vault.md): record format, store and key-provider contracts, restore and failure semantics, recovery and erasure limits.
 - [Persistent vault operations](specs/persistent-operations.md): expiry and cleanup, the four deletion-related operations, and the backup-recovery and failover runbooks.
+- [SQLite store qualification record](research/qualification-store-sqlite-0.1.0-alpha.1.md): partial; what ran, what did not (power loss), and what remains.
 - [Persistence qualification record](research/qualification-persistence-0.1.0-alpha.1.md): tested matrix, evidence index, unqualified profiles, and remaining limitations, with the [PostgreSQL qualification report](../packages/store-postgres/qualification/report/report.md) and the [design review](research/persistent-vault-design-review.md).
 - [Persistent record test vectors](../conformance/persistent/v1/README.md): deterministic wire vectors every implementation must reproduce.
 - [Persistent backend research](research/persistent-backend-capabilities.md) (DynamoDB, Redis, SQLite; research only, no adapter) and the [Python persistence parity plan](plans/python-persistence-parity.md) (plan only, not implemented).

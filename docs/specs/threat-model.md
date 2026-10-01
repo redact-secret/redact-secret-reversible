@@ -150,7 +150,8 @@ This section is **current** for the unpublished packages on `main`: `@redact-sec
   | AWS KMS key provider | One real-service run in `us-east-1` on Node.js 22 with single-Region symmetric keys; not run with `store-postgres`. Multi-Region keys, custom key stores, and cross-account use are not tested |
   | The local key provider as a production key-management profile | Not qualified: exercised only with material generated in the test process |
   | Asynchronous replicas as failover targets, connection poolers, managed PostgreSQL services, other PostgreSQL versions, TLS, `store-postgres` on Node.js 20 or 24 | Not qualified |
-  | DynamoDB, Redis, SQLite | No adapter; [research](../research/persistent-backend-capabilities.md) only |
+  | `store-sqlite` on one local SQLite file (WAL, `synchronous=FULL`), processes of one host | **Partly tested, not qualified** ([record](../research/qualification-store-sqlite-0.1.0-alpha.1.md)): conformance, two processes, process kills, and backup restore on macOS and Node.js 22.16.0. Power loss not simulated. A backup restored together with its marker file is not noticed by the store's tripwire |
+  | DynamoDB, Redis | No adapter; [research](../research/persistent-backend-capabilities.md) only |
   | Python, browser, Worker, or edge persistence; streaming | Not implemented |
 
 - **Requirements on the deployment:** trustworthy time on the database host and every server; the recovery epoch kept where a database restore cannot change it; the same digest key in every process of the namespace; a serving database role limited to the adapter's grants; `log_statement` at `none` or `ddl` with parameter logging off; sweeps scheduled by the application; the recovery runbook run after every recovery.

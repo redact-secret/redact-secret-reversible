@@ -59,7 +59,7 @@ Pin the exact version while the packages are beta. More programs you can run as 
 | A Python server | `redact-secret-vault` (PyPI) | [README](packages/vault-py/README.md) |
 | A server whose captures must survive a restart or be restored by another process | `@redact-secret/vault-server/persistent` (alpha, not on npm yet) | [Persistent server guide](docs/guides/persistent-server.md) |
 
-The persistent profile is built from smaller packages you only meet in that guide: [`store-postgres`](packages/store-postgres/README.md), [`store-memory`](packages/store-memory/README.md), [`vault-crypto`](packages/vault-crypto/README.md), [`key-provider-aws-kms`](packages/key-provider-aws-kms/README.md), [`vault-contracts`](packages/vault-contracts/README.md), and [`vault-conformance`](packages/vault-conformance/README.md).
+The persistent profile is built from smaller packages you only meet in that guide: [`store-postgres`](packages/store-postgres/README.md), [`store-sqlite`](packages/store-sqlite/README.md) (partly qualified, see the [record](docs/research/qualification-store-sqlite-0.1.0-alpha.1.md)), [`store-memory`](packages/store-memory/README.md), [`vault-crypto`](packages/vault-crypto/README.md), [`key-provider-aws-kms`](packages/key-provider-aws-kms/README.md), [`vault-contracts`](packages/vault-contracts/README.md), and [`vault-conformance`](packages/vault-conformance/README.md).
 
 ## Five things to know
 
