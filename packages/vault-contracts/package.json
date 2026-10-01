@@ -1,0 +1,47 @@
+{
+  "name": "@redact-secret/vault-contracts",
+  "version": "0.1.0-alpha.1",
+  "description": "Types, limits, validators, and error classes shared by persistent Redact Secret vault servers, crypto layers, stores, and key providers. No runtime dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-vault.git",
+    "directory": "packages/vault-contracts"
+  },
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-vault/issues"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/vault-contracts#readme",
+  "keywords": [
+    "redaction",
+    "secrets",
+    "vault",
+    "contracts"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  }
+}
