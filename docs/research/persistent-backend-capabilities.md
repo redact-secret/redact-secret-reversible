@@ -497,6 +497,8 @@ One database file on a local filesystem of one host, opened by one or more proce
 
 ## 9. Recommendation
 
+Follow-up issues opened on 2026-10-01: [#130](https://github.com/redact-secret/redact-secret-vault/issues/130) for the SQLite profile and [#131](https://github.com/redact-secret/redact-secret-vault/issues/131) for the contract revision a DynamoDB profile would need. No issue is opened for Redis until there is demand.
+
 | Profile | Recommendation | Main reason |
 | --- | --- | --- |
 | `sqlite-local-wal` (WAL + `FULL`, or DELETE + `EXTRA`) | Open an implementation issue | Meets every requirement of contract version 1 on documented behaviour, including the conflict rule and the store clock; meets the contract's ceilings; smallest qualification surface |

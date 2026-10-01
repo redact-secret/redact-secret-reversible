@@ -769,7 +769,7 @@ JavaScript-only until the Python gates pass: the persistent server profile, the 
 
 ## 8. Implementation handoffs
 
-To be filed only after the contracts and vectors are accepted (#104, #106). Each is independently reviewable. "JS" dependencies are issues of this repository.
+Filed on 2026-10-01, after the contracts and vectors were merged, as issues [#119](https://github.com/redact-secret/redact-secret-vault/issues/119), [#120](https://github.com/redact-secret/redact-secret-vault/issues/120), [#121](https://github.com/redact-secret/redact-secret-vault/issues/121), [#122](https://github.com/redact-secret/redact-secret-vault/issues/122), [#123](https://github.com/redact-secret/redact-secret-vault/issues/123), [#124](https://github.com/redact-secret/redact-secret-vault/issues/124), [#125](https://github.com/redact-secret/redact-secret-vault/issues/125), [#126](https://github.com/redact-secret/redact-secret-vault/issues/126), [#127](https://github.com/redact-secret/redact-secret-vault/issues/127), [#128](https://github.com/redact-secret/redact-secret-vault/issues/128), [#129](https://github.com/redact-secret/redact-secret-vault/issues/129), in the order below. Each is independently reviewable. "JS" dependencies are issues of this repository.
 
 1. **Python: persistent contracts, errors, limits, and validators (standard library only)**
    - Scope: `redact_secret_vault.persistent` with the dataclasses and protocols of §3.2 and §3.3, the error classes of §3.4, limits, string and integer rules of §3.5 and §3.6, and validators mirroring `packages/vault-contracts/src/validate.ts`. No I/O, no crypto, no server changes.
