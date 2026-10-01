@@ -275,7 +275,10 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: packages/vault-py/pyproject.toml
-      - run: pip install -e ".[test,lint,crypto]"
+      # The aws-kms extra (boto3) is installed so the key provider's tests run against
+      # a fake client; no AWS call is made and no credential is present. The real-key
+      # interoperation tests skip with their reason here.
+      - run: pip install -e ".[test,lint,crypto,aws-kms]"
         working-directory: packages/vault-py
       - run: ruff check .
         working-directory: packages/vault-py
