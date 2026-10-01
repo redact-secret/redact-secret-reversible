@@ -68,7 +68,7 @@ The agreed JavaScript package names describe two different responsibilities:
 | --- | --- | --- | --- |
 | `@redact-secret/vault` | Portable, opt-in in-memory mapping and token lifecycle (**beta**) | `0.1.0-beta.3` | Qualified: Node.js 20/22/24 and browser main thread; optional dedicated-Worker mode qualified separately (opt-in, not an implicit upgrade). Not yet: edge, SharedWorker, Service Worker, Node.js `worker_threads` |
 | `@redact-secret/vault-server` | Server-side authorization of restoration across principals, tenants, sources, destinations, and value paths (**beta**, in-memory backend) | `0.1.0-beta.3` | Tested: Node.js 20/22/24. Not yet: persistent backends |
-| `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [contract](docs/decisions/define-persistent-store-contract.md) only) | None | Backend-specific server environments |
+| `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [specification](docs/specs/persistent-vault.md) and [decision](docs/decisions/supersede-persistent-store-contract.md) only) | None | Backend-specific server environments |
 | `redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0b3` (`0.1.0b2` on PyPI) | Python 3.10+ server processes with a `node` executable available |
 
 All packages on `main` pin `@redact-secret/core@0.1.0-beta.12` exactly; `0.1.0-beta.2` pinned `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)) and `0.1.0-beta.1` pinned `0.1.0-beta.10`:
@@ -111,7 +111,8 @@ Define shared security and conformance contracts first. Qualify `@redact-secret/
 - [Security policy](SECURITY.md): private vulnerability reporting, response process, and release verification.
 - [Code of conduct](CODE_OF_CONDUCT.md), [governance](GOVERNANCE.md), and [roadmap](ROADMAP.md).
 - [Assurance case](docs/specs/assurance-case.md): why the security requirements are met.
-- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/define-server-authority-interface.md) and [its in-memory implementation](docs/decisions/implement-vault-server-in-memory.md), and the [persistent store contract](docs/decisions/define-persistent-store-contract.md) (contract only; no implementation yet).
+- [Decisions](docs/decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](docs/decisions/define-server-authority-interface.md) and [its in-memory implementation](docs/decisions/implement-vault-server-in-memory.md), the earlier [persistent store contract](docs/decisions/define-persistent-store-contract.md) (partly superseded), and the [ciphertext-only store decision](docs/decisions/supersede-persistent-store-contract.md) that replaces it (proposed; no implementation yet).
+- [Persistent vault specification](docs/specs/persistent-vault.md): proposed record format, store and key-provider contracts, restore and failure semantics, recovery and erasure limits.
 - [Threat model](docs/specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](docs/specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md) (archived): tested runtime/core matrix and evidence for 0.1.0-alpha.1.
