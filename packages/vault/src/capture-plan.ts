@@ -113,15 +113,14 @@ export interface CapturePlanBudget {
   readonly retainedBytes: number;
 }
 
-declare const planRandomBrand: unique symbol;
-
 /**
  * An opaque handle to the platform CSPRNG as it was when the handle was
  * acquired. Only `acquirePlanRandom` mints one, so no caller can supply its
  * own random source.
  */
 export interface PlanRandom {
-  readonly [planRandomBrand]: true;
+  /** A type-level brand only; no such property exists at run time. */
+  readonly __planRandom: true;
 }
 
 /** What the in-memory vault supplies beyond the plain plan arguments. */

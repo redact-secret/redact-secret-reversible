@@ -83,6 +83,34 @@
       "path": "bench/browser/worker-boundary.mjs",
       "rationale": "Same pattern as 762bff0d2bdd5716 in the B5 Worker-boundary benchmark: APP is the benchmark's own temporary build directory passed to join() for writeFileSync, and the written index.html is a constant string literal with no interpolation reaching the <script> tag.",
       "rule_id": "sast.rules.javascript.lang.security.audit.unknown-value-with-script-tag"
+    },
+    "26654523f2b69e35": {
+      "classification": "false_positive",
+      "line": 101,
+      "path": "packages/vault-conformance/src/model-cases.ts",
+      "rationale": "`operation` is drawn by the seeded generator from a fixed list of `Store` operation names and indexes the reference model, an object this package defines. No external value selects the method. Test-harness code.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "283c839ee0f08cdd": {
+      "classification": "false_positive",
+      "line": 271,
+      "path": "packages/vault-conformance/src/faulty-store.ts",
+      "rationale": "`operation` is a member of the fixed list of `Store` method names the fault wrapper is built from, typed as a key of the `Store` interface; it never comes from input. The call delegates to the wrapped store's own method of that name. Test-harness code, not a vault runtime path.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "4b8b9291d11bd7ac": {
+      "classification": "false_positive",
+      "line": 107,
+      "path": "packages/vault-conformance/src/model-cases.ts",
+      "rationale": "The same fixed operation name as the line-101 finding, applied to the store under test, whose methods are exactly the `Store` interface. No external value selects the method. Test-harness code.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "ba9e27184af94ec6": {
+      "classification": "false_positive",
+      "line": 84,
+      "path": "qualification/check-persistence-boundaries.mjs",
+      "rationale": "The pattern is an anchored allowlist for packed file names; each repeated group ends in a literal `/`, so alternatives cannot overlap and matching is linear. The input is the file list of a tarball this script just built, not external text. Development tooling, never published.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
     }
   },
   "known_errors": {}
