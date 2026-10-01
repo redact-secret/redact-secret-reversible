@@ -28,6 +28,21 @@ bridge = NodeCoreBridge(node_modules="/srv/myapp/core/node_modules")
 export REDACT_SECRET_VAULT_NODE_MODULES=/srv/myapp/core/node_modules
 ```
 
+Then check the setup. `doctor` is on `main` and not in `0.1.0b3`:
+
+```bash
+python -m redact_secret_vault doctor --node-modules /srv/myapp/core/node_modules
+```
+
+```text
+ok    node: v22.16.0
+ok    core location: /srv/myapp/core/node_modules (from --node-modules)
+ok    core: @redact-secret/core 0.1.0-beta.12 loaded (addon)
+ok    scan: 1 finding(s) in the synthetic input
+```
+
+A failing check prints `FAIL`, the reason, and a `fix:` line, and the command exits 1.
+
 ## Use
 
 ```python
@@ -97,6 +112,8 @@ asyncio.run(main())
 - **PII is off by default** and never retained unless a capture names the exact type.
 
 ## Common problems
+
+Run `python -m redact_secret_vault doctor` first: it names the failing part and the fix.
 
 | Error | Cause |
 | --- | --- |
