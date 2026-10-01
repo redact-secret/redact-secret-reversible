@@ -716,7 +716,7 @@ Policy is evaluated in step 7 and the commit happens in step 9. The application'
 - A capture is expired when the store's clock is at or past `expiresAt`. Expiry is a condition of the commit, independent of whether cleanup has removed the row.
 - If only the store's clock is set back, commits fail `clock-skew` once the difference passes the bound, so the extension of any lifetime is at most the bound. If the store's and the servers' clocks are set back together, lifetimes extend by that amount; nothing inside the system can detect it. Trustworthy time on the database host and the servers is a deployment requirement.
 - A restart does not reset any deadline: all are absolute timestamps.
-- `used` is stored on the entry, not on the receipt, so removing a receipt never makes a consumed use available again. What a receipt provides is deduplication of its attempt. The server sets `receiptExpiresAt` to the latest `expiresAt` among the captures of the attempt, plus the skew bound, plus a grace period (default 1 hour), so every capture an attempt touched has expired before its receipt can be swept, and a replay of that attempt is denied `expired`.
+- `used` is stored on the entry, not on the receipt, so removing a receipt never makes a consumed use available again. What a receipt provides is deduplication of its attempt. The server sets `receiptExpiresAt` to the latest `expiresAt` among the captures of the attempt, plus the skew bound, plus a grace period (default 1 hour), so every capture an attempt touched has expired before its receipt can be swept, and a replay of that attempt is denied `expired`, or `unknown-token` once the rows are swept.
 - Tombstones are kept as §5.6 states, with a default retention of 24 hours. Capture identifiers are 128 random bits and are never reissued.
 
 ### 7.6 Cancellation, timeouts, partitions, failover
@@ -832,6 +832,8 @@ Authenticated encryption shows a record was written by a key holder. It does not
   3. Raise the configured epoch.
   4. Call `invalidateRecovered` with the new epoch. Every capture in the recovered database is now treated as revoked.
   5. Start servers with the new epoch. Applications capture again from their sources.
+The step-by-step procedures, with the exact calls and what a qualification run demonstrated for each, are in the [operations specification](persistent-operations.md).
+
 - **Tripwire.** An adapter for a durable backend states in `restoreDetection` what it does to notice a recovered database by itself, and quarantines the namespace when it does. It is a guard against a skipped runbook, not a replacement for it, and a backup taken after an earlier recovery already carries the current epoch.
 - **Not offered:** returning recovered captures to service. That would need a record of consumption and revocation kept outside the database, and operations to apply it; version 1 has neither.
 - **Not covered:** a party that can write the database, or roll it back without the operator's knowledge, can also restore the epoch record and whatever the tripwire reads. Freshness against that party needs a monotonic lifecycle authority outside the database, which is the application's to provide. This design does not claim to detect a malicious rollback.

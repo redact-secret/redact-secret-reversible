@@ -125,6 +125,27 @@
       "path": "packages/key-provider-aws-kms/src/provider.ts",
       "rationale": "Each repetition of the group begins with a literal `-` and the letters it repeats cannot contain one, so no two ways of matching overlap and matching is linear. The input is the application's own configuration (`expected.partition`), validated once at construction, not request data.",
       "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
+    },
+    "9abe2087fe4bb3e3": {
+      "classification": "false_positive",
+      "line": 96,
+      "path": "packages/store-postgres/qualification/lib/vault-worker.mjs",
+      "rationale": "Qualification worker process: `method` arrives over IPC from the parent qualification script in the same run, which sends only `Store` operation names. It is never request data and the file is not part of the published package (`files` ships `dist` only).",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "abe8947c6e1f351d": {
+      "classification": "false_positive",
+      "line": 107,
+      "path": "packages/store-postgres/qualification/lib/vault-worker.mjs",
+      "rationale": "`operations` is an object literal defined a few lines above; an operation name the parent script did not define yields `undefined` and is answered UNKNOWN_OPERATION. Qualification tooling, not published.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
+    },
+    "ad872d5b5ff87fd4": {
+      "classification": "false_positive",
+      "line": 195,
+      "path": "packages/store-postgres/qualification/run.mjs",
+      "rationale": "Builds a `<details>` line of the Markdown qualification report from this run's own test names and counts. It is written to a file in the repository, not served or injected into a page. Qualification tooling, not published.",
+      "rule_id": "sast.rules.javascript.lang.security.html-in-template-string"
     }
   },
   "known_errors": {}
