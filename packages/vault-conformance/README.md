@@ -44,6 +44,8 @@ const provider = createInsecureTestKeyProvider({ acknowledgeInsecure: "test-only
 
 With another test runner, `runCases(cases)` runs the cases in order and returns `{ name, group, status, detail }` for each.
 
+The deterministic store cases are also published as data, for implementations in other languages: [`conformance/persistent/v1/schedules.json`](../../conformance/persistent/v1/SCHEDULES.md), run by an orchestrator through a driver. The seeded random sequences and the three buffer-aliasing cases exist only here.
+
 ## What a pass shows, and what it does not
 
 A store that passes behaves as specification §4.2 and §5 require for the inputs and schedules this harness runs, in the configuration the factory supplied.

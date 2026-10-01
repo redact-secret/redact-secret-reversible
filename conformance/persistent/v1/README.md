@@ -11,6 +11,7 @@
 | `vectors.json` | The vectors. Generated; do not edit by hand. |
 | `generate-vectors.mjs` | Writes `vectors.json`. Each positive vector is computed twice, once from the byte layout written out in the script with WebCrypto called directly, and once by `@redact-secret/vault-crypto`; the script fails if they differ. `--check` compares without writing. |
 | `verify_vectors.py` | A cross-check that shares no code with the JavaScript package: Python's standard library for SHA-256, HMAC, and HKDF, and the `cryptography` package for AES-256-GCM. |
+| `schedules.json`, `orchestrator.mjs`, `driver-js.mjs` | The schedule corpus for the Store contract and the server profile, its orchestrator, and the JavaScript driver. Not vectors: see [SCHEDULES.md](SCHEDULES.md). |
 
 ```sh
 npm run build -w @redact-secret/vault-contracts
