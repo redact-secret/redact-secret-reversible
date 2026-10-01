@@ -73,6 +73,8 @@ export function pausingPool(pool) {
           return client.query(text, values);
         },
         release: (destroy) => client.release(destroy),
+        on: (event, listener) => client.on(event, listener),
+        removeListener: (event, listener) => client.removeListener(event, listener),
       };
     },
   };

@@ -53,6 +53,14 @@ import { isSchemaName, migrationStatements, SCHEMA_VERSION } from "./schema.js";
 export interface PgClientLike {
   query(text: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
   release(destroy?: boolean | Error): void;
+  /**
+   * Optional, as on a `pg` client. When both are present the adapter listens
+   * for `error` on a client for as long as it holds it: `pg` emits that event
+   * when a checked-out connection fails, and Node.js turns an `error` event
+   * nobody listens for into an uncaught exception.
+   */
+  on?(event: string, listener: (...args: unknown[]) => void): unknown;
+  removeListener?(event: string, listener: (...args: unknown[]) => void): unknown;
 }
 
 export interface PgPoolLike {
@@ -129,7 +137,8 @@ function sqlState(thrown: unknown): string | undefined {
 }
 
 function toNumber(value: unknown): number {
-  const n = typeof value === "string" ? Number(value) : value;
+  // `bigint` columns arrive as strings by default, and as BigInt or number when the application configured a type parser.
+  const n = typeof value === "string" || typeof value === "bigint" ? Number(value) : value;
   if (typeof n !== "number" || !Number.isSafeInteger(n)) throw new StoreError("STORE_UNAVAILABLE");
   return n;
 }
@@ -152,6 +161,26 @@ function boundedOption(value: number | undefined, fallback: number, ceiling: num
 }
 
 /**
+ * A client the adapter has taken from the pool, until `release`.
+ *
+ * While it is held, a connection failure is observed here and reaches the
+ * caller only as the rejected statement that follows, never as an unhandled
+ * `error` event. A client that is destroyed keeps the listener: late events
+ * of a discarded connection must not escape either.
+ */
+function hold(client: PgClientLike): { release(destroy: boolean): void } {
+  const listening = typeof client.on === "function" && typeof client.removeListener === "function";
+  const ignore = (): void => {};
+  if (listening) client.on?.("error", ignore);
+  return {
+    release(destroy: boolean): void {
+      if (listening && !destroy) client.removeListener?.("error", ignore);
+      client.release(destroy ? true : undefined);
+    },
+  };
+}
+
+/**
  * Creates the tables of schema version 1. Run once, by a role that owns the
  * schema, before any store is opened. See `grantStatements` for the serving
  * role's privileges.
@@ -164,20 +193,22 @@ export async function migrate(pool: PgPoolLike, schema = "rsv"): Promise<void> {
   } catch {
     throw new StoreError("STORE_UNAVAILABLE");
   }
+  const held = hold(client);
   try {
     await client.query("BEGIN");
     // One migration at a time across processes.
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`rsv-migrate:${schema}`]);
     for (const statement of migrationStatements(schema)) await client.query(statement);
     await client.query("COMMIT");
-    client.release();
+    held.release(false);
   } catch {
+    let destroy = false;
     try {
       await client.query("ROLLBACK");
-      client.release();
     } catch {
-      client.release(true);
+      destroy = true;
     }
+    held.release(destroy);
     throw new StoreError("STORE_UNAVAILABLE");
   }
 }
@@ -221,6 +252,7 @@ export async function openPostgresStore(options: PostgresStoreOptions, nowSql: s
     throw new StoreError("STORE_UNAVAILABLE");
   }
   let standbyNames: string;
+  const held = hold(client);
   try {
     const version = await client.query(`SELECT version FROM "${schema}".rsv_schema`);
     if (version.rows.length !== 1 || toNumber(version.rows[0]?.version) !== SCHEMA_VERSION) {
@@ -236,9 +268,9 @@ export async function openPostgresStore(options: PostgresStoreOptions, nowSql: s
     if ((options.requireSynchronousStandby === true || synchronousCommit === "remote_apply") && standbyNames.trim() === "") {
       throw new StoreError("STORE_CAPABILITY");
     }
-    client.release();
+    held.release(false);
   } catch (thrown) {
-    client.release(true);
+    held.release(true);
     if (thrown instanceof StoreError) throw thrown;
     throw new StoreError("STORE_UNAVAILABLE");
   }
@@ -338,6 +370,7 @@ class PostgresStoreImpl implements PostgresStore {
     } catch {
       throw new StoreError("STORE_UNAVAILABLE");
     }
+    const held = hold(client);
     let value: T;
     try {
       await client.query(mode === "write" ? "BEGIN ISOLATION LEVEL READ COMMITTED" : "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -364,7 +397,7 @@ class PostgresStoreImpl implements PostgresStore {
       } catch {
         destroy = true;
       }
-      client.release(destroy ? true : undefined);
+      held.release(destroy);
       if (thrown instanceof Rollback) return thrown.value as T;
       if (thrown instanceof StoreError || thrown instanceof Contention) throw thrown;
       const state = sqlState(thrown);
@@ -375,10 +408,10 @@ class PostgresStoreImpl implements PostgresStore {
     try {
       await client.query("COMMIT");
     } catch {
-      client.release(true);
+      held.release(true);
       throw new StoreError(mode === "write" ? "STORE_AMBIGUOUS" : "STORE_UNAVAILABLE");
     }
-    client.release();
+    held.release(false);
     return value;
   }
 
