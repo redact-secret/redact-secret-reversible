@@ -126,6 +126,29 @@ describe("D. failover", { skip: dockerUnavailable() }, () => {
       evidence("D", "sync/settings", { settings, replication, profile: store.capabilities().profile, standbys: 1, synchronousCommitChosen: "on" });
     });
 
+    test("a store that requires a synchronous standby stops serving when the setting is removed while it runs", async () => {
+      const store = await createPostgresStore({ pool, schema: SCHEMA, requireSynchronousStandby: true, maxClockSkewMs: 30_000 });
+      const created = rawCapture({ namespace });
+      assert.equal((await store.createCapture(created)).outcome, "created");
+      const commit = await rawCommit(store, created);
+      // What failover automation does when the standby is lost and availability is preferred: commits go on, unreplicated.
+      await psql(primary.name, "ALTER SYSTEM RESET synchronous_standby_names");
+      await psql(primary.name, "SELECT pg_reload_conf()");
+      await until(async () => (await rows(pool, "SELECT current_setting('synchronous_standby_names') AS names"))[0].names === "", { what: "the setting to be removed" });
+      try {
+        await assert.rejects(store.commitRestore(commit), isStoreError("STORE_UNAVAILABLE"), "a commit was acknowledged with no synchronous standby configured");
+        await assert.rejects(store.recoveryState({ namespace }), isStoreError("STORE_UNAVAILABLE"));
+        assert.deepEqual((await captureState(admin, namespace, created.capture.captureId)).used, [0]);
+      } finally {
+        await psql(primary.name, `ALTER SYSTEM SET synchronous_standby_names = 'FIRST 1 (${standby.applicationName})'`);
+        await psql(primary.name, "SELECT pg_reload_conf()");
+        await until(async () => (await psql(primary.name, "SELECT sync_state FROM pg_stat_replication")) === "sync", { what: "the standby to be synchronous again" });
+      }
+      await until(async () => (await rows(pool, "SELECT current_setting('synchronous_standby_names') AS names"))[0].names !== "", { what: "the setting to be back" });
+      assert.equal((await store.commitRestore(commit)).outcome, "committed");
+      evidence("D", "sync/setting-removed-while-running", { whileRemoved: "STORE_UNAVAILABLE", applied: false, afterRestored: "committed" });
+    });
+
     test("a store pointed at the standby refuses to serve: STORE_CAPABILITY at creation, STORE_UNAVAILABLE per transaction", async () => {
       await assert.rejects(createPostgresStore({ pool: standbyPool, schema: SCHEMA }), isStoreError("STORE_CAPABILITY"));
       // A store opened on the primary whose pool later hands out connections to the standby.

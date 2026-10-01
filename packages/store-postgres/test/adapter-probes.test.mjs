@@ -191,7 +191,19 @@ describe("adapter probes", { skip: SKIP }, () => {
     assert.deepEqual(await store.createCapture(rawCapture({ namespace: drifted })), { outcome: "rejected", reason: "quarantined" });
     assert.deepEqual(await store.acknowledgeIdentityChange({ namespace: drifted }), { epoch: 1, state: "serving" });
     assert.deepEqual(await store.recoveryState({ namespace: drifted }), { epoch: 1, state: "serving" });
-    evidence("probe", "acknowledge-identity-change", { liftsExplicitQuarantine: false, changesEpoch: false, acceptsAnyIdentityChange: true });
+    // A different system identifier is another cluster: a restore, never a promotion. It cannot be acknowledged.
+    const moved = randomNamespace("ack");
+    await initializeNamespace(pool, moved, 1);
+    const movedCapture = rawCapture({ namespace: moved });
+    await store.createCapture(movedCapture);
+    await admin.query(`UPDATE "${SCHEMA}".rsv_namespace SET system_identifier = '1' WHERE namespace = $1`, [moved]);
+    assert.deepEqual(await store.recoveryState({ namespace: moved }), { epoch: 1, state: "quarantined" });
+    assert.deepEqual(await store.acknowledgeIdentityChange({ namespace: moved }), { epoch: 1, state: "quarantined" }, "a changed system identifier was acknowledged");
+    assert.deepEqual(await store.recoveryState({ namespace: moved }), { epoch: 1, state: "quarantined" });
+    assert.equal((await store.invalidateRecovered({ namespace: moved, newEpoch: 2 })).outcome, "invalidated");
+    assert.deepEqual(await store.recoveryState({ namespace: moved }), { epoch: 2, state: "serving" });
+    assert.equal((await store.readCaptures({ scope: movedCapture.scope, captureIds: [movedCapture.capture.captureId] }))[0].state, "revoked");
+    evidence("probe", "acknowledge-identity-change", { liftsExplicitQuarantine: false, changesEpoch: false, acceptsNewTimeline: true, acceptsNewSystemIdentifier: false });
   });
 
   test("a connection is returned to the pool clean after every kind of aborted transaction", async () => {

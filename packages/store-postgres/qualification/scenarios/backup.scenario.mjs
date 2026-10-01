@@ -158,6 +158,9 @@ describe("E. restore from backup", { skip: dockerUnavailable() }, () => {
     assert.deepEqual(observed.state, { epoch: 1, state: "quarantined" });
     await assert.rejects(openVault({ pool: observed.app, namespace, keys, epoch: 1 }), quarantined);
     await assert.rejects(openVault({ pool: observed.app, namespace, keys, epoch: 2 }), quarantined);
+    // The failover shortcut is refused here: another cluster is never a promotion.
+    assert.deepEqual(await observed.store.acknowledgeIdentityChange({ namespace }), { epoch: 1, state: "quarantined" });
+    await assert.rejects(openVault({ pool: observed.app, namespace, keys, epoch: 1 }), quarantined);
     const admin = pool(fresh.adminUrl, 2);
     assert.deepEqual((await captureState(admin, namespace, captures.consumedAfter.captureId)).used, [0], "the restored rows are those of the backup: authentic and stale");
     assert.equal((await captureState(admin, namespace, captures.revokedAfter.captureId)).capture.state, "live");
