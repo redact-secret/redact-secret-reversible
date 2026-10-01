@@ -5,7 +5,7 @@ name: release
 # independent of each other. npm order follows the dependency graph:
 # @redact-secret/vault-contracts, @redact-secret/vault, the persistence
 # packages (vault-crypto, vault-conformance, store-memory, store-postgres,
-# key-provider-aws-kms), then @redact-secret/vault-server.
+# store-sqlite, key-provider-aws-kms), then @redact-secret/vault-server.
 # Triggered by pushing a `v<version>` tag (RELEASING.md step 3) or manually via
 # workflow_dispatch (e.g. to retry after a transient failure — each publish job
 # is idempotent per package, see below).
@@ -119,6 +119,28 @@ jobs:
       - run: node packages/store-postgres/scripts/create-app-role.mjs
       - run: npm run test:postgres
 
+  # @redact-secret/store-sqlite on real SQLite files: the conformance suite,
+  # two server processes on one file, process kills around commit, and backup
+  # and restore. No power-loss simulation is run here or anywhere else.
+  sqlite:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RSV_SQLITE_DRIVERS: better-sqlite3,node:sqlite
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci
+      - name: Install better-sqlite3 (the only install script this repository runs)
+        run: npm run install:sqlite-driver
+      - run: npm run test:sqlite
+
   browser:
     runs-on: ubuntu-latest
     steps:
@@ -149,7 +171,7 @@ jobs:
   # fall back to a token. The vault is published before the vault-server,
   # which depends on it at an exact version.
   publish:
-    needs: [boundaries, vault-server, node, browser, persistence, postgres]
+    needs: [boundaries, vault-server, node, browser, persistence, postgres, sqlite]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -233,7 +255,7 @@ jobs:
       # trusted publisher is not configured on npmjs.com yet fails here with an
       # auth error; there is no token fallback (RELEASING.md, "Provenance").
       - name: npm publish --provenance (persistence packages)
-        run: node scripts/publish-workspace.mjs vault-crypto vault-conformance store-memory store-postgres key-provider-aws-kms
+        run: node scripts/publish-workspace.mjs vault-crypto vault-conformance store-memory store-postgres store-sqlite key-provider-aws-kms
 
       - name: Resolve vault-server version and dist-tag
         id: server_pkg

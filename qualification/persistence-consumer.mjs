@@ -9,15 +9,21 @@
 // is installed or loaded by them.
 // Consumer B installs the persistence packages and runs capture, restore,
 // revoke, and deletion through the persistent server profile over the
-// reference memory store, and over PostgreSQL when RSV_PG_ADMIN_URL and
-// RSV_PG_APP_URL name a disposable database.
+// reference memory store, over SQLite files, and over PostgreSQL when
+// RSV_PG_ADMIN_URL and RSV_PG_APP_URL name a disposable database. The SQLite
+// flow runs over node:sqlite where this Node.js bundles SQLite 3.51.3 or later,
+// and over better-sqlite3 only when RSV_QUALIFY_BETTER_SQLITE3=1: that driver
+// has an install script, so the default run installs it nowhere.
+// Consumer C installs store-sqlite alone and shows that it imports and loads
+// no driver, and refuses to start without one the application passes.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as nodeModule from "node:module";
 import { join } from "node:path";
 
 import { CORE_VERSION, REPORTS, ROOT, run, WORK } from "./lib.mjs";
 
-const PACKAGES = ["vault-contracts", "vault", "vault-crypto", "vault-conformance", "store-memory", "store-postgres", "key-provider-aws-kms", "vault-server"];
+const PACKAGES = ["vault-contracts", "vault", "vault-crypto", "vault-conformance", "store-memory", "store-postgres", "store-sqlite", "key-provider-aws-kms", "vault-server"];
 
 const packDir = join(WORK, "persistence-pack");
 rmSync(packDir, { recursive: true, force: true });
@@ -99,10 +105,13 @@ for (const name of installedA) {
     `consumer A: unexpected installed package ${name}`,
   );
 }
-check(!installedA.some((name) => /^pg|@aws-sdk|store-|key-provider-|vault-crypto/.test(name.replace("@redact-secret/", ""))), "consumer A: a driver, SDK, store, provider, or crypto layer was installed");
+check(!installedA.some((name) => /^pg|@aws-sdk|store-|key-provider-|vault-crypto|better-sqlite3/.test(name.replace("@redact-secret/", ""))), "consumer A: a driver, SDK, store, provider, or crypto layer was installed");
 
 // The server's default entry must not load the contracts package or the persistent profile.
-const graph = execFileSync(
+// `registerHooks` exists from Node.js 22.15 and 23.5. Where it is missing (Node.js 20) the observation is skipped, with the
+// reason in the report; the Node.js 22 runs of this check (the `postgres` job and the release `persistence` job) make it.
+const hooksAvailable = typeof nodeModule.registerHooks === "function";
+const graph = !hooksAvailable ? "" : execFileSync(
   process.execPath,
   [
     "--input-type=module",
@@ -117,12 +126,15 @@ const graph = execFileSync(
   { cwd: a.dir, encoding: "utf8" },
 );
 let loadedUrls = null;
+let graphSkipped = null;
 try {
   loadedUrls = JSON.parse(graph.trim().split("\n").at(-1));
 } catch {
   loadedUrls = null;
 }
-if (loadedUrls === null) {
+if (!hooksAvailable) {
+  graphSkipped = `not run: node:module registerHooks is not in Node.js ${process.version}`;
+} else if (loadedUrls === null) {
   check(false, "consumer A: could not observe the module graph (node:module registerHooks unavailable)");
 } else {
   check(!loadedUrls.some((url) => /vault-contracts|\/persistent\//.test(url)), "consumer A: importing the root entry points loaded the contracts package or the persistent profile");
@@ -130,16 +142,21 @@ if (loadedUrls === null) {
 }
 
 // ---------------------------------------------------------------- consumer B
+const withBetterSqlite3 = process.env.RSV_QUALIFY_BETTER_SQLITE3 === "1";
 const withPostgres = typeof process.env.RSV_PG_ADMIN_URL === "string" && typeof process.env.RSV_PG_APP_URL === "string";
 const b = consumer(
   "persistence-full",
-  [...PACKAGES.map((directory) => tarballs[directory]), `@redact-secret/core@${CORE_VERSION}`, "pg@8.23.1", "@aws-sdk/client-kms@3.1144.0"],
+  [...PACKAGES.map((directory) => tarballs[directory]), `@redact-secret/core@${CORE_VERSION}`, "pg@8.23.1", ...(withBetterSqlite3 ? ["better-sqlite3@12.11.1"] : []), "@aws-sdk/client-kms@3.1144.0"],
   `
 import { createPersistentServerVault } from "@redact-secret/vault-server/persistent";
 import { createRecordCrypto } from "@redact-secret/vault-crypto";
 import { createLocalKeyProvider } from "@redact-secret/vault-crypto/local-key-provider";
 import { createMemoryStore } from "@redact-secret/store-memory";
 import { createPostgresStore, grantStatements, migrate } from "@redact-secret/store-postgres";
+import { betterSqlite3Driver, createSqliteStore, migrate as migrateSqlite, nodeSqliteDriver, sqliteVersionAcceptable } from "@redact-secret/store-sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as contracts from "@redact-secret/vault-contracts";
 import * as conformance from "@redact-secret/vault-conformance";
 import * as kms from "@redact-secret/key-provider-aws-kms";
@@ -195,8 +212,39 @@ if (process.env.RSV_PG_ADMIN_URL && process.env.RSV_PG_APP_URL) {
   await pool.end();
 }
 
+async function sqliteFlow(driver) {
+  const dir = mkdtempSync(join(tmpdir(), "rsv-consumer-sqlite-"));
+  const filename = join(dir, "vault.sqlite");
+  try {
+    await migrateSqlite({ driver, filename });
+    const store = await createSqliteStore({ driver, filename });
+    const flow = await exercise(store, "consumer-sqlite-" + (driver.name === "node:sqlite" ? "nodesqlite" : "bettersqlite3"), {});
+    flow.profile = store.capabilities().profile;
+    flow.restoreDetection = store.capabilities().restoreDetection;
+    store.close();
+    return flow;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const sqlite = {};
+try {
+  const nodeSqlite = await import("node:sqlite");
+  sqlite["node:sqlite"] = sqliteVersionAcceptable(process.versions.sqlite)
+    ? await sqliteFlow(nodeSqliteDriver(nodeSqlite))
+    : "not run: this Node.js bundles SQLite " + process.versions.sqlite;
+} catch {
+  sqlite["node:sqlite"] = "not run: no node:sqlite in this Node.js";
+}
+try {
+  const better = (await import("better-sqlite3")).default;
+  sqlite["better-sqlite3"] = await sqliteFlow(betterSqlite3Driver(better));
+} catch (error) {
+  sqlite["better-sqlite3"] = error?.code === "ERR_MODULE_NOT_FOUND" ? "not run: not installed" : "failed: " + (error?.code ?? error?.name);
+}
+
 console.log(JSON.stringify({
-  memory, postgres,
+  memory, sqlite, postgres,
   exports: {
     contracts: Object.keys(contracts).sort(),
     conformance: Object.keys(conformance).sort(),
@@ -214,6 +262,34 @@ const expectFlow = (label, flow) => {
   check(flow.deleted === "deleted" && flow.keyRetired === false, `${label}: ciphertext deletion reported ${flow.deleted}, keyRetired ${flow.keyRetired}`);
 };
 expectFlow("consumer B (store-memory)", b.result.memory);
+const installedB = installedPackages(b.dir);
+const sqliteRan = [];
+for (const [driverName, flow] of Object.entries(b.result.sqlite)) {
+  if (typeof flow === "string") {
+    check(!flow.startsWith("failed"), `consumer B (store-sqlite over ${driverName}): ${flow}`);
+    continue;
+  }
+  sqliteRan.push(driverName);
+  expectFlow(`consumer B (store-sqlite over ${driverName})`, flow);
+  check(flow.profile === "sqlite-local-wal/synchronous=FULL", `consumer B (store-sqlite over ${driverName}): profile was ${flow.profile}`);
+}
+if (withBetterSqlite3) check(sqliteRan.includes("better-sqlite3"), `consumer B: the better-sqlite3 flow did not run: ${b.result.sqlite["better-sqlite3"]}`);
+check(!installedB.includes("better-sqlite3") || withBetterSqlite3, "consumer B: better-sqlite3 was installed without RSV_QUALIFY_BETTER_SQLITE3=1");
+
+// ---------------------------------------------------------------- consumer C
+// store-sqlite alone: it imports no driver and installs none; the application passes one.
+const c = consumer(
+  "persistence-sqlite-without-driver",
+  [tarballs["vault-contracts"], tarballs["store-sqlite"]],
+  `
+import { createSqliteStore } from "@redact-secret/store-sqlite";
+const outcome = await createSqliteStore({ filename: "vault-without-driver.sqlite" }).then(() => "started", (error) => error.code);
+console.log(JSON.stringify({ outcome }));
+`,
+);
+const installedC = installedPackages(c.dir);
+check(c.result.outcome === "STORE_INVALID_ARGUMENT", `consumer C: store-sqlite without a driver reported ${c.result.outcome}`);
+check(!installedC.includes("better-sqlite3"), "consumer C: a driver was installed");
 if (withPostgres) expectFlow("consumer B (store-postgres)", b.result.postgres);
 for (const required of ["StoreError", "KeyProviderError", "RecordCryptoError", "LIMITS", "missingCapabilities"]) {
   check(b.result.exports.contracts.includes(required), `vault-contracts does not export ${required}`);
@@ -235,7 +311,9 @@ const report = {
   core: CORE_VERSION,
   versions,
   consumerA: { installed: installedA, result: a.result },
-  consumerB: { memory: b.result.memory, postgres: withPostgres ? b.result.postgres : "not run: RSV_PG_ADMIN_URL and RSV_PG_APP_URL are not set" },
+  moduleGraph: graphSkipped ?? "observed",
+  consumerC: { installed: installedC, result: c.result },
+  consumerB: { memory: b.result.memory, sqlite: b.result.sqlite, postgres: withPostgres ? b.result.postgres : "not run: RSV_PG_ADMIN_URL and RSV_PG_APP_URL are not set" },
   failures,
 };
 writeFileSync(join(REPORTS, "persistence-consumer.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -244,4 +322,4 @@ if (failures.length) {
   console.error(`persistence consumer qualification failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`persistence consumer qualification passed on ${process.version}: base packages install ${installedA.length} package(s) and no driver or SDK; persistent flow over store-memory${withPostgres ? ` and ${b.result.postgres.profile}` : " (PostgreSQL not run: no database configured)"}`);
+console.log(`persistence consumer qualification passed on ${process.version}: base packages install ${installedA.length} package(s) and no driver or SDK; persistent flow over store-memory and SQLite (${sqliteRan.length === 0 ? "no driver usable on this Node.js" : sqliteRan.join(", ")})${withPostgres ? ` and ${b.result.postgres.profile}` : " (PostgreSQL not run: no database configured)"}`);

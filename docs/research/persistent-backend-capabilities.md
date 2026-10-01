@@ -2,6 +2,8 @@
 
 **Status: research, not a support claim.** Nothing here says that an adapter exists, is planned for a release, or has been qualified. It records what the vendors' own documentation says each backend can and cannot provide for the proposed `Store` contract in [persistent-vault.md](../specs/persistent-vault.md) (§3.6, §4, §5, §7, §8.2, §9, as revised after its design review), which is itself proposed and not implemented. Tracking issue: [redact-secret-vault#114](https://github.com/redact-secret/redact-secret-vault/issues/114).
 
+**Update, 2026-10-01 (#130).** Section 8.1 has an implementation, `@redact-secret/store-sqlite`, and a partial [qualification record](qualification-store-sqlite-0.1.0-alpha.1.md): the conformance suite, two processes on one file, process kills, and backup and restore ran on one machine; **the power-loss simulation did not run**, and the profile is not supported. The sections below remain the research as written. Where the implementation differs from section 8.1: the driver is `better-sqlite3` ([decision](../decisions/choose-sqlite-driver.md)); the receipt lookup precedes the writes in the same `BEGIN IMMEDIATE` transaction rather than being claimed by an insert; the journal mode and `synchronous` are re-read in every transaction, not only at startup; and the two `restoreDetection` mechanisms of section 8.1 are both implemented, with the limits [stated and tested](../reference/store-sqlite.md#restore-detection).
+
 ## 1. Method
 
 - Sources are primary documentation only: `docs.aws.amazon.com` for DynamoDB, `redis.io` for Redis Open Source (single node, Sentinel, Cluster), `sqlite.org` for SQLite. No blog posts, no third-party analyses, no recollection.

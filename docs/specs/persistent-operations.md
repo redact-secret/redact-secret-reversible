@@ -150,6 +150,16 @@ The PostgreSQL store compares the cluster's system identifier and the timeline i
 
 The tripwire is a guard against a skipped runbook, not the runbook. For the two undetected methods, **demonstrated:** a server configured with a raised epoch refused the restored database, and steps 2 to 4 invalidated it. **Stated limits:** timeline numbers are not unique across divergent histories; rows restored selectively into a live database change neither value; neither case was tested.
 
+### 5.2 The SQLite store
+
+[`@redact-secret/store-sqlite`](../reference/store-sqlite.md) runs the same runbook, with these differences. A restore is the replacement of the database file (or of the file and its `-wal` and `-shm` files) by a copy; a copy made while the database was in use, or without its `-wal` file, is an older database too.
+
+- Step 1 is stopping every server process on the host. There is no role to revoke: close the file to them by stopping them, or by moving the recovered file to a path none of them uses.
+- Step 2 lists namespaces with `SELECT namespace, epoch, state FROM rsv_namespace`, and opens the store with `createSqliteStore({ filename })` in a maintenance process.
+- The tripwire reads a counter in the file against a process-local high-water mark and a marker file ([restore detection](../reference/store-sqlite.md#restore-detection)). **Demonstrated** ([test](../../packages/store-sqlite/test/backup-restore.test.mjs)): a backup made by the SQLite backup API, `VACUUM INTO`, or a file copy after a `TRUNCATE` checkpoint, put in place of the live file, reads as quarantined in a new process while the marker file was not restored with it; and a process that outlived the replacement notices it. **Demonstrated not to be noticed:** the same backup restored together with its marker file, with no process outliving the replacement; a single-use value spent after the backup was released again. For that case the runbook, with a raised configured epoch, is the only control.
+- After `invalidateRecovered` the file's present counter is the new baseline, and the marker file is rewritten. Servers started with the new epoch find a serving namespace.
+- **Demonstrated** for the three backup routes at the store level, and through the persistent server for the backup API: after steps 2 to 4 every recovered capture was denied `revoked`, a server on the old epoch was refused `STORE_QUARANTINED`, and new captures worked.
+
 ## 6. Failover runbook
 
 A failover is a recovery unless the promoted node is known to hold every commit the old primary acknowledged. That is knowable for one topology only: the qualified profile with one synchronous standby.
@@ -238,6 +248,7 @@ The server's `onAudit` hook receives one event per operation: `capture`, `restor
 | Serving-role privileges and migrations | [least-privilege.test.mjs](../../packages/store-postgres/test/least-privilege.test.mjs) |
 | Sanitized errors and audit events; database logs | [diagnostics.test.mjs](../../packages/store-postgres/test/diagnostics.test.mjs), [server-log.scenario.mjs](../../packages/store-postgres/qualification/scenarios/server-log.scenario.mjs) |
 | Results, versions, settings, counts, and times of the run | [report.md](../../packages/store-postgres/qualification/report/report.md), [summary.json](../../packages/store-postgres/qualification/report/summary.json) |
+| SQLite store: two processes on one file, process kill around commit, backup routes, the tripwire and its blind spot, transaction discipline and outcome mapping. **No power-loss simulation was run** | [two-process.test.mjs](../../packages/store-sqlite/test/two-process.test.mjs), [process-kill.test.mjs](../../packages/store-sqlite/test/process-kill.test.mjs), [backup-restore.test.mjs](../../packages/store-sqlite/test/backup-restore.test.mjs), [transactions.test.mjs](../../packages/store-sqlite/test/transactions.test.mjs); [qualification record](../research/qualification-store-sqlite-0.1.0-alpha.1.md) |
 
 ## 12. What this does not provide
 
@@ -246,4 +257,4 @@ The server's `onAudit` hook receives one event per operation: `capture`, `restor
 - Erasure. The library revokes and deletes rows; an erasure statement is the key owner's and the storage operator's.
 - Protection against a party holding a wrapping key and a copy of the store.
 - A tenant-wide delete, a namespace listing, an audit trail for store-level operations, or a sweep scheduler.
-- Any claim for a backend, PostgreSQL version, topology, or runtime other than those the qualification report names.
+- Any claim for a backend, PostgreSQL version, topology, or runtime other than those the qualification report names. The SQLite store has a [partial record](../research/qualification-store-sqlite-0.1.0-alpha.1.md) and no support claim.

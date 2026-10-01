@@ -137,4 +137,5 @@ A failed capture returns no result, so no usable token leaves the server. When t
 - [`@redact-secret/store-postgres`](../../packages/store-postgres/README.md) and its [reference](../reference/store-postgres.md): the qualified store.
 - [`@redact-secret/vault-crypto`](../../packages/vault-crypto/README.md): record encryption and the local key provider.
 - [`@redact-secret/key-provider-aws-kms`](../../packages/key-provider-aws-kms/README.md): the optional AWS KMS key provider.
+- [`@redact-secret/store-sqlite`](../../packages/store-sqlite/README.md) and its [reference](../reference/store-sqlite.md): a store on one SQLite file for processes of one host. Partial record, no support claim; power loss was not simulated.
 - [`@redact-secret/store-memory`](../../packages/store-memory/README.md): a non-durable store for tests.
