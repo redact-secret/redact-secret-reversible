@@ -645,8 +645,8 @@ A restore is linearized at the commit of the store's `commitRestore` transaction
 
 ### 7.2 Order of a restore
 
-1. Validate the request shape and snapshot the fields. Reject malformed token markers. Deny an empty purpose.
-2. Resolve the principal from trusted context, with a timeout. The tenant is the principal's. Resolve the session, when a session resolver is configured; a resolver that throws or times out denies `unauthenticated`.
+1. Validate the request shape and snapshot the fields.
+2. Resolve the principal from trusted context, with a timeout. The tenant is the principal's. Resolve the session, when a session resolver is configured; a resolver that throws or times out denies `unauthenticated`. Then deny malformed token markers and an empty purpose. Both denials come after the principal is known, so the audit event can name it, and before any store read or key unwrap.
 3. A request with no token is returned unchanged. No store call is made and no attempt is recorded.
 4. Derive entry identifiers and call `readEntries`. Deny, in this order: a namespace that is not serving at the configured epoch; unknown entries; revoked captures; captures the request does not name; a session tag that does not match the resolved session, or a session-bound capture when no session resolved; expiry on the server's clock; `used + count > maxUses` from the row.
 5. For each capture involved, unwrap its DEK once and decrypt its entries with the AAD built from trusted scope. Any failure is a denial; no partial result exists.
@@ -686,7 +686,7 @@ requestDigest = MAC( "rsv-request-v1" 0x00
 | `STORE_UNAVAILABLE` | None | `STORE_UNAVAILABLE`. The caller may retry the same attempt |
 | Committed, response delivered | Budget consumed, receipt written | The restored fields, once |
 | Committed, then the server crashes or the response is lost | Budget consumed, receipt written | Nothing. The value is not delivered and that use is spent |
-| Same `attemptId`, same request, after a commit | None | `RESTORE_DENIED`, reason `attempt-already-committed`, no fields |
+| Same `attemptId`, same request, after a commit | None | `RESTORE_DENIED`, no fields. The reason is `attempt-already-committed` when the request reaches the commit; when the attempt itself exhausted an entry, the preflight denies `budget` first. `resolveAttempt` reports `committed` in both cases |
 | Same `attemptId`, different request | None | `RESTORE_DENIED`, reason `attempt-mismatch` |
 | `STORE_AMBIGUOUS` or any unclassified failure at commit | Unknown | `COMMIT_AMBIGUOUS` carrying the `attemptId`, no fields |
 
@@ -762,7 +762,7 @@ const vault = await createPersistentServerVault({
 - The existing `createServerVault` is unchanged and remains the default. Persistence is opt-in by calling this factory.
 - The factory reads `store.capabilities()` and fails `UNSUPPORTED_STORE` unless `contractVersion` is 1 and `atomicCreate`, `atomicRestore`, `authoritativeCommit`, `revocationFences`, `attemptReceipts`, and `storeClock` are all true. A store that is `volatile` or not `crossProcess` is refused unless the application passes `allowNonDurableStore: true`. A durable store whose `restoreDetection` is `"none"` is refused unless the application passes `allowNoRestoreDetection: true`; the runbook of §9.3 is then the only control against a recovered database. It then reads the recovery state and fails `STORE_QUARANTINED` unless the namespace is serving at `recoveryEpoch`. It never initializes a namespace.
 - `capture(input, { context, release, ... })` resolves the principal and session from `context`, then asks `lifecyclePolicy`. The tenant and session binding of a capture come only from the resolvers. A context for which the session resolver returns `null` produces a capture that is not session-bound and can be restored from any session of the tenant.
-- `restore({ context, sink, purpose, captures, fields, attemptId })` has no `tenant` and no `sessionId` field. A restore cannot assert the session a capture came from; it can only present trusted context that resolves to the same one.
+- `restore({ context, sink, purpose, captures, fields, attemptId })` has no `tenant` and no `sessionId` field, and ignores one if passed. A restore cannot assert the session a capture came from; it can only present trusted context that resolves to the same one.
 - `revoke({ context, captureId })` denies future restores. `deleteCaptureCiphertext({ context, captureId })` revokes, then deletes the capture's ciphertext from the live store, and its result states that no key was retired. Both read the capture first; for a session-bound capture the resolved session must match its tag. There is no tenant-wide delete.
 - `lifecyclePolicy` is asked once per call of `capture`, `revoke`, `deleteCaptureCiphertext`, and `resolveAttempt`:
 
@@ -797,8 +797,8 @@ Capture failure: when encryption, a provider call, or `createCapture` fails, no 
 | Token of a revoked capture after its ciphertext was deleted | `revoked` while remembered | `unknown-token` |
 | Wrong or missing session for a session-bound capture | Not enforced (`sessionId` is advisory) | `source`, from the session tag, before any key is unwrapped. The session is also part of the associated data |
 | Captures named by one restore | Up to 1024 | Up to the store's `maxRestoreCaptures` (at most 64) |
-| Explicit `tenant` on a restore | Accepted | Not accepted |
-| Identifier with a lone surrogate | Accepted | `INVALID_ARGUMENT` |
+| Explicit `tenant` or `sessionId` on a restore | Accepted | Ignored: it has no effect |
+| Identifier with a lone surrogate | Accepted | `INVALID_ARGUMENT`; in a restore field path, the denial `invalid-request` |
 | Capture requires a principal | No | Yes |
 | New denial reasons | — | `integrity-failure`, `key-unavailable`, `attempt-mismatch`, `attempt-already-committed` |
 | New error codes | — | `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `KEY_UNAVAILABLE` (capture only; at restore a key failure is a denial), `CLOSED` |
