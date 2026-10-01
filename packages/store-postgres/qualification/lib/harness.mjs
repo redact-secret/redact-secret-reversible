@@ -19,6 +19,11 @@ export const SCHEMA = process.env.RSV_PG_SCHEMA ?? "rsv";
 export const WORKER_PATH = fileURLToPath(new URL("./vault-worker.mjs", import.meta.url));
 export const MIGRATE_WORKER_PATH = fileURLToPath(new URL("./migrate-worker.mjs", import.meta.url));
 
+/** Host ports for the scenarios' own containers: 56000 to 56099 unless RSVQ_PORT_BASE says otherwise. */
+export function port(offset) {
+  return Number(process.env.RSVQ_PORT_BASE ?? 56000) + offset;
+}
+
 /** Unmistakably synthetic values the core detects (AGENTS.md security boundary). Never a real credential. */
 export function syntheticSecret(index = 0) {
   return `ghp_SYNTHETICxREVOKEDxTESTx${String(index).padStart(13, "0")}`;

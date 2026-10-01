@@ -41,6 +41,12 @@ export async function docker(args, options = {}) {
   return stdout.trim();
 }
 
+/** A container's log, stdout and stderr together. PostgreSQL writes its server log to stderr. */
+export async function logs(container) {
+  const { stdout, stderr } = await exec("docker", ["logs", container], { maxBuffer: 256 * 1024 * 1024, timeout: 60_000 });
+  return `${stdout}\n${stderr}`;
+}
+
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function until(check, { timeoutMs = 90_000, intervalMs = 150, what = "condition" } = {}) {
@@ -107,7 +113,7 @@ export function createTopology(tag) {
       const volume = `${prefix}-${suffix}`;
       await docker(["volume", "create", ...label, volume]);
       volumes.push(volume);
-      await docker(["run", "--rm", ...label, "-v", `${volume}:/share`, IMAGE, "chown", "postgres:postgres", "/share"]);
+      await docker(["run", "--rm", ...label, "-v", `${volume}:/share`, IMAGE, "bash", "-c", "mkdir -p /share/archive && chown -R postgres:postgres /share"]);
       return volume;
     },
 
