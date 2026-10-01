@@ -8,15 +8,18 @@ npm install @redact-secret/vault-server@0.1.0-beta.3 @redact-secret/vault@0.1.0-
 
 `0.1.0-alpha.2` was this package's first published version. The npm `latest` and `beta` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-beta.3`. Exact versions are still recommended while the packages are beta, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
 
+On `main` this package is `0.1.0-beta.4`, **unpublished**. It adds the opt-in [persistent profile](#persistent-profile) at `@redact-secret/vault-server/persistent` (alpha) and a dependency on `@redact-secret/vault-contracts`; the default entry described below is unchanged. The sections up to "Persistent profile" describe the default, in-memory entry.
+
 ## Supported, and not
 
 | | Status in 0.1.0-beta.3 |
 | --- | --- |
 | Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
-| Storage backend | In-memory only. `@redact-secret/store-*` persistent backends are a separate, later track ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) — this package does not implement or claim one |
-| Python | **Not in this package.** A research-grade native Python implementation of the same contract is [`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
+| Storage backend, default entry (`createServerVault`) | In-memory only, single process |
+| Persistent profile (`./persistent`, on `main`, unpublished, **alpha**) | Implemented. This package contains no store, driver, cipher, or key provider: the application injects them. Qualified with [`@redact-secret/store-postgres`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/store-postgres/README.md) on PostgreSQL 17.11 (single primary, or primary with one synchronous standby), Node.js 22, and the local key provider; tested over the non-durable `@redact-secret/store-memory` on Node.js 20, 22, 24. Nothing else: see the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-persistence-0.1.0-alpha.1.md) |
+| Python | **Not in this package**, and no Python persistence exists. A research-grade native Python implementation of the same contract is [`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
 | Streaming, arbitrary-text `restore(text)` | **Not supported**, matching `@redact-secret/vault` |
-| Browser | **Not a target.** This package assumes a server trust boundary (`PrincipalResolver` reads request-scoped, already-authenticated context); it is Node.js-only and is never bundled for a browser |
+| Browser | **Not a target**, for either entry. This package assumes a server trust boundary (`PrincipalResolver` reads request-scoped, already-authenticated context); it is Node.js-only and is never bundled for a browser |
 
 ## Usage
 
@@ -112,15 +115,101 @@ Exceptions thrown by either hook never change an operation's outcome.
 
 Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the shadow registry and the wrapped vault disagreed — a bug in this package, always fails closed), `VAULT_FAILURE` (wraps a `@redact-secret/vault` `VaultError`, exposed as `.vaultCode`; when that is `CORE_FAILURE`, the core's fixed code, for example `PII_ACTIVATION_CONFLICT`, is exposed as `.coreCode`), `DISPOSED`.
 
+From `0.1.0-beta.4` (on `main`, unpublished), the `ServerVaultErrorCode`, `ServerDenialReason`, and `ServerAuditOperation` types also contain the members the [persistent profile](#persistent-profile) uses: codes `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `KEY_UNAVAILABLE`, `CLOSED`; denial reasons `integrity-failure`, `key-unavailable`, `attempt-mismatch`, `attempt-already-committed`; audit operations `capture`, `delete-ciphertext`, `resolve-attempt`. `createServerVault` never produces them, but an exhaustive `switch` over these types needs the new cases.
+
 ## Threat boundary, failure behavior, and residual risk
 
 - **Threat boundary added over the in-memory vault:** a different authenticated principal, a cross-tenant request, a stale grant surviving a policy or revocation change, and a resolver or policy that is unreachable, slow, or throws — the exact boundary the [server authority ADR](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/define-server-authority-interface.md) names.
 - **Failure behavior:** every injection point fails closed, as above. A revoked or drained token reads as `unknown-token` once its short-lived tombstone (`revocationMemoryMs`) ages out — both are conformant per the ADR's §4.
 - **Residual risk (this package's own, beyond what the ADR already states):**
-  - Single-process only. This is `@redact-secret/vault`'s in-memory backend wrapped with server authority, not a distributed store; a multi-process deployment needs its own shared linearization mechanism, deferred to the persistent-store contract (#19).
+  - Single-process only. This is `@redact-secret/vault`'s in-memory backend wrapped with server authority, not a distributed store; a multi-process deployment uses the [persistent profile](#persistent-profile), where the store's transaction is the shared linearization point.
   - `revoke()` is not itself principal-gated in this release (it mirrors `@redact-secret/vault`'s own trusted-operator `revoke(captureId)`); an application that needs to authorize *who* may revoke composes its own check before calling it.
   - The FIFO queue trades throughput for correctness (see Concurrency, above): under sustained load, calls wait for their turn rather than running in parallel.
   - This package cannot verify that a consumer's `PrincipalResolver` actually authenticates the caller or that its `ServerReleasePolicy` is logically sound — a policy bug that always allows is indistinguishable from `denyByDefault` at the type level. Only this package's own adversarial tests, and the application's own review of its injected policy, catch that.
+
+## Persistent profile
+
+**On `main`, unpublished, alpha.** An opt-in entry point for captures that one server process makes and another restores, or that survive a restart. It is specified in the [persistent vault specification](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/persistent-vault.md) (§7, §8) and qualified only as the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-persistence-0.1.0-alpha.1.md) states. Importing `@redact-secret/vault-server` loads none of it.
+
+```ts
+import { createPersistentServerVault } from "@redact-secret/vault-server/persistent";
+
+const vault = await createPersistentServerVault({
+  namespace: "support-prod",
+  recoveryEpoch: 1,          // from deployment configuration, outside the database
+  store,                     // a Store, e.g. from @redact-secret/store-postgres
+  crypto,                    // a RecordCrypto, e.g. createRecordCrypto({ keyProvider })
+  digestKey,                 // 32 bytes from your secret manager, the same in every process
+  resolvePrincipal,          // trusted context -> { id, tenant }
+  resolveSession,            // optional: trusted context -> session identifier or null
+  lifecyclePolicy,           // required; only { allow: true } allows
+  policy,                    // ServerReleasePolicy, as for createServerVault
+  limits: { entryTtlMs: 5 * 60 * 1000 },
+  pii: [],
+});
+```
+
+The [repository README](https://github.com/redact-secret/redact-secret-vault/blob/main/README.md#persistent-quick-start) has a complete deny-by-default example with PostgreSQL and the local key provider.
+
+### Who owns what
+
+The server authorizes and orchestrates. It never opens a database or key-service connection: `store` and `crypto` are objects the application constructs, and the application closes whatever they hold (a `pg` pool, a KMS client). The server decrypts in process, so values exist in its memory for the duration of a call; the store only ever receives ciphertext, wrapped keys, counters, and receipts. An injected `Store` or `RecordCrypto` runs inside the trusted process and is not contained by its interface.
+
+### Options
+
+Required: `namespace`, `recoveryEpoch`, `store`, `crypto`, `resolvePrincipal`, `policy`, `lifecyclePolicy`, and `digestKey` (or `allowUnkeyedDigests: true`, which accepts that a reader of the store can test guesses of principal, sink, purpose, and session against stored digests).
+
+Optional: `resolveSession`; `onAudit`; `limits` (`entryTtlMs` is the capture lifetime: default 10 minutes, at most 24 hours; there is no "never"); `now`; `policyRevision`; `resolverTimeoutMs` and `policyTimeoutMs` (default 5000 each); `storeTimeoutMs` (10000); `cryptoTimeoutMs` (15000); `maxCommitRetries` (3, at most 10); `receiptGraceMs` (one hour); `tombstoneRetentionMs` (24 hours); `pii` and `expectPiiActivation`.
+
+Waivers, each off by default: `allowNonDurableStore` (accept a volatile or single-process store such as `@redact-secret/store-memory`; for tests) and `allowNoRestoreDetection` (accept a durable store that declares no restore detection).
+
+Creation fails closed: `UNSUPPORTED_STORE` when the store does not declare the required capabilities, `STORE_QUARANTINED` unless the namespace is serving at `recoveryEpoch`, and `INVALID_ARGUMENT` for a missing digest key or when `limits.entryTtlMs` plus twice the store's clock-skew bound plus `receiptGraceMs` exceeds the 48 hours a store accepts for a receipt. The server never initializes a namespace; a maintenance process calls `store.initializeNamespace` once.
+
+### Operations
+
+| Call | What it does | What it does not do |
+| --- | --- | --- |
+| `capture(input, { context, release, ... })` | Resolves principal and session from `context`, asks `lifecyclePolicy`, scans with the core, encrypts each retained value, and creates the capture and its entries in one store transaction. Tokens are returned only after that transaction succeeded | Accept a tenant or session from the caller: `issuedTenant`, `tenant`, and `sessionId` in the options have no effect |
+| `restore({ context, sink, purpose, captures, fields, attemptId? })` | Authorizes every occurrence (session, expiry, budget, grants, policy), stages the output, commits one conditional transaction, and returns the fields only on a definite commit. Each restore that reaches the store has an `attemptId`, generated when omitted | Return anything on a denial, conflict, or unknown outcome. Release a value twice for one use |
+| `revoke({ context, captureId })` | Durably denies future restores of one capture | Delete ciphertext. Retract a value already returned |
+| `deleteCaptureCiphertext({ context, captureId })` | Revokes, then deletes the capture's entry rows and stored wrapped key from the live store. The result carries `keyRetired: false` | Erase. Copies in backups, replicas, and logs remain decryptable while the wrapping key is usable, and no key is retired |
+| `resolveAttempt({ context, attemptId, ...originalRequest })` | Reports whether an attempt committed: `committed`, `absent`, or `attempt-mismatch` | Return restored fields, ever |
+| `close()` | Releases this instance; later calls fail `CLOSED` | Revoke, delete, or close the store, the pool, or the key provider |
+
+`revoke` and `deleteCaptureCiphertext` are found only within the caller's own tenant, and for a session-bound capture only from its own session. There is no tenant-wide delete. Cleanup of expired rows is `store.sweepExpired`, scheduled by the application; it is never what denies a restore.
+
+### Failures
+
+Summarized from [specification §7.3](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/persistent-vault.md#73-attempts-and-failure-outcomes), which is authoritative. No row returns fields except the first.
+
+| Outcome | Stored effect | What the caller does |
+| --- | --- | --- |
+| Success | Budget consumed, receipt written | Use the fields, once |
+| `RESTORE_DENIED` with a reason | None | Keep the redacted text |
+| `RESTORE_CONFLICT` (still `stale` after the retries) | None | May retry the same attempt |
+| `STORE_UNAVAILABLE` | None | May retry the same attempt |
+| `STORE_QUARANTINED`, `CLOCK_SKEW` | None | Fix the deployment: the epoch or recovery state, or the clocks |
+| `COMMIT_AMBIGUOUS` (carries `attemptId`) | Unknown | Call `resolveAttempt`. On `absent`, the same attempt may be submitted again. On `committed`, the use is spent and the value was not delivered: capture it again from its source |
+| Same `attemptId` and request after it committed | None | `RESTORE_DENIED`: `attempt-already-committed`, or `budget` when that attempt exhausted the entry |
+| Same `attemptId`, different request | None | `RESTORE_DENIED`, `attempt-mismatch` |
+| `LIFECYCLE_DENIED` | None | The lifecycle policy, a resolver, or a timeout denied capture, revoke, deletion, or resolution |
+| `KEY_UNAVAILABLE` (capture only), `LIMIT_EXCEEDED` | None | Nothing was stored. At restore, a key failure is the denial `key-unavailable` |
+
+Release is **at most once**. The server never retries an ambiguous commit and never replays a committed result. Exactly-once delivery is not provided.
+
+A failed capture returns no result, so no usable token leaves the server. When the store cannot say whether a capture was created, the server fences the identifier it issued so the capture cannot be restored.
+
+### Differences from `createServerVault`
+
+[Specification §8.3](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/persistent-vault.md#83-differences-from-the-in-memory-server) lists them. The ones most likely to matter: a token of another tenant is `unknown-token` (not `tenant-mismatch`), because another tenant's rows are never read; a session-bound capture is enforced (`source`), where the in-memory server's `sessionId` is advisory; an explicit `tenant` or `sessionId` on a restore is ignored; capture requires a principal; at most 64 captures per restore; and `revoke` takes `{ context, captureId }` and is gated by `lifecyclePolicy`.
+
+### Limits to know before deploying
+
+- A party that can write the database can reset a use counter or a revocation. Encryption shows a record is authentic, not current.
+- After a database restore from backup, or a failover that may have lost commits, follow the [recovery runbook](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/persistent-operations.md#5-backup-recovery-runbook): recovered captures are invalidated, and applications capture again. Keep `recoveryEpoch` where a database restore cannot change it.
+- The same `digestKey` must be configured in every process of the namespace; changing it loses outstanding attempts and session-bound captures.
+- Audit events (`capture`, `restore`, `revoke`, `delete-ciphertext`, `resolve-attempt`, `resolve-principal`, `policy-error`) carry codes, counts, and opaque identifiers only. Store-level recovery and cleanup calls emit none.
+- The threat model's [persistent section](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/threat-model.md#persistent-mappings--implemented-on-main-qualified-for-two-postgresql-profiles) lists what is and is not protected.
 
 ## Core compatibility
 

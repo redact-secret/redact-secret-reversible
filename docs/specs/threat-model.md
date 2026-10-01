@@ -1,7 +1,7 @@
 # Threat model: reversible restoration modes
 
-**Status:** current for `@redact-secret/vault` browser main-thread and Node.js in-memory use (published `0.1.0-alpha.1` and `0.1.0-alpha.2`), its optional dedicated-Worker mode ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14), first published in `0.1.0-alpha.2`; see the [Worker-mode ADR](../decisions/qualify-dedicated-worker-mode.md)), and for `@redact-secret/vault-server`'s single-process, in-memory server authority mode (published `0.1.0-alpha.2`, its first release); **proposed** for multi-process/persistent server authority and persistent-store modes, which have no implementation or support claim.
-**Issue:** [#6](https://github.com/redact-secret/redact-secret-vault/issues/6). **Core compatibility:** `@redact-secret/vault@0.1.0-alpha.1` pins `@redact-secret/core` `0.1.0-beta.9` exactly (see [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md)); the `0.1.0-alpha.2` candidates pin `0.1.0-beta.10` exactly ([#41](https://github.com/redact-secret/redact-secret-vault/issues/41), [#44](https://github.com/redact-secret/redact-secret-vault/issues/44)). Opt-in PII detection in `0.1.0-beta.10` is implemented and qualified with PII off and on, not yet published ([#42](https://github.com/redact-secret/redact-secret-vault/issues/42), [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md)); see [PII findings](#pii-findings-core-beta10--current-published-in-010-alpha2). On `main`, both packages and the Python bridge pin `0.1.0-beta.11` exactly ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)); the published `0.1.0-alpha.2` through `0.1.0-beta.1` pin `0.1.0-beta.10`.
+**Status:** current for `@redact-secret/vault` browser main-thread and Node.js in-memory use (published `0.1.0-alpha.1` and `0.1.0-alpha.2`), its optional dedicated-Worker mode ([#14](https://github.com/redact-secret/redact-secret-vault/issues/14), first published in `0.1.0-alpha.2`; see the [Worker-mode ADR](../decisions/qualify-dedicated-worker-mode.md)), and for `@redact-secret/vault-server`'s single-process, in-memory server authority mode (published `0.1.0-alpha.2`, its first release); **current** for the persistent server profile on `main` (unpublished alpha; [#4](https://github.com/redact-secret/redact-secret-vault/issues/4)) only within the profiles its [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) names, and **proposed** for every other backend, topology, runtime, and language, which have no support claim.
+**Issue:** [#6](https://github.com/redact-secret/redact-secret-vault/issues/6). **Core compatibility:** `@redact-secret/vault@0.1.0-alpha.1` pins `@redact-secret/core` `0.1.0-beta.9` exactly (see [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md)); the `0.1.0-alpha.2` candidates pin `0.1.0-beta.10` exactly ([#41](https://github.com/redact-secret/redact-secret-vault/issues/41), [#44](https://github.com/redact-secret/redact-secret-vault/issues/44)). Opt-in PII detection in `0.1.0-beta.10` is implemented and qualified with PII off and on, not yet published ([#42](https://github.com/redact-secret/redact-secret-vault/issues/42), [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md)); see [PII findings](#pii-findings-core-beta10--current-published-in-010-alpha2). On `main`, both packages and the Python bridge pin `0.1.0-beta.12` exactly, as does the published `0.1.0-beta.3`; `0.1.0-beta.2` pins `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)), and the published `0.1.0-alpha.2` through `0.1.0-beta.1` pin `0.1.0-beta.10`.
 
 This document names the assets, attackers, data flows, trust boundary, residual risk, and alternative for each mode. It complements the [browser in-memory specification](in-memory-security.md) and the [architecture](../../ARCHITECTURE.md). A mode is supported only when its row below says **qualified** and its runtime passes the [conformance corpus](../../conformance/README.md).
 
@@ -24,6 +24,7 @@ This document names the assets, attackers, data flows, trust boundary, residual 
 4. **Careless integrator.** Logs errors or audit events, forwards `text` without checking `passedThrough`, grants broad paths, or retries after denial.
 5. **Same-page hostile script, compromised dependency, or browser extension.** Out of scope for protection: it can read the original input, call `restore`, or read its result. Documented as a limit, never as a guarantee.
 6. **Other principals and tenants on a server.** Out of scope for the plain in-memory vault. Addressed by `@redact-secret/vault-server`'s server authority layer.
+7. **Readers and writers of a persistent store, holders of a wrapping key, and injected adapters.** Only for the persistent profile; listed in [its section](#persistent-mappings--implemented-on-main-qualified-for-two-postgresql-profiles).
 
 ## Modes
 
@@ -95,11 +96,65 @@ This row is tested by this package's own adversarial suite (`packages/vault-serv
   - Qualification. The protocol has negative tests (`packages/vault-py/tests/test_bridge_process.py`) but no dedicated adversarial qualification record, fuzzing, or Windows run.
 - **Alternative if residual risk is unacceptable:** `max_scans_per_process=1` for per-scan process isolation; one bridge per tenant or trust domain; or a `CoreClient` of the application's own, such as a separately qualified service.
 
-### Persistent mappings — proposed, not supported
+### Persistent mappings — implemented on `main`, qualified for two PostgreSQL profiles
 
-- **Assets added:** ciphertext at rest, keys, backups, replicas.
-- **Attackers added:** database disclosure, record substitution, key compromise, stale backups, replica lag.
-- **Required controls:** authenticated encryption bound to tenant, session, and entry metadata; consumer-owned keys; logical expiry and revocation at use time; a backend-specific linearization proof; deletion and backup policy. The exact store interface, AEAD/AAD binding, key-injection and rotation shape, deletion/backup guarantees, and fail-closed failure behavior are now decided as a contract — not yet an implementation — in the [persistent store contract](../decisions/define-persistent-store-contract.md) ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)), which a concrete qualified backend ([#20](https://github.com/redact-secret/redact-secret-vault/issues/20)) builds against. That contract's store interface, key-provider shape, per-entry atomicity, plaintext replay, and deletion promise are superseded by the [ciphertext-only store decision](../decisions/supersede-persistent-store-contract.md) ([#104](https://github.com/redact-secret/redact-secret-vault/issues/104)); the [persistent vault specification](persistent-vault.md) holds the proposed design and its trust-boundary table (§10). No published package persists anything.
+This section is **current** for the unpublished packages on `main`: `@redact-secret/vault-server/persistent` (`0.1.0-beta.4`) with `@redact-secret/vault-crypto`, a key provider, and a store, each `0.1.0-alpha.1`. "Qualified" below means what the [persistence qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) names and nothing more. The design is the [persistent vault specification](persistent-vault.md), whose §10 is the trust-boundary table this section follows; procedures are in the [operations specification](persistent-operations.md). The earlier [persistent store contract](../decisions/define-persistent-store-contract.md) ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)) is superseded where the [ciphertext-only store decision](../decisions/supersede-persistent-store-contract.md) says so. Like the in-memory server row, this profile is tested by its own suites, harness, and backend scenarios, not by `conformance/v1/corpus.json`, so it is short of this document's top-line "qualified" bar in that one respect; in this section the word refers to the profile-specific record. No published package persists anything.
+
+- **Data flow:** request handler → `PrincipalResolver` and `SessionResolver` → `lifecyclePolicy` → `capture`: the capture plan scans with the core, the crypto layer encrypts each retained value under a per-capture data key from the key provider, and the store creates the capture and its entries in one transaction → redacted text to the model. Later, possibly in another process: `restore` → resolvers → the store's read → unwrap and decrypt in the server → grants and `ServerReleasePolicy` → the store's conditional commit → fields returned only after a definite commit.
+- **Trust boundary:** every server process of the namespace, together with the key material it can use. The database, its backups and replicas, and the key service are outside it and are treated as below. A `Store`, `KeyProvider`, or `RecordCrypto` the application injects runs **inside** it.
+- **Assets added:** ciphertext envelopes and wrapped data keys at rest; the wrapping key material (in process memory for the local provider, in the key service for AWS KMS); the digest key; the recovery epoch in deployment configuration; lifecycle state in the database (use counters, revocation, receipts, the namespace epoch); backups, replicas, WAL archives, and database logs, which hold copies of all stored bytes; decrypted values in server memory for the duration of one call.
+- **Attackers added:**
+  1. A party that reads the store or a backup.
+  2. A party that writes the store, or rolls it back.
+  3. A party that holds a wrapping key and a copy of the store.
+  4. A party that reads the key service's audit log.
+  5. A second server process racing a restore against a revocation; a lost response; a crashed or partitioned database.
+  6. A faulty or hostile injected `Store`, `KeyProvider`, or `RecordCrypto`.
+- **Protects against:**
+  - Disclosure of values, tokens, finding types, and grants to a reader of the store or a backup who has no wrapping key. None of them is ever sent to the store.
+  - A stored record moved to another tenant, namespace, capture, entry, or session, or given another expiry or `maxUses`: the server rebuilds the associated data from trusted scope and decryption fails (`integrity-failure`, or `source` for a foreign session tag). A swapped wrapped key fails the same way.
+  - Another tenant's requests: its rows are never read (`unknown-token`), and it cannot revoke, delete, or resolve another tenant's capture.
+  - A restore asserting a session or tenant: both come only from the resolvers.
+  - Release before a definite commit, partial release, and release beyond `maxUses`, including across processes: a restore is one conditional transaction. A revocation that commits first denies it.
+  - Replay of a committed attempt: a receipt deduplicates the state change and never authorizes sending the value again.
+  - An unknown commit outcome treated as "not consumed": it is `COMMIT_AMBIGUOUS`, returns no fields, and is never retried by the server.
+  - Unauthorized capture, revoke, ciphertext deletion, and attempt resolution: each needs `lifecyclePolicy` to return `{ allow: true }`.
+  - Lifetimes without end: every capture expires within 24 hours, judged on the store's clock at commit; a caller whose clock differs by more than the bound fails closed.
+  - A default, embedded, or environment-derived key, and a silent fallback between providers: there is none.
+  - Driver, SDK, key, ciphertext, or value text in errors and audit events.
+- **Does not protect against:**
+  - **A party that writes the store.** It can delete or corrupt rows, and reset a use counter or a revocation. Authenticated encryption shows a record was written by a key holder, not that it is current. Demonstrated: resetting `used` to 0 in the database made a consumed single-use value restorable again.
+  - **Rollback.** A database restored from backup, or a promoted replica that lacks acknowledged commits, holds authentic old rows. Demonstrated: a server left on the old epoch released a consumed value a second time and restored a revoked capture. The control is the recovery epoch in deployment configuration plus the [recovery runbook](persistent-operations.md#5-backup-recovery-runbook); a rollback the operator does not know about is not detected, and a party that can write the database can also restore the epoch record.
+  - **Restore methods the PostgreSQL store does not notice.** Its tripwire detected a dump restored into a new cluster, point-in-time recovery, and a standby promotion. It did **not** detect a dump restored into the same cluster, or a base backup or file-system snapshot started as a plain copy. The tripwire is a guard against a skipped runbook, not the control.
+  - **Promotion of an asynchronous replica.** Demonstrated as a negative control: the promoted node lacked an acknowledged consumption, revocation, and receipt. Transaction isolation orders transactions on one node; it is not evidence of failover durability.
+  - **A party holding a wrapping key and a store copy.** It can decrypt every capture wrapped under that key. Revocation and expiry are server checks and do not stop it. Rotation and re-wrap do not help after exposure.
+  - **Erasure.** Revocation denies future restores. Ciphertext deletion removes rows from the live database only. A wrapped key in a backup, replica, WAL archive, or log stays usable for as long as its wrapping key is. Retiring a wrapping key covers every capture under it, not one. No call in these packages produces an erasure statement.
+  - **Exactly-once delivery.** Release is at most once. A commit whose response is lost spends the use and delivers nothing.
+  - **A hostile injected adapter.** It runs in the trusted process and can lie, retain what it is given, or read memory. The conformance harness shows a correct adapter behaves; it does not contain a hostile one.
+  - **Policy changes between evaluation and commit.** The application's identity and policy systems are not in the store's transaction. The window is bounded by the commit timeout; revocation is the hard cut-off.
+  - **Clocks set back together.** If the database's and the servers' clocks move back by the same amount, lifetimes extend by it and nothing inside the system notices.
+  - **Metadata.** A reader of the store sees tenant and capture identifiers, times, counters, sizes, and timing (specification §3.7). Database statement logging copies ciphertext and wrapped keys into log files.
+  - **Decrypted values in memory.** Values are decrypted before grants and policy are checked. The bytes are overwritten when the call ends; a managed runtime may have copied them, and a returned value is a string that cannot be overwritten.
+  - **Stored volume.** There is no aggregate quota; capture rate is limited only by the application's `lifecyclePolicy`.
+- **AWS KMS key provider, additionally:**
+  - KMS records every call in CloudTrail, with the encryption context in clear. The provider therefore sends a digest of namespace, tenant, and capture, never the identifiers. A reader of the trail sees call volume, timing, principal, and key, and can tell that two calls concern the same capture. The digest is unkeyed: a party that already knows all three identifiers can recognise that capture's calls.
+  - With the opt-in cache, disabling a key or removing a permission in KMS does not reach a cached data key until its entry ages out, at most five minutes (`maxAgeMs`). Demonstrated against a disabled key. The cache is off by default.
+  - KMS key deletion has a waiting period of 7 to 30 days and affects every capture under the key. Automatic key rotation does not retire earlier key material.
+- **What is qualified, per profile:**
+
+  | Profile | State |
+  | --- | --- |
+  | Persistent server on Node.js 22 with `store-postgres` on PostgreSQL 17.11, single primary, `fsync` and `synchronous_commit` on, two server processes, local key provider | Qualified. Durable against a crash that keeps the storage; loss of the storage is a recovery |
+  | The same with one synchronous standby and `requireSynchronousStandby: true` | Qualified, including promotion of that standby under the conditions of [operations §6.1](persistent-operations.md#61-promotion-of-the-synchronous-standby) |
+  | Persistent server over `store-memory` on Node.js 20, 22, 24 | Tested. Not persistence: the store is non-durable and single-process |
+  | AWS KMS key provider | One real-service run in `us-east-1` on Node.js 22 with single-Region symmetric keys; not run with `store-postgres`. Multi-Region keys, custom key stores, and cross-account use are not tested |
+  | The local key provider as a production key-management profile | Not qualified: exercised only with material generated in the test process |
+  | Asynchronous replicas as failover targets, connection poolers, managed PostgreSQL services, other PostgreSQL versions, TLS, `store-postgres` on Node.js 20 or 24 | Not qualified |
+  | DynamoDB, Redis, SQLite | No adapter; [research](../research/persistent-backend-capabilities.md) only |
+  | Python, browser, Worker, or edge persistence; streaming | Not implemented |
+
+- **Requirements on the deployment:** trustworthy time on the database host and every server; the recovery epoch kept where a database restore cannot change it; the same digest key in every process of the namespace; a serving database role limited to the adapter's grants; `log_statement` at `none` or `ddl` with parameter logging off; sweeps scheduled by the application; the recovery runbook run after every recovery.
+- **Alternative if residual risk is unacceptable:** keep the in-memory server (`createServerVault`), which persists nothing and loses captures on restart; shorten `limits.entryTtlMs`; after any recovery or failover that may have lost commits, invalidate and capture again rather than trying to keep captures; for erasure requirements, use narrowly scoped wrapping keys with an independent registry, or core-only redaction with no retention.
 
 ### PII findings (core beta.10) — current, published in 0.1.0-alpha.2
 
@@ -143,6 +198,19 @@ This section is **current** for the packages on `main` against `@redact-secret/c
 | Token altered with a homoglyph so the marker disappears | Destroying the marker also destroys the token; nothing is restored | None needed: that text stays as ordinary text |
 | Private fields visible to debuggers and DevTools | Runtime inspection is outside the page API | Do not inspect vaults in shared sessions |
 | Same-page script compromise | Outside any in-page control | Strict CSP, Trusted Types, fewer third-party scripts, or a server/origin alternative |
+
+### Residual risks for the persistent profile (current on `main`, unpublished)
+
+| Risk | Why accepted | Mitigation available to the application |
+| --- | --- | --- |
+| A database writer resets a use counter or a revocation | Lifecycle state is mutable and outside the encrypted record; version 1 has no lifecycle authority outside the database | Least-privilege serving role; treat database write access as restore authority; short TTLs |
+| A recovered or rolled-back database serves stale state, and two restore methods are not detected by the PostgreSQL store | Encryption cannot show a record is current | Recovery epoch outside the database; the recovery runbook after every recovery; invalidate and capture again |
+| An asynchronous replica promoted as primary loses acknowledged commits | Durability across nodes is a property of the topology, not of the adapter | The synchronous-standby profile with `requireSynchronousStandby: true`; otherwise treat a promotion as a recovery |
+| A committed restore whose response is lost delivers nothing | At-most-once release was chosen over replaying plaintext | `resolveAttempt`; capture again from the source |
+| Ciphertext and wrapped keys outlive deletion in backups, replicas, WAL, and logs | A store cannot destroy a key or reach a backup | Scoped wrapping keys with an independent registry; bounded backup retention; a stated completion delay |
+| A holder of a wrapping key and a store copy decrypts every capture under that key | Revocation and expiry are server checks | Protect key material in the secret manager or key service; separate keys per tenant where that matters |
+| KMS CloudTrail shows call volume, timing, and principal; a cached data key outlives a disabled key by up to `maxAgeMs` | Properties of the key service and of any in-memory key | Restrict access to the trail; leave the cache off |
+| A hostile injected store, key provider, or crypto layer | It runs in the trusted process | Use only reviewed adapters; qualify each on its own |
 
 ### Residual risks for PII findings (current, published `0.1.0-alpha.2`, core beta.10; see [decision-pii-retention-and-activation-ownership](../decisions/decide-pii-retention-and-activation-ownership.md))
 

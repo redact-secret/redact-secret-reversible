@@ -14,10 +14,10 @@ Read from `origin/main` at `35ffa32`, the registries, and the issue bodies; noth
 | `@redact-secret/core` | `latest` and `beta` are `0.1.0-beta.12` |
 | `@redact-secret/vault-contracts`, `vault-crypto`, `store-memory`, `store-postgres`, `key-provider-local`, `key-provider-aws-kms` | None exists on npm (404) |
 | Open PRs | [#99](https://github.com/redact-secret/redact-secret-vault/pull/99), a stale `release/beta.2` PR superseded by the merged #98. Not touched by this workstream |
-| Persistence code | None. `vault-server` wraps a private in-memory vault plus a metadata shadow (`packages/vault-server/src/server-vault.ts`) |
+| Persistence code | At the baseline: none; `vault-server` wraps a private in-memory vault plus a metadata shadow (`packages/vault-server/src/server-vault.ts`). On the branch since: `packages/vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `key-provider-aws-kms` (each `0.1.0-alpha.1`), `packages/vault-server/src/persistent/`, and `packages/vault/src/capture-plan.ts` (`vault` and `vault-server` at `0.1.0-beta.4`). All unpublished. `createServerVault` is unchanged |
 | Persistent ADR | `docs/decisions/define-persistent-store-contract.md`, accepted for the contract only (#19, closed). It has a plaintext-returning `Store.consume`, per-entry atomicity, a `KeyProvider` that seals payloads, plaintext replay on retry, and `Store.purge` promising key destruction |
 | `main` protection | Required checks: `boundaries`, `browser`, `node 20/22/24` on ubuntu and macos, `sast`. Admins enforced. No required reviews |
-| Release | `release.yml` publishes `vault`, then `vault-server`, then PyPI, by trusted publishing. It knows no other package |
+| Release | At the baseline: `release.yml` publishes `vault`, then `vault-server`, then PyPI, by trusted publishing, and knows no other package. On the branch since: it publishes `vault-contracts`, `vault`, the five other persistence packages through `scripts/publish-workspace.mjs`, then `vault-server`. That path has not run |
 
 Documentation drift found: `ARCHITECTURE.md` still says alpha and "persistence is not implemented" in its status paragraph; `README.md` says Python `0.1.0b2` is on PyPI where `0.1.0b3` is. Fixed under #112.
 
@@ -32,8 +32,9 @@ Documentation drift found: `ARCHITECTURE.md` still says alpha and "persistence i
 
 ## External blockers
 
-1. **First publish of new npm packages.** Needs the maintainer's npm account. Until then the release workflow cannot publish them with provenance.
-2. **Release.** Each release needs the maintainer's confirmation before its tag is pushed.
+1. **First publish of new npm packages.** Still open. Needs the maintainer's npm account, for each of the six new packages, in dependency order (`RELEASING.md`, "Persistence packages"). Until `@redact-secret/vault-contracts` exists on npm with a trusted publisher, the `publish` job of `release.yml` stops at its first publish step and publishes nothing, `@redact-secret/vault` and `@redact-secret/vault-server` included.
+2. **Release.** Still open. Each release needs the maintainer's confirmation before its tag is pushed. No tag has been pushed for `0.1.0-beta.4`.
+3. **Implementation review.** In progress on 2026-10-01; its outcome goes into the qualification record.
 
 ## Deliverables and order
 
@@ -50,3 +51,10 @@ Documentation drift found: `ARCHITECTURE.md` still says alpha and "persistence i
 - 2026-10-01: specification and superseding decision written; two-pass independent design review recorded in `docs/research/persistent-vault-design-review.md` (no critical, one high, fixed). Design frozen for implementation.
 - 2026-10-01: maintainer decisions — push, PR, and merge are authorized; releases need confirmation before a tag is pushed. Docker Desktop restarted (daemon answers). Creating AWS KMS test keys with the `redact-secret` profile is authorized.
 - 2026-10-01: #114 research drafted in `docs/research/persistent-backend-capabilities.md` (separate PR; its section references must follow the final specification numbering).
+- 2026-10-01: #104, #106, #107 implemented: `vault-contracts`, `vault-crypto` with the local key provider, and the record format v1 vectors in `conformance/persistent/v1`.
+- 2026-10-01: #108, #110 implemented: `vault-conformance` (store and key-provider harnesses, fault injection, 19 mutation controls) and `store-memory`.
+- 2026-10-01: #109 implemented: the capture plan in `@redact-secret/vault` and `@redact-secret/vault-server/persistent`, with tests in `packages/vault-server/test/persistent` and an on-demand table of 39 mutations.
+- 2026-10-01: #20, #111 implemented: `store-postgres`, its qualification run on PostgreSQL 17.11 (295 passed, 0 failed, 13 skipped), and `docs/specs/persistent-operations.md`.
+- 2026-10-01: #113 implemented: `key-provider-aws-kms`, with one real-service run in `us-east-1`. #114 research and #115 plan (`docs/plans/python-persistence-parity.md`) merged into the branch.
+- 2026-10-01: #112: versions set to `0.1.0-beta.4` and `0.1.0-alpha.1`; `release.yml`, `scripts/publish-workspace.mjs`, `qualification/check-persistence-boundaries.mjs`, and `qualification/persistence-consumer.mjs` added. CI run 36910248437 at `3815f34` passed every job, including `persistence` on Node.js 20, 22, 24 and `postgres 17`.
+- 2026-10-01: #112 documentation: README, ARCHITECTURE, CHANGELOG, RELEASING, threat model, assurance case, and `docs/research/qualification-persistence-0.1.0-alpha.1.md` reconciled with the tree and the registries. Verified locally on Node.js 22.16.0: `test:persistence`, `test:vault-server` (256 tests, 252 passed, 4 skipped), `check:persistence-boundaries`, and the server mutation table (39 of 39 caught). Nothing is published; the implementation review is still in progress.

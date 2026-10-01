@@ -4,16 +4,16 @@ This is the intended direction for the next twelve months (October 2026 – Sept
 
 ## Near term
 
-- Re-pin `@redact-secret/core` to `0.1.0-beta.11` and release `0.1.0-alpha.4` of both npm packages ([#64](https://github.com/redact-secret/redact-secret-vault/issues/64)).
+- Complete the independent implementation review of the persistent profile and publish the first persistence prerelease: `0.1.0-beta.4` of both npm packages and `0.1.0-alpha.1` of the six persistence packages, all on `main` and unpublished today ([#112](https://github.com/redact-secret/redact-secret-vault/issues/112), [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md)).
 - Document and test JavaScript/Python conformance and the supported core version ranges ([#18](https://github.com/redact-secret/redact-secret-vault/issues/18)).
 - Continue qualifying `@redact-secret/vault` on the in-memory runtimes it supports ([#2](https://github.com/redact-secret/redact-secret-vault/issues/2)).
 
 ## Later in the year
 
 - Server restoration under the language-neutral authority contract, including qualifying the Python package beyond research grade ([#3](https://github.com/redact-secret/redact-secret-vault/issues/3)).
-- Qualify one concrete persistent store through adversarial tests ([#20](https://github.com/redact-secret/redact-secret-vault/issues/20)), then optional `@redact-secret/store-*` backends ([#4](https://github.com/redact-secret/redact-secret-vault/issues/4)), built against the [persistent store contract](docs/decisions/define-persistent-store-contract.md).
+- Persistence beyond the first qualified profile ([#4](https://github.com/redact-secret/redact-secret-vault/issues/4)). `@redact-secret/store-postgres` is implemented and qualified on PostgreSQL 17.11 for two topologies ([#20](https://github.com/redact-secret/redact-secret-vault/issues/20)). Further backends (**proposed**; DynamoDB, Redis, and SQLite are [research](docs/research/persistent-backend-capabilities.md) only, [#114](https://github.com/redact-secret/redact-secret-vault/issues/114)) and Python persistence (**proposed**; [plan](docs/plans/python-persistence-parity.md), [#115](https://github.com/redact-secret/redact-secret-vault/issues/115)) each need their own qualification, against the [persistent vault specification](docs/specs/persistent-vault.md).
 
 ## Not planned
 
 - Detection rules or policy logic: they belong to the [core](https://github.com/redact-secret/redact-secret).
-- Streaming restoration, Rust or Go distributions, and edge, SharedWorker, Service Worker, or Node.js `worker_threads` runtimes are not scheduled. Each needs its own threat model and qualification first.
+- Streaming restoration, browser or Worker persistence, Rust or Go distributions, and edge, SharedWorker, Service Worker, or Node.js `worker_threads` runtimes are not scheduled. Each needs its own threat model and qualification first.
