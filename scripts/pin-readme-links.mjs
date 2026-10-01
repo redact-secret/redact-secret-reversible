@@ -34,7 +34,6 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * is a directory (it then links to /tree/ instead of /blob/).
  */
 export function pinLinks(text, { packageDir, ref, isDirectory = () => false }) {
-  const absolute = new RegExp(`${REPO_URL.replace(/[.]/g, "\\.")}/(blob|tree)/main/`, "g");
   let fence = null;
   return text
     .split("\n")
@@ -48,7 +47,10 @@ export function pinLinks(text, { packageDir, ref, isDirectory = () => false }) {
         fence = mark[1];
         return line;
       }
-      return line.replace(absolute, `${REPO_URL}/$1/${ref}/`).replace(/\]\(([^)\s]+)\)/g, (all, target) => {
+      return line
+        .replaceAll(`${REPO_URL}/blob/main/`, `${REPO_URL}/blob/${ref}/`)
+        .replaceAll(`${REPO_URL}/tree/main/`, `${REPO_URL}/tree/${ref}/`)
+        .replace(/\]\(([^)\s]+)\)/g, (all, target) => {
         if (/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(target)) return all;
         const hash = target.indexOf("#");
         const path = hash < 0 ? target : target.slice(0, hash);

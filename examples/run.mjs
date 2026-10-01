@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Runs every example and fails if one fails. Usage: npm run examples
-// The Python example runs only when `--python=<interpreter>` is given.
+// The Python example runs only when `--python=PATH` names an interpreter.
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,7 +14,7 @@ for (const file of readdirSync(here).sort()) {
   if (!/^\d\d-.*\.(mjs|py)$/.test(file)) continue;
   const isPython = file.endsWith(".py");
   if (isPython && !python) {
-    console.log(`\n--- ${file}: skipped (pass --python=<interpreter> to run it)`);
+    console.log(`\n--- ${file}: skipped (pass --python=PATH to run it)`);
     continue;
   }
   console.log(`\n--- ${file}`);
