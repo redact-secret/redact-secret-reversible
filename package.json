@@ -17,6 +17,7 @@
     "check:links": "node scripts/check-links.mjs",
     "test:vault": "npm run build -w @redact-secret/vault && npm run test -w @redact-secret/vault",
     "test:vault-server": "npm run build && npm run test -w @redact-secret/vault-server",
+    "examples": "npm run build && node examples/run.mjs",
     "test:bench": "npm run build && node --test bench/test/*.test.mjs",
     "bench": "npm run build && node bench/run.mjs",
     "bench:smoke": "npm run build && node bench/run.mjs --quick",

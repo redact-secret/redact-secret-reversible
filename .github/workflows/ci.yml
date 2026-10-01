@@ -51,6 +51,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:vault-server
+      # The runnable examples (examples/README.md): each asserts its own output.
+      - run: npm run examples
 
   node:
     name: node ${{ matrix.node }} (${{ matrix.os }})
@@ -226,3 +228,5 @@ jobs:
         working-directory: packages/vault-py
       - run: pytest -q
         working-directory: packages/vault-py
+      - name: Python example
+        run: python examples/05-python-server.py
