@@ -124,7 +124,7 @@ payload = u8 payloadVersion (1)
        || lp16(policyRevision)   (empty when hasPolicyRevision is 0)
 ```
 
-Sinks are unique and in ascending byte order; within a grant, paths are unique and in ascending byte order. A decoder rejects any other order. The value, the finding type, the grants, and the policy revision are encrypted because the store does not need them to index or to enforce lifecycle conditions.
+Sinks are unique and in ascending byte order; within a grant, paths are unique and in ascending byte order. A decoder rejects any other order. `type` is 1 to 256 bytes. A `policyRevision` that is present may be empty, and stays distinct from an absent one. `value` is opaque bytes to the crypto layer, which neither decodes nor validates it; the server encodes it from a well-formed string and decodes it strictly. The value, the finding type, the grants, and the policy revision are encrypted because the store does not need them to index or to enforce lifecycle conditions.
 
 Stored envelope, one per entry:
 
@@ -140,7 +140,7 @@ Stored on the capture and replaceable under a key revision (§5.6): `keyRef` (a 
 | Quantity | Ceiling |
 | --- | --- |
 | Value | 1 MiB (`LIMIT_CEILINGS.maxValueBytes` of the vault; default 8 KiB) |
-| Envelope | The store's `maxEnvelopeBytes`, at most 1 MiB + 64 KiB |
+| Envelope | The store's `maxEnvelopeBytes`, at most 1 MiB + 64 KiB. A maximum-size value with very large grants can exceed it; that is a `RECORD_LIMIT` at seal |
 | Grants per record | 1 to 64 sinks, 1 to 256 paths each, each identifier at most 256 code units |
 | `type`, `policyRevision` | 256 bytes each |
 | `sink`, each `path`, `principalId` | 256 code units each |
@@ -415,11 +415,20 @@ A store or provider reports an expected outcome in its result and throws only fo
 | | `KEY_INVALID_ARGUMENT` | The input violates the contract |
 | `RecordCryptoError` | `RECORD_MALFORMED`, `RECORD_UNSUPPORTED`, `RECORD_INTEGRITY`, `RECORD_LIMIT`, `RECORD_INVALID_ARGUMENT` | Decoding, version or algorithm, authentication, size, and input failures |
 
+Code assignment in the crypto layer:
+
+- `RECORD_MALFORMED`: bad magic, a length that does not match, non-canonical order, a zero count, a bad presence flag, trailing bytes, invalid UTF-8 in an identifier.
+- `RECORD_UNSUPPORTED`: an unknown format version, algorithm, or payload version, checked before any key is unwrapped.
+- `RECORD_LIMIT`: anything over a ceiling of §3.6, including a length field that claims more than the envelope ceiling. Nothing that large is allocated.
+- `RECORD_INTEGRITY`: the tag did not verify.
+- `RECORD_INVALID_ARGUMENT`: the caller's input, including a binding outside §3.6 and an empty record list.
+- A provider result of the wrong shape (a key that is not 32 bytes, a key reference or wrapped key outside its limits) is `KEY_UNAVAILABLE`. A provider's own `KeyProviderError` is rebuilt from its code, so nothing attached to it passes through.
+
 An adapter that cannot tell whether a mutation took effect must throw `STORE_AMBIGUOUS`. The server treats any other exception from a mutating store call as ambiguous too.
 
 ### 4.2 Mechanical validation by the store
 
-A store rejects with `STORE_INVALID_ARGUMENT`, before any write: an identifier or timestamp outside §3; a duplicate `entryId` in `entries` or `uses`; a duplicate capture; a `count` that is not an integer of at least 1; a `uses` entry whose capture is not in `captures`, or a capture in `captures` with no use; an empty `uses` or `entries`; a capture lifetime outside `0 < expiresAt − createdAt ≤ 24 h`; a `maxUses` outside 1 to 1000; an envelope over `maxEnvelopeBytes`; a `requestDigest` that is not 32 bytes; a `keyRef` or `wrappedKey` that is empty or over its limit; a `sessionTag` that is neither null nor 64 hexadecimal characters; an `epoch` or `newEpoch` that is not a positive safe integer; a `receiptExpiresAt` more than 48 hours past the store's clock; a `retentionMs` outside 0 to 30 days; a sweep `limit` outside 1 to 10 000. `STORE_INVALID_ARGUMENT` is a definite failure: nothing was applied, and the server reports it as an invariant violation, not as an ambiguous commit. These checks protect the store's own invariants against a faulty caller. They are not authorization.
+A store rejects with `STORE_INVALID_ARGUMENT`, before any write: an identifier or timestamp outside §3; a duplicate `entryId` in `entries` or `uses`; a duplicate capture; a `count` that is not an integer of at least 1; a `uses` entry whose capture is not in `captures`, or a capture in `captures` with no use; an empty `uses` or `entries`; an empty or duplicated identifier list in a read; a capture lifetime outside `0 < expiresAt − createdAt ≤ 24 h`; a `maxUses` outside 1 to 1000; an envelope over the contract ceiling of §3.6 (one between the store's own lower `maxEnvelopeBytes` and that ceiling is `STORE_CAPABILITY`); a `requestDigest` that is not 32 bytes; a `keyRef` or `wrappedKey` that is empty or over its limit; a `sessionTag` that is neither null nor 64 hexadecimal characters; an `epoch` or `newEpoch` that is not a positive safe integer; a `receiptExpiresAt` more than 48 hours past the store's clock (judged inside the transaction, since it needs the clock); a `retentionMs` outside 0 to 30 days; a sweep `limit` outside 1 to 10 000. `STORE_INVALID_ARGUMENT` is a definite failure: nothing was applied, and the server reports it as an invariant violation, not as an ambiguous commit. These checks protect the store's own invariants against a faulty caller. They are not authorization.
 
 ## 5. Store semantics
 
@@ -467,7 +476,7 @@ One transaction that creates the capture and all its entries, or nothing.
 
 - `rejected: "quarantined"` when the namespace has no recovery record, is quarantined, or `input.epoch` differs from the stored epoch.
 - `rejected: "clock-skew"` when the store's clock and `input.now` differ by more than `maxClockSkewMs`, or `createdAt` is outside that bound of the store's clock.
-- `rejected: "fenced"` when a revoked capture with that identifier exists.
+- `rejected: "fenced"` when a capture with that identifier exists and is revoked, is a fence, or was created under an earlier epoch.
 - `rejected: "exists"` when a live capture or any entry with one of the entry identifiers exists. Nothing is overwritten.
 - `rejected: "stale"` when the conflict rule aborted the transaction. The server may try again with a new capture identifier.
 - Otherwise every row is created with `used = 0`, `lifecycleRevision = 1`, `ciphertextRevision = 1`, capture `generation = 1`, `keyRevision = 1`, and the current epoch.
@@ -528,11 +537,11 @@ export type ReplaceCaptureKeyResult =
   | { readonly outcome: "rejected"; readonly reason: "stale" | "unknown" | "revoked" | "expired" };
 ```
 
-`revokeCapture` sets the capture to `revoked` and increments its `generation` in one transaction. `entries` is the number of entry rows the capture had at that moment; it is informational. For an absent capture it returns `not-found` and writes nothing, unless `fenceAbsent` is set, in which case it writes a revoked row whose `createdAt` and `expiresAt` are the store's clock, and returns `fenced`. Revocation works in a quarantined namespace. The tombstone is kept at least until the later of the capture's `expiresAt` and the store's clock at revocation, plus `retentionMs`.
+`revokeCapture` sets the capture to `revoked` and increments its `generation` in one transaction. `entries` is the number of entry rows the capture had at that moment; it is informational. For an absent capture it returns `not-found` and writes nothing, unless `fenceAbsent` is set, in which case it writes a revoked row whose `createdAt` and `expiresAt` are the store's clock, and returns `fenced`; the epoch recorded on a fence is not significant. A capture of an earlier epoch already reads as revoked: revoking it answers `already-revoked` and writes nothing. The caller's `now` is informational here: the result has no skew rejection, and retention is computed from the store's clock. Revocation works in a quarantined namespace. The tombstone is kept at least until the later of the capture's `expiresAt` and the store's clock at revocation, plus `retentionMs`.
 
 `inspectAttempt` is an authoritative read. `absent` means no transaction for that attempt has committed as of the read. It never returns restored data.
 
-`replaceCaptureKey` replaces a capture's wrapped key with another wrapping of the same DEK: a compare-and-swap on `keyRevision`. It refuses a capture that is revoked, expired on the store's clock, or has had its ciphertext deleted. It never changes an envelope, `used`, `lifecycleRevision`, `ciphertextRevision`, `maxUses`, `state`, `generation`, the epoch, or any time. A restore running concurrently is unaffected, because the DEK is the same. Version 1 has no operation that replaces envelopes; `ciphertextRevision` is 1 for every entry and is checked at commit so a later version can add one.
+`replaceCaptureKey` replaces a capture's wrapped key with another wrapping of the same DEK: a compare-and-swap on `keyRevision`. It refuses a capture that is revoked, expired on the store's clock, or has had its ciphertext deleted (`revoked`); when several refusals apply, which is reported is not specified. It works in a quarantined namespace. It never changes an envelope, `used`, `lifecycleRevision`, `ciphertextRevision`, `maxUses`, `state`, `generation`, the epoch, or any time. A restore running concurrently is unaffected, because the DEK is the same. Version 1 has no operation that replaces envelopes; `ciphertextRevision` is 1 for every entry and is checked at commit so a later version can add one.
 
 ### 5.7 `deleteCiphertext`, `sweepExpired`
 
@@ -548,9 +557,9 @@ export type SweepResult =
   | { readonly outcome: "rejected"; readonly reason: "clock-skew" };
 ```
 
-`deleteCiphertext` removes the entry rows of a capture that is revoked, or expired on the store's clock; overwrites the capture's stored key with an empty value; increments `keyRevision`; marks the capture revoked; and keeps the row as a tombstone. It refuses a live, unexpired capture. The skew check applies only when the decision rests on expiry: a revoked capture's ciphertext can be deleted whatever the clocks say.
+`deleteCiphertext` removes the entry rows of a capture that is revoked, or expired on the store's clock; overwrites the capture's stored key with an empty value; increments `keyRevision`; marks the capture revoked; and keeps the row as a tombstone. It does not change `generation`. Deleting again answers `deleted` with zero entries. It refuses a live, unexpired capture. The skew check applies only when the decision rests on expiry: a revoked capture's ciphertext can be deleted whatever the clocks say.
 
-`sweepExpired` removes at most `limit` rows per kind: entries of captures expired on the store's clock, capture rows past their expiry or tombstone retention, and receipts past `receiptExpiresAt`. It is cleanup. Skipping it changes storage use, never an authorization outcome. A backend's native TTL, where used, must not delete a row before the same bound, and is likewise never the reason a restore is denied or allowed.
+`sweepExpired` removes at most `limit` rows per kind: entries of captures expired on the store's clock, capture rows past their expiry or tombstone retention, and receipts past `receiptExpiresAt`. Entries and unrevoked capture rows go when the store's clock is at or past `expiresAt`; receipts and tombstones go only strictly past their bound; a capture row is never removed while it still has entries. It is cleanup. Skipping it changes storage use, never an authorization outcome. A backend's native TTL, where used, must not delete a row before the same bound, and is likewise never the reason a restore is denied or allowed.
 
 Both take the caller's `now`, so a store clock that has jumped forward cannot delete live rows on its own authority.
 
@@ -574,7 +583,7 @@ export type InvalidateRecoveredResult =
 ```
 
 - `initializeNamespace` creates the recovery record. It refuses when the record exists, or when any capture, entry, or receipt row of the namespace exists. No other operation creates the record: a server that finds none fails closed.
-- `quarantine` sets the state to `quarantined`. Captures and commits are then rejected; revocation still works.
+- `quarantine` sets the state to `quarantined`. Captures and commits are then rejected; revocation still works. For a namespace with no record it changes nothing and reports `uninitialized`.
 - `invalidateRecovered` sets the epoch to `newEpoch`, which must be greater than the stored epoch, and the state to `serving`, in one transaction. Every capture created under an earlier epoch is thereafter treated as revoked. Invalidation is decided by the epoch stamped on each capture, not by comparing clocks.
 
 There is no operation that adopts a new epoch while keeping earlier captures usable, and none that sets `used` from an external ledger. See §9.3.
@@ -616,7 +625,7 @@ createLocalKeyProvider({
 });
 ```
 
-`material` is 32 bytes, or a non-extractable `CryptoKey` for HKDF with the `deriveKey` usage. `keyRef` is `local:<id>`. For each context the provider derives a wrapping key with HKDF-SHA-256 (`salt` = 32 zero bytes, `info = "rsv-local-wrap-v1" 0x00 || lp16(namespace) || lp16(tenant) || lp16(captureId)`) and wraps the DEK with AES-256-GCM under a random 96-bit nonce: `wrappedKey = 0x01 || nonce || ciphertext || tag`, where the leading byte is the wrap format version. The provider does not load, store, or rotate the material; the application does, from its own secret manager.
+`material` is 32 bytes, or a non-extractable `CryptoKey` for HKDF with the `deriveKey` usage. `keyRef` is `local:<id>`. For each context the provider derives a wrapping key with HKDF-SHA-256 (`salt` = 32 zero bytes, `info = "rsv-local-wrap-v1" 0x00 || lp16(namespace) || lp16(tenant) || lp16(captureId)`) and wraps the DEK with AES-256-GCM under a random 96-bit nonce: `wrappedKey = 0x01 || nonce || ciphertext || tag`, where the leading byte is the wrap format version. No associated data is passed; the context is bound through the derivation. A stored key of the wrong length or version, or one that does not authenticate, is `KEY_INTEGRITY`; an empty or oversized one, or an empty key reference, is `KEY_INVALID_ARGUMENT`. `scope.tenants`, when given, is not empty. The provider does not load, store, or rotate the material; the application does, from its own secret manager.
 
 It is a complete provider for a deployment whose secret manager delivers key material to the process. Its limits are stated in the package: the material is in process memory; anyone who obtains it and a copy of the store can decrypt every capture wrapped under it; and because every wrapping key derives from one material, retiring that material makes every capture under it unreadable. It offers no per-tenant or per-capture erasure.
 
@@ -667,7 +676,7 @@ requestDigest = MAC( "rsv-request-v1" 0x00
         || pathCount × ( lp16(path) || u32 occurrences ) ) )         (entries, then paths, ascending)
 ```
 
-`captureId` here is every capture the request names. `MAC` is HMAC-SHA-256 under the application's digest key, which also keys the session tag (§3.2). The key is required: without it, a party reading the store could test guesses of principal, sink, purpose, and session against what is stored. An application may pass `allowUnkeyedDigests: true`, which substitutes SHA-256 and accepts that. The key must be the same in every process of the namespace; an attempt made under one key and retried under another is `attempt-mismatch`, and a session-bound capture made under one key is denied `source` under another, so the key is changed only when it is acceptable to lose outstanding attempts and session-bound captures.
+`captureId` here is every capture the request names: 1 to 64. There are 1 to 1024 uses, each with 1 to 65 535 paths and 1 to 2^32 − 1 occurrences. `MAC` is HMAC-SHA-256 under the application's digest key, which also keys the session tag (§3.2). The key is required: without it, a party reading the store could test guesses of principal, sink, purpose, and session against what is stored. An application may pass `allowUnkeyedDigests: true`, which substitutes SHA-256 and accepts that. The key must be the same in every process of the namespace; an attempt made under one key and retried under another is `attempt-mismatch`, and a session-bound capture made under one key is denied `source` under another, so the key is changed only when it is acceptable to lose outstanding attempts and session-bound captures.
 
 | Situation | Stored effect | Returned to caller |
 | --- | --- | --- |
@@ -777,7 +786,7 @@ const vault = await createPersistentServerVault({
 - Staged plaintext exists only inside one call, bounded by the capture and restore limits, and is not cached across calls.
 - Audit events carry operation, outcome, reason, counts, and opaque identifiers. They never carry a value, a token, a key, ciphertext, or a driver or provider message.
 
-Capture failure: when encryption, a provider call, or `createCapture` fails, no capture result is returned, so no usable token exists outside the server. When `createCapture` is ambiguous, the server calls `revokeCapture` once with `fenceAbsent` for the identifier it issued and reports failure either way.
+Capture failure: when encryption, a provider call, or `createCapture` fails, no capture result is returned, so no usable token exists outside the server. When `createCapture` is ambiguous, the server calls `revokeCapture` once with `fenceAbsent` for the identifier it issued and reports failure either way. A `stale` creation applied nothing and is reported as `STORE_UNAVAILABLE`; the caller captures again.
 
 ### 8.3 Differences from the in-memory server
 
@@ -792,7 +801,7 @@ Capture failure: when encryption, a provider call, or `createCapture` fails, no 
 | Identifier with a lone surrogate | Accepted | `INVALID_ARGUMENT` |
 | Capture requires a principal | No | Yes |
 | New denial reasons | — | `integrity-failure`, `key-unavailable`, `attempt-mismatch`, `attempt-already-committed` |
-| New error codes | — | `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `CLOSED` |
+| New error codes | — | `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `KEY_UNAVAILABLE` (capture only; at restore a key failure is a denial), `CLOSED` |
 
 ## 9. Revoke, deletion, key retirement, erasure
 
