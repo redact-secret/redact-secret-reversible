@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/vault-server",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "Server authority (principal, tenant, source, sink/path, purpose) for restoring values captured by @redact-secret/vault, with an in-memory storage backend.",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@redact-secret/vault": "0.1.0-beta.3",
+    "@redact-secret/vault": "0.1.0-beta.4",
     "@redact-secret/vault-contracts": "0.1.0-alpha.1"
   },
   "peerDependencies": {

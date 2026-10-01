@@ -26,7 +26,8 @@
     "bench:archive": "node bench/archive.mjs",
     "test:persistence": "npm run build && npm run test -w @redact-secret/vault-contracts && npm run test -w @redact-secret/vault-crypto && npm run test -w @redact-secret/vault-conformance && npm run test -w @redact-secret/store-memory && npm run test -w @redact-secret/key-provider-aws-kms",
     "test:postgres": "npm run build && npm run test -w @redact-secret/store-postgres",
-    "check:persistence-boundaries": "npm run build && node qualification/check-persistence-boundaries.mjs"
+    "check:persistence-boundaries": "npm run build && node qualification/check-persistence-boundaries.mjs",
+    "qualify:persistence": "node qualification/persistence-consumer.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

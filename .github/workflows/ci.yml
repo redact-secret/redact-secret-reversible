@@ -28,6 +28,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run check:boundaries
+      - run: npm run check:persistence-boundaries
       - run: npm run check:links
       - name: Validate conformance corpus JSON
         run: node -e 'JSON.parse(require("fs").readFileSync("conformance/v1/corpus.json","utf8"))'
@@ -140,6 +141,16 @@ jobs:
       - name: Create the serving role
         run: node packages/store-postgres/scripts/create-app-role.mjs
       - run: npm run test:postgres
+      # Packed tarballs in clean projects outside the repository: the base
+      # packages install no driver or SDK, and the persistent profile runs over
+      # the reference store and this PostgreSQL.
+      - run: npm run qualify:persistence
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: reports-persistence-postgres-${{ matrix.postgres }}
+          path: .qualification/reports/
+          if-no-files-found: error
 
   browser:
     runs-on: ubuntu-latest
