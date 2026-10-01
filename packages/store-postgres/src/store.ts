@@ -82,7 +82,12 @@ export interface PostgresStoreOptions {
    * default is overridden per transaction.
    */
   readonly synchronousCommit?: "on" | "remote_apply";
-  /** Refuse to start unless `synchronous_standby_names` is set. Default false. */
+  /**
+   * Refuse to start, and refuse every later transaction, unless
+   * `synchronous_standby_names` is set. Default false. The setting can be
+   * changed with a reload while a store is running, so it is read again in
+   * each transaction.
+   */
   readonly requireSynchronousStandby?: boolean;
   /** Per-statement deadline inside a transaction. Default 5000. */
   readonly statementTimeoutMs?: number;
@@ -101,6 +106,11 @@ export interface PostgresStore extends Store {
    * its epoch, after the operator has established that the change of identity
    * lost no acknowledged commit (promotion of a synchronous standby). Any
    * other change of identity is a recovery: use `invalidateRecovered`.
+   *
+   * It accepts a new timeline of the same cluster and nothing else. A changed
+   * system identifier is refused, and a namespace quarantined by `quarantine`
+   * stays quarantined. It cannot tell a synchronous standby from a stale one:
+   * that is the operator's finding, not this method's.
    */
   acknowledgeIdentityChange(input: { readonly namespace: string }, options?: StoreCallOptions): Promise<RecoveryState>;
   /** Marks this adapter closed. The pool stays open: the application owns it. */
@@ -328,7 +338,8 @@ export async function openPostgresStore(options: PostgresStoreOptions, nowSql: s
     maxEnvelopeBytes: boundedOption(options.maxEnvelopeBytes, LIMITS.maxEnvelopeBytes, LIMITS.maxEnvelopeBytes),
   });
 
-  return new PostgresStoreImpl(pool, schema, capabilities, synchronousCommit, statementTimeoutMs, lockTimeoutMs, nowSql);
+  const requireStandby = options.requireSynchronousStandby === true || synchronousCommit === "remote_apply";
+  return new PostgresStoreImpl(pool, schema, capabilities, synchronousCommit, requireStandby, statementTimeoutMs, lockTimeoutMs, nowSql);
 }
 
 class PostgresStoreImpl implements PostgresStore {
@@ -336,6 +347,7 @@ class PostgresStoreImpl implements PostgresStore {
   readonly #t: { readonly ns: string; readonly capture: string; readonly entry: string; readonly receipt: string };
   readonly #capabilities: StoreCapabilities;
   readonly #synchronousCommit: string;
+  readonly #requireStandby: boolean;
   readonly #statementTimeoutMs: number;
   readonly #lockTimeoutMs: number;
   readonly #nowSql: string;
@@ -346,6 +358,7 @@ class PostgresStoreImpl implements PostgresStore {
     schema: string,
     capabilities: StoreCapabilities,
     synchronousCommit: string,
+    requireStandby: boolean,
     statementTimeoutMs: number,
     lockTimeoutMs: number,
     nowSql: string,
@@ -359,6 +372,7 @@ class PostgresStoreImpl implements PostgresStore {
     };
     this.#capabilities = capabilities;
     this.#synchronousCommit = synchronousCommit;
+    this.#requireStandby = requireStandby;
     this.#statementTimeoutMs = statementTimeoutMs;
     this.#lockTimeoutMs = lockTimeoutMs;
     this.#nowSql = nowSql;
@@ -409,12 +423,15 @@ class PostgresStoreImpl implements PostgresStore {
       );
       const facts = await client.query(
         `SELECT ${this.#nowSql} AS now, pg_is_in_recovery() AS standby,
+                current_setting('synchronous_standby_names') AS standbys,
                 (SELECT system_identifier::text FROM pg_control_system()) AS sysid,
                 ${TIMELINE_SQL} AS timeline`,
       );
       const row = facts.rows[0] ?? {};
       // A connection that has landed on a standby is not the authority.
       if (row.standby !== false || typeof row.sysid !== "string") throw new StoreError("STORE_UNAVAILABLE");
+      // The profile this store declared needs a synchronous standby; a primary that stopped naming one is not it.
+      if (this.#requireStandby && (typeof row.standbys !== "string" || row.standbys.trim() === "")) throw new StoreError("STORE_UNAVAILABLE");
       const head: Head = { now: toNumber(row.now), systemIdentifier: row.sysid, timelineId: toNumber(row.timeline) };
       value = await body(client, head);
       // Cancelled before COMMIT was sent: roll back, so the outcome is known.
@@ -958,6 +975,11 @@ class PostgresStoreImpl implements PostgresStore {
       return await this.#transaction<RecoveryState>("write", options, async (client, head) => {
         const ns = await this.#namespace(client, head, input.namespace, "update");
         if (ns.state === "uninitialized") return { epoch: 0, state: "uninitialized" };
+        // A promoted standby keeps its cluster's system identifier. A different
+        // one is another cluster: a restore, never a promotion, and not
+        // something this operation may accept. `invalidateRecovered` is the way out.
+        const recorded = await client.query(`SELECT system_identifier FROM ${this.#t.ns} WHERE namespace = $1`, [input.namespace]);
+        if (recorded.rows[0]?.system_identifier !== head.systemIdentifier) return { epoch: ns.epoch, state: "quarantined" };
         await client.query(`UPDATE ${this.#t.ns} SET system_identifier = $2, timeline_id = $3 WHERE namespace = $1`, [
           input.namespace,
           head.systemIdentifier,
