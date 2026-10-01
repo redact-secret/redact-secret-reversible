@@ -72,6 +72,19 @@ Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the sh
 
 From `0.1.0-beta.4` (on `main`, unpublished), the `ServerVaultErrorCode`, `ServerDenialReason`, and `ServerAuditOperation` types also contain the members the [persistent profile](../guides/persistent-server.md) uses: codes `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `KEY_UNAVAILABLE`, `CLOSED`; denial reasons `integrity-failure`, `key-unavailable`, `attempt-mismatch`, `attempt-already-committed`; audit operations `capture`, `delete-ciphertext`, `resolve-attempt`. `createServerVault` never produces them, but an exhaustive `switch` over these types needs the new cases.
 
+## Reference policies
+
+`@redact-secret/vault-server/policies` (from `0.1.0-beta.4`, on `main`, unpublished; [#134](https://github.com/redact-secret/redact-secret-vault/issues/134)) exports four `ServerReleasePolicy` values. The server evaluates them exactly as it evaluates your own function, at step 9 of the evaluation order, so they cannot allow what an earlier step denied.
+
+| Export | Allows | Denies with |
+| --- | --- | --- |
+| `denyByDefault` | Nothing | `policy` |
+| `allowSameTenantOnly` | A caller whose tenant is the capture's `issuedTenant` | `tenant-mismatch` |
+| `allowSinkPurposes(table)` | A sink listed in `table` with a purpose listed for it. `table` maps a sink to an array of purposes and is copied at creation; a malformed table throws `TypeError` | `sink-or-path` for an unlisted sink, `missing-purpose` for an unlisted purpose |
+| `allOf(...policies)` | When every policy returns exactly `{ allow: true }`. With no policy it denies | The first decision that is not an allow, handed back unchanged |
+
+`allOf` does not judge a malformed decision itself: it returns it, and the server reports `policy-evaluation-error`. A policy that throws or rejects inside `allOf` is `policy-evaluation-error` too. The persistent entry accepts the same values.
+
 ## Threat boundary, failure behavior, and residual risk
 
 - **Threat boundary added over the in-memory vault:** a different authenticated principal, a cross-tenant request, a stale grant surviving a policy or revocation change, and a resolver or policy that is unreachable, slow, or throws — the exact boundary the [server authority ADR](../decisions/define-server-authority-interface.md) names.

@@ -21,7 +21,7 @@ const server = await createServerVault({
   // 1. Who is asking? Read YOUR already-authenticated request context.
   //    Throw if it cannot be established. Never return a default principal.
   resolvePrincipal: async (ctx) => ({ id: ctx.userId, tenant: ctx.tenant }),
-  // 2. May they? Deny by default.
+  // 2. May they? Deny by default: same tenant, and this purpose only.
   policy: (input) =>
     input.tenant === input.source.issuedTenant && input.purpose === "support-reply-purpose-synthetic"
       ? { allow: true }
@@ -62,6 +62,21 @@ try {
 - **A restore is all or nothing.** One failing token denies the whole request and returns no values.
 - **Calls run one at a time** on each `ServerVault`, in order. A `revoke()` queued before a `restore()` always wins.
 - **Single process.** State is in memory. To share captures across processes or survive a restart, see the [persistent profile](#persistent-profile).
+
+## Ready-made policies
+
+From `0.1.0-beta.4` (on `main`, unpublished), `@redact-secret/vault-server/policies` has the common rules, so you do not write them by hand:
+
+```ts
+import { allOf, allowSameTenantOnly, allowSinkPurposes } from "@redact-secret/vault-server/policies";
+
+const policy = allOf(
+  allowSameTenantOnly,
+  allowSinkPurposes({ "support-ticket-reply-sink-synthetic": ["support-reply-purpose-synthetic"] }),
+);
+```
+
+`allOf` needs every policy to allow, and the first denial decides. `denyByDefault` denies everything. Add your own rules as more functions in `allOf`.
 
 ## Denial reasons
 

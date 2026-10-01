@@ -195,6 +195,8 @@ Every field is a fixed enum, a count, a timestamp, or an *identifier* the applic
 
 Illustrative only. Synthetic tenant/purpose/sink literals; no real deployment logic; not exported by any package.
 
+**Addendum, 2026-10-01 ([#134](https://github.com/redact-secret/redact-secret-vault/issues/134)).** "Not exported by any package" no longer holds. `@redact-secret/vault-server/policies` exports `denyByDefault`, `allowSameTenantOnly`, `allowSinkPurposes(table)`, and `allOf(...policies)`; the Python package already exported their counterparts. `allowSinkPurposes` is the `purposeLimited` example below with its table as a parameter and without the tenant rule, which `allowSameTenantOnly` supplies. Nothing in the interface changes: these are ordinary `ServerReleasePolicy` values, evaluated after the server's own checks, and `allOf` hands back anything that is not exactly `{ allow: true }`, so the server's fail-closed handling of a malformed decision still applies. The examples below stay illustrative.
+
 ```ts
 /**
  * deny-by-default: nothing is allowed unless another rule explicitly says
