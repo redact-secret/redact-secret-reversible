@@ -27,6 +27,12 @@
 - Release automation ([#138](https://github.com/redact-secret/redact-secret-vault/issues/138)): `release.yml` pins the links of every package README to the release tag before publishing, and turns relative links into absolute ones ([RELEASING.md](RELEASING.md#readme-links)). Package manifests are unchanged.
 - Documentation: every README is rewritten around one working example. Detail moved, unchanged, to [`docs/guides/`](docs/README.md) and `docs/reference/`; release tables moved to [`docs/status.md`](docs/status.md). New: [troubleshooting](docs/guides/troubleshooting.md). Install commands name one package: npm installs the pinned core as a peer.
 
+### Python persistence groundwork
+
+**Not released. Python persistence is not implemented and not supported.** `redact-secret-vault` stays at `0.1.0b3`, with no runtime dependency in the base install. These entries are internal modules under the [plan](docs/plans/python-persistence-parity.md); support is stated only by the qualification record of [#128](https://github.com/redact-secret/redact-secret-vault/issues/128). Decisions: [record](docs/decisions/python-persistence-api-and-packaging.md).
+
+- `redact_secret_vault.persistent` ([#119](https://github.com/redact-secret/redact-secret-vault/issues/119)): contracts, errors, limits, and validators mirroring `@redact-secret/vault-contracts`, standard library only. Needs Python 3.11 or later; the in-memory server is unchanged.
+
 ### New packages at 0.1.0-alpha.1
 
 **Not released.** None of these names exists on npm yet. Each will publish under the `alpha` dist-tag. Together they are the persistent profile of the [persistent vault specification](docs/specs/persistent-vault.md), decided in the [ciphertext-only store decision](docs/decisions/supersede-persistent-store-contract.md). What was tested, and on what, is in the [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md); anything it does not name is unsupported.
