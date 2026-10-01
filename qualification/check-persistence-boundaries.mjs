@@ -31,6 +31,10 @@ const PACKAGES = {
   // The adapter declares the driver as a peer and types it structurally: its
   // own code imports no driver, the application passes a pool.
   "store-postgres": { deps: [CONTRACTS], peers: ["pg"], imports: [CONTRACTS], nodeBuiltins: false },
+  // The one package that names the SQLite driver, as an optional peer: it is loaded by a dynamic import inside
+  // the store and never reaches the base packages. The store reads and writes its marker file and canonicalizes
+  // the database path, so it alone may import Node built-ins.
+  "store-sqlite": { deps: [CONTRACTS], peers: ["better-sqlite3"], imports: [CONTRACTS, "better-sqlite3"], nodeBuiltins: ["node:fs", "node:path"], optionalPeers: ["better-sqlite3"] },
   "key-provider-aws-kms": { deps: [CONTRACTS], peers: ["@aws-sdk/client-kms"], imports: [CONTRACTS, "@aws-sdk/client-kms"], nodeBuiltins: false },
   "vault-server": {
     deps: [VAULT, CONTRACTS],
@@ -90,6 +94,9 @@ for (const [dirName, rule] of Object.entries(PACKAGES)) {
   check(JSON.stringify(Object.keys(pkg.dependencies ?? {}).sort()) === JSON.stringify([...rule.deps].sort()), `${name}: runtime dependencies are ${Object.keys(pkg.dependencies ?? {}).join(", ") || "none"}`);
   check(JSON.stringify(Object.keys(pkg.peerDependencies ?? {}).sort()) === JSON.stringify([...rule.peers].sort()), `${name}: peer dependencies are ${Object.keys(pkg.peerDependencies ?? {}).join(", ") || "none"}`);
   check(pkg.optionalDependencies === undefined, `${name}: optional dependencies are not allowed`);
+  // A peer is optional only where the rule says so: the driver of an adapter is the application's choice to install.
+  const optionalPeers = Object.entries(pkg.peerDependenciesMeta ?? {}).filter(([, meta]) => meta?.optional === true).map(([peer]) => peer);
+  check(JSON.stringify(optionalPeers.sort()) === JSON.stringify([...(rule.optionalPeers ?? [])].sort()), `${name}: optional peers are ${optionalPeers.join(", ") || "none"}`);
   // Workspace packages are pinned exactly: a range would let an unqualified combination install.
   for (const [dep, range] of Object.entries(pkg.dependencies ?? {})) {
     if (dep.startsWith("@redact-secret/")) check(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(range), `${name}: ${dep} must be pinned exactly, found ${range}`);
@@ -104,7 +111,7 @@ for (const [dirName, rule] of Object.entries(PACKAGES)) {
     for (const [, spec] of src.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
       if (spec.startsWith("./") || spec.startsWith("../")) continue;
       if (spec.startsWith("node:")) {
-        check(rule.nodeBuiltins, `${name}: ${file} imports ${spec}`);
+        check(Array.isArray(rule.nodeBuiltins) && rule.nodeBuiltins.includes(spec), `${name}: ${file} imports ${spec}`);
         continue;
       }
       check(rule.imports.includes(spec), `${name}: ${file} imports ${spec}`);
@@ -115,7 +122,7 @@ for (const [dirName, rule] of Object.entries(PACKAGES)) {
     if (!ownsAdapter) {
       for (const pattern of ADAPTER_ONLY) check(!pattern.test(src), `${name}: ${file} names an adapter, driver, or SDK (${pattern})`);
     }
-    if (dirName === "store-postgres" || dirName === "store-memory") {
+    if (dirName === "store-postgres" || dirName === "store-memory" || dirName === "store-sqlite") {
       // A store holds ciphertext: it imports no crypto layer and calls no cipher or key provider.
       check(!/crypto\.subtle|createRecordCrypto|unwrapDataKey|generateDataKey|decrypt\(/.test(src), `${name}: ${file} touches a cipher or a key provider`);
     }
