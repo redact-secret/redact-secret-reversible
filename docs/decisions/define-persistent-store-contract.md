@@ -7,6 +7,8 @@ decided_at: 2026-09-27
 ---
 # Define the persistent store, encryption, and key ownership contract
 
+> **Partly superseded 2026-10-01** by [decision-supersede-persistent-store-contract](supersede-persistent-store-contract.md) ([#104](https://github.com/redact-secret/redact-secret-vault/issues/104)) and the [persistent vault specification](../specs/persistent-vault.md). Do not implement §1, §1.1, §4's AAD layout, §5's `KeyProvider`, §6's `purge` and backup-replay rule, or §7's plaintext replay: each of those sections carries a note naming its replacement. The record is kept as history.
+>
 > **Accepted 2026-09-27** for the interface contract only ([#19](https://github.com/redact-secret/redact-secret-vault/issues/19)). No `@redact-secret/store-*` package, backend, or vendor selection exists yet. [#20](https://github.com/redact-secret/redact-secret-vault/issues/20) selects and adversarially qualifies one concrete backend against this contract; it must pass its own conformance and qualification gates before claiming support, exactly as [#16](https://github.com/redact-secret/redact-secret-vault/issues/16) and [#17](https://github.com/redact-secret/redact-secret-vault/issues/17) must against the [server authority interface](define-server-authority-interface.md).
 
 ## Context
@@ -20,6 +22,8 @@ None of this is exported by `@redact-secret/vault`, `@redact-secret/vault-server
 ## Decision
 
 ### 1. Store interface — atomic eligibility check, consume, and revoke
+
+> **Superseded.** A store never returns plaintext and never calls a key provider. See [specification §4 and §5](../specs/persistent-vault.md#4-contracts).
 
 ```ts
 /**
@@ -128,6 +132,8 @@ export interface Store {
 
 #### 1.1 What "atomic" means here
 
+> **Superseded.** Atomicity is per restore request and per capture, not per entry. See [specification §7.1](../specs/persistent-vault.md#71-linearization).
+
 "Atomic" is the same guarantee F4 already defines for the in-memory vault, restated for a store that may be distributed, replicated, or crash independently of the calling process:
 
 - **One linearization point per entry.** Each entry's lifecycle (`unconsumed → consumed`, `unconsumed → revoked`) transitions at exactly one storage-level operation — a conditional write (compare-and-swap on a state/version column, or an equivalent serializable transaction) keyed on `entryId`. No other operation may observe or act on a state between "check passed" and "state transitioned."
@@ -137,6 +143,8 @@ export interface Store {
 
 ### 2. Logical TTL — distinct from any backend's native TTL
 
+> **Refined.** Native TTL remains cleanup only. Expiry is an authenticated field judged at commit on the store's clock. See [specification §7.5](../specs/persistent-vault.md#75-time).
+
 A store's `logicalExpiresAt` (carried in `StoreEntryMetadata` at write time, derived from the vault's `entryTtlMs`) is the *only* deadline `checkEligibility` and `consume` may honor. It is computed and checked against the store's own trusted clock at request time — never a client-supplied timestamp — exactly as the in-memory vault's expiry check works today (F4, "Resolved choices"). A backend's own native expiry mechanism (Redis `EXPIRE`, DynamoDB TTL, a Postgres row plus a reaper job, ...) is a **storage-reclamation optimization**, not a security boundary:
 
 - A backend MAY set its native TTL later than `logicalExpiresAt` (recommended, with a documented margin) so ciphertext remains physically present for `purge`/crypto-shredding to act on deliberately rather than being silently reclaimed first.
@@ -144,6 +152,8 @@ A store's `logicalExpiresAt` (carried in `StoreEntryMetadata` at write time, der
 - A backend whose native TTL fires *before* `logicalExpiresAt` fails closed (the entry becomes unavailable early) rather than unsafe — availability loss, never an authorization bypass — but must be documented as a limitation, since it silently shortens the vault's stated TTL.
 
 ### 3. Tenant isolation
+
+> **Refined.** The store scopes rows; the server, not the store, builds the associated data from trusted scope. See [specification §3.4](../specs/persistent-vault.md#34-associated-data).
 
 Every stored entry is partitioned by `issuedTenant`, and every `checkEligibility`/`consume`/`revoke`/`purge` call is scoped to a `tenant` argument. A compliant store enforces isolation at two independent layers, not one:
 
@@ -153,6 +163,8 @@ Every stored entry is partitioned by `issuedTenant`, and every `checkEligibility
 `tenant-mismatch` at the store layer is deliberately redundant with S1's `ServerReleasePolicy` tenant check — a store must not assume the layer above it always gets this right.
 
 ### 4. Encryption contract — AEAD with metadata bound into AAD
+
+> **Superseded** for the AAD layout, the cipher choice, and which metadata is left unencrypted. See [specification §3](../specs/persistent-vault.md#3-record-format-version-1).
 
 Every retained value is sealed with authenticated encryption with associated data (AEAD: any cipher construction offering both confidentiality and integrity/authenticity over the ciphertext, with additional authenticated data that is verified but not encrypted — for example AES-256-GCM per [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38/d/final), or XChaCha20-Poly1305). This ADR does not mandate a specific cipher or library, per Gate P and the [package/language decision](name-vault-packages-and-language-contract.md)'s "must not force one vendor's vault or the consumer's identity provider" — it requires the AEAD *property*, backed by [OWASP's cryptographic storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html):
 
@@ -180,6 +192,8 @@ where `releaseDigest` is a stable digest of the sorted `(sink, path)` grant pair
   - **Memory disclosure after decryption.** Once `consume` returns plaintext, the same caveats as the in-memory vault apply (no managed-runtime zeroization guarantee).
 
 ### 5. Key ownership — consumer-owned KMS, injection interface, and rotation
+
+> **Superseded.** The key provider supplies and wraps data keys; it does not seal payloads. See [specification §6](../specs/persistent-vault.md#6-keys).
 
 This repository does not implement, bundle, or depend on any KMS, HSM, or crypto library. A consumer supplies key material through one injection point:
 
@@ -226,6 +240,8 @@ export interface KeyProvider {
 
 ### 6. Backup and deletion
 
+> **Superseded.** A store cannot promise key destruction, and backup replay is handled by a recovery epoch and quarantine. See [specification §9](../specs/persistent-vault.md#9-revoke-deletion-key-retirement-erasure).
+
 - **Logical deletion is immediate and independent of physical byte removal.** `revoke` and `purge` make an entry unreadable through the store's own API (`checkEligibility`/`consume` return denial) at their linearization point, regardless of when or whether the underlying ciphertext bytes are actually erased from disk, replicas, or backups.
 - **Crypto-shredding is an acceptable deletion mechanism** for `purge`, provided the backend can destroy/retire the specific key version(s) that could ever decrypt the named entries *without* also destroying still-needed keys for unrelated live entries (granular enough key scoping — for example per-tenant or per-rotation-epoch keys, never one permanent key for an entire store), and the backend documents and tests that no other key it retains can decrypt that ciphertext afterward.
 - **A backend that cannot do granular crypto-shredding must guarantee physical deletion instead** — including from backups, or backups must themselves expire no later than `logicalExpiresAt` plus a documented, bounded grace period — before it may claim compliant deletion.
@@ -234,6 +250,8 @@ export interface KeyProvider {
 - **Deletion completion means cryptographic unrecoverability, not necessarily byte-level absence.** A consumer-facing deletion/erasure guarantee is satisfied once no key under this backend's control can ever decrypt the entry again, even if ciphertext bytes persist in a backup until that backup's own natural expiry.
 
 ### 7. Error handling and failure behavior — fail closed on ambiguous state
+
+> **Superseded** for idempotent plaintext replay and `"ambiguous-consume"`. Receipts never replay plaintext. See [specification §7.3](../specs/persistent-vault.md#73-attempts-and-failure-outcomes).
 
 The controlling invariant, stated exactly as the issue requires: **a store must never both release a secret and leave it consumable again.** Concretely:
 
