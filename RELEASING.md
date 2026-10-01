@@ -66,10 +66,10 @@ npm dist-tag add @redact-secret/vault-server@<version> latest
 
 npm allows moving `latest` to any published version, prerelease included; what it refuses is deleting a package's `latest` tag. So a bare `npm install @redact-secret/vault` installs whatever `latest` names, and leaving `latest` on an older alpha is a real hazard: until 2026-09-28 it pointed at `@redact-secret/vault@0.1.0-alpha.1`, which peers core beta.9 and conflicts with core beta.10.
 
-Current tags (2026-09-29, after `0.1.0-beta.2`):
+Current tags (2026-10-01, after `0.1.0-beta.3`):
 
-- `@redact-secret/vault`: `latest` and `beta` → `0.1.0-beta.2`; `alpha` → `0.1.0-alpha.3`.
-- `@redact-secret/vault-server`: `latest` and `beta` → `0.1.0-beta.2`; `alpha` → `0.1.0-alpha.3`.
+- `@redact-secret/vault`: `latest` and `beta` → `0.1.0-beta.3`; `alpha` → `0.1.0-alpha.3`.
+- `@redact-secret/vault-server`: `latest` and `beta` → `0.1.0-beta.3`; `alpha` → `0.1.0-alpha.3`.
 
 For the first stable release, either keep this manual step or change each package's `publishConfig.tag` to `latest` and deliberately relax the workflow guard in the same reviewed change.
 
