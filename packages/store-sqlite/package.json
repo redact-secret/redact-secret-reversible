@@ -1,0 +1,65 @@
+{
+  "name": "@redact-secret/store-sqlite",
+  "version": "0.1.0-alpha.1",
+  "description": "Ciphertext-only SQLite store for the persistent Redact Secret vault server, for one database file on a local file system. Holds no plaintext, keys, or policy.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@redact-secret/vault-contracts": "0.1.0-alpha.1"
+  },
+  "peerDependencies": {
+    "better-sqlite3": "^12.11.1"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@redact-secret/core": "0.1.0-beta.12",
+    "@redact-secret/vault-conformance": "0.1.0-alpha.1",
+    "@redact-secret/vault-crypto": "0.1.0-alpha.1",
+    "@redact-secret/vault-server": "0.1.0-beta.4",
+    "better-sqlite3": "12.11.1"
+  },
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-vault.git",
+    "directory": "packages/store-sqlite"
+  },
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-vault/issues"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/store-sqlite#readme",
+  "keywords": [
+    "redaction",
+    "secrets",
+    "vault",
+    "sqlite"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --test-concurrency=1 --test-timeout=600000"
+  }
+}
