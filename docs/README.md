@@ -4,6 +4,8 @@ New here? Start with the [repository README](../README.md), then the README of t
 
 ## Guides
 
+- [Troubleshooting](guides/troubleshooting.md): every error code and denial reason, with its cause and fix.
+- [Examples](../examples/README.md): programs that run as they are, including a local PostgreSQL setup.
 - [Worker mode](guides/worker-mode.md): run the vault in a dedicated Worker.
 - [PII findings](guides/pii.md): turn PII detection on and choose what is retained.
 - [Persistent server](guides/persistent-server.md): capture in one process, restore in another, over PostgreSQL (alpha, unpublished).

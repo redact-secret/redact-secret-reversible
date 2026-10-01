@@ -7,10 +7,10 @@ Swap secrets for random tokens before text leaves your code (for example, to an 
 ## Install
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.3 @redact-secret/core@0.1.0-beta.12
+npm install @redact-secret/vault@0.1.0-beta.3
 ```
 
-Pin exact versions: each release works with one exact `@redact-secret/core` version.
+npm also installs `@redact-secret/core` at the one version this release works with (an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
 
 ## Use
 
@@ -63,13 +63,15 @@ That is the whole flow: `createVault` → `capture` → `restore` → `dispose`.
 
 ## Common tasks
 
+Runnable versions of these are in [examples](https://github.com/redact-secret/redact-secret-vault/blob/main/examples/README.md), and every error code with its fix is in [troubleshooting](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/guides/troubleshooting.md).
+
 **Multi-turn conversations.** Capture only the new user turn. Earlier turns are already redacted, so send the stored redacted history plus the new capture's `text`. Do not capture text that already contains tokens (it fails with `TOKEN_LITERAL_IN_INPUT`). At restore time, list every capture of the conversation in `captures`.
 
 **A capture fails with `UNREDACTED_FINDINGS`.** The input contains values the core chose to leave visible (`warn` or `allow`). Prefer a core `policy` that maps those types to `redact`. Otherwise pass `unredacted: "pass-through"` and check `passedThroughTypes` before sending.
 
 **A capture fails with `BLOCKED_FINDING`.** The core's policy blocks that value. Nothing was retained and no text is returned.
 
-**`createVault()` fails with `CORE_FAILURE` / `NOT_INITIALIZED`.** Pass `pii: []`, or await the core's own `initialize(...)` first.
+**`createVault()` fails with `CORE_FAILURE` / `NOT_INITIALIZED`.** Pass `pii: []`, or await the core's own `initialize(...)` first. From `0.1.0-beta.4` the error message says so.
 
 **Revoke early.** `vault.revoke(captured.captureId)` removes a capture's unused entries.
 

@@ -37,7 +37,7 @@ The agreed JavaScript package names describe two different responsibilities:
 | [`@redact-secret/key-provider-aws-kms`](../packages/key-provider-aws-kms/README.md) | Optional AWS KMS key provider over a consumer-supplied client (**alpha**, unpublished) | `0.1.0-alpha.1` | Fake-backed suite on Node.js 20/22/24; one real-service run in `us-east-1` on Node.js 22 with single-Region symmetric keys. Not run with `store-postgres` |
 | `redact-secret-vault` (Python, [packages/vault-py](../packages/vault-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0b3` (on PyPI) | Python 3.10+ server processes with a `node` executable available. No persistence |
 
-The packages on `main` that depend on the core pin `@redact-secret/core@0.1.0-beta.12` exactly, as does the published `0.1.0-beta.3`, which these commands install; `0.1.0-beta.2` pinned `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)) and `0.1.0-beta.1` pinned `0.1.0-beta.10`:
+The packages on `main` that depend on the core pin `@redact-secret/core@0.1.0-beta.12` exactly, as does the published `0.1.0-beta.3`, which these commands install; `0.1.0-beta.2` pinned `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)) and `0.1.0-beta.1` pinned `0.1.0-beta.10`. npm installs the pinned core with either package, because it is an exact peer dependency; naming it, as here, is only needed for a package manager that does not install peers:
 
 ```bash
 npm install @redact-secret/vault@0.1.0-beta.3 @redact-secret/core@0.1.0-beta.12

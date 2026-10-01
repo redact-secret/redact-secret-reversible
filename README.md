@@ -18,8 +18,10 @@ Hide secrets from a model, then put them back where you allow it.
 ## Quick start
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.3 @redact-secret/core@0.1.0-beta.12
+npm install @redact-secret/vault@0.1.0-beta.3
 ```
+
+npm also installs the one `@redact-secret/core` version this release works with.
 
 ```ts
 import { createVault } from "@redact-secret/vault";
@@ -46,7 +48,7 @@ const { fields } = vault.restore({
 vault.dispose(); // 4. Drop everything when the task ends.
 ```
 
-Pin exact versions while the packages are beta: each release works with one exact `@redact-secret/core` version.
+Pin the exact version while the packages are beta. More programs you can run as they are: [examples](examples/README.md).
 
 ## Which package do I need?
 
@@ -69,6 +71,8 @@ The persistent profile is built from smaller packages you only meet in that guid
 
 ## Documentation
 
+- Something failed? [Troubleshooting](docs/guides/troubleshooting.md) lists every error code with its fix.
+- [Examples](examples/README.md) you can run as they are.
 - Guides: [Worker mode](docs/guides/worker-mode.md), [PII findings](docs/guides/pii.md), [persistent server](docs/guides/persistent-server.md).
 - Reference: [`vault`](docs/reference/vault.md), [`vault-server`](docs/reference/vault-server.md), [Python](docs/reference/vault-py.md).
 - [Release status](docs/status.md) and [changelog](CHANGELOG.md): what is published, and for which runtimes.

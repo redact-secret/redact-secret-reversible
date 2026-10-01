@@ -7,10 +7,10 @@
 ## Install
 
 ```bash
-npm install @redact-secret/vault-server@0.1.0-beta.3 @redact-secret/vault@0.1.0-beta.3 @redact-secret/core@0.1.0-beta.12
+npm install @redact-secret/vault-server@0.1.0-beta.3
 ```
 
-Pin exact versions: each release works with one exact `@redact-secret/vault` and `@redact-secret/core` version.
+npm also installs the matching `@redact-secret/vault` and `@redact-secret/core` (an exact dependency and an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
 
 ## Use
 
@@ -94,7 +94,7 @@ const policy = allOf(
 | `budget` | The token was already restored `maxUses` times |
 | `policy`, `policy-evaluation-error` | Your policy said no, or failed |
 
-Do not forward the reason to the model or to end users.
+Do not forward the reason to the model or to end users. Causes and fixes for each are in [troubleshooting](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/guides/troubleshooting.md#restoring), and [example 04](https://github.com/redact-secret/redact-secret-vault/blob/main/examples/04-server-two-tenants.mjs) shows three of them.
 
 ## API at a glance
 

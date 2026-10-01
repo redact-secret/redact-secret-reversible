@@ -103,6 +103,8 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+A complete version that also shows a denied restore: [examples/05-python-server.py](https://github.com/redact-secret/redact-secret-vault/blob/main/examples/05-python-server.py).
+
 ## The rules
 
 - **You supply two functions.** `principal_resolver` turns your already-authenticated request context into a `Principal`; raise when it cannot. `release_policy` decides each restore. A failure in either one denies.
@@ -124,6 +126,7 @@ Run `python -m redact_secret_vault doctor` first: it names the failing part and 
 
 ## More
 
+- [Troubleshooting](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/guides/troubleshooting.md#python): every error code with its fix.
 - [Reference](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/reference/vault-py.md): how the core is located, the bridge process and its limits, PII, tests, and how this package compares with the JavaScript one.
 - [Threat model](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/specs/threat-model.md#python-core-bridge-redact-secret-vault--research-grade-not-qualified) for the bridge.
 - [Release status](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/status.md) and [RELEASING.md](https://github.com/redact-secret/redact-secret-vault/blob/main/RELEASING.md#python).
