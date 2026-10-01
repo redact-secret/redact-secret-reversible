@@ -6,24 +6,26 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run test:vault && npm run test:vault-server && npm run test:bench",
+    "test": "npm run test:vault && npm run test:vault-server && npm run test:persistence && npm run test:bench",
     "lint": "biome lint",
-    "build": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server",
-    "typecheck": "npm run typecheck -w @redact-secret/vault && npm run build -w @redact-secret/vault && npm run typecheck -w @redact-secret/vault-server",
+    "build": "npm run build -w @redact-secret/vault-contracts && npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-crypto && npm run build -w @redact-secret/vault-conformance && npm run build -w @redact-secret/store-memory && npm run build -w @redact-secret/store-postgres && npm run build -w @redact-secret/vault-server",
+    "typecheck": "npm run build",
     "qualify:node": "node qualification/node.mjs",
     "qualify:browser": "node qualification/browser.mjs",
     "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs",
     "check:links": "node scripts/check-links.mjs",
     "test:vault": "npm run build -w @redact-secret/vault && npm run test -w @redact-secret/vault",
-    "test:vault-server": "npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-server && npm run test -w @redact-secret/vault-server",
+    "test:vault-server": "npm run build && npm run test -w @redact-secret/vault-server",
     "test:bench": "npm run build && node --test bench/test/*.test.mjs",
     "bench": "npm run build && node bench/run.mjs",
     "bench:smoke": "npm run build && node bench/run.mjs --quick",
     "bench:compare": "npm run build && node bench/compare.mjs",
     "bench:compare:smoke": "npm run build && node bench/compare.mjs --quick",
     "bench:worker": "npm run build && node bench/browser/worker-boundary.mjs",
-    "bench:archive": "node bench/archive.mjs"
+    "bench:archive": "node bench/archive.mjs",
+    "test:persistence": "npm run build && npm run test -w @redact-secret/vault-contracts && npm run test -w @redact-secret/vault-crypto && npm run test -w @redact-secret/vault-conformance && npm run test -w @redact-secret/store-memory",
+    "test:postgres": "npm run build && npm run test -w @redact-secret/store-postgres"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

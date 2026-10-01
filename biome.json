@@ -1,9 +1,18 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "files": {
-    "includes": ["packages/vault/src/**", "packages/vault-server/src/**", "bench/**"]
+    "includes": [
+      "packages/*/src/**",
+      "bench/**"
+    ]
   },
-  "formatter": { "enabled": false },
-  "assist": { "enabled": false },
-  "linter": { "enabled": true }
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true
+  }
 }

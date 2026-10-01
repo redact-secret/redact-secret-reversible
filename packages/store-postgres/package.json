@@ -1,7 +1,7 @@
 {
-  "name": "@redact-secret/vault-server",
-  "version": "0.1.0-beta.3",
-  "description": "Server authority (principal, tenant, source, sink/path, purpose) for restoring values captured by @redact-secret/vault, with an in-memory storage backend.",
+  "name": "@redact-secret/store-postgres",
+  "version": "0.1.0-alpha.1",
+  "description": "Ciphertext-only PostgreSQL store for the persistent Redact Secret vault server. Holds no plaintext, keys, or policy.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -9,10 +9,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./persistent": {
-      "types": "./dist/persistent/index.d.ts",
-      "import": "./dist/persistent/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -22,11 +18,14 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@redact-secret/vault": "0.1.0-beta.3",
     "@redact-secret/vault-contracts": "0.1.0-alpha.1"
   },
   "peerDependencies": {
-    "@redact-secret/core": "0.1.0-beta.12"
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "pg": "8.23.1",
+    "@redact-secret/vault-conformance": "0.1.0-alpha.1"
   },
   "engines": {
     "node": "20.x || 22.x || 24.x"
@@ -34,31 +33,25 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/redact-secret/redact-secret-vault.git",
-    "directory": "packages/vault-server"
+    "directory": "packages/store-postgres"
   },
   "bugs": {
     "url": "https://github.com/redact-secret/redact-secret-vault/issues"
   },
-  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/vault-server#readme",
+  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/store-postgres#readme",
   "keywords": [
     "redaction",
     "secrets",
-    "llm",
     "vault",
-    "authorization"
+    "postgres"
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "beta"
+    "tag": "alpha"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test"
-  },
-  "devDependencies": {
-    "@redact-secret/store-memory": "0.1.0-alpha.1",
-    "@redact-secret/vault-conformance": "0.1.0-alpha.1",
-    "@redact-secret/vault-crypto": "0.1.0-alpha.1"
+    "test": "node --test --test-concurrency=1"
   }
 }

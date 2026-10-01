@@ -51,5 +51,8 @@
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test"
+  },
+  "devDependencies": {
+    "@redact-secret/vault-conformance": "0.1.0-alpha.1"
   }
 }

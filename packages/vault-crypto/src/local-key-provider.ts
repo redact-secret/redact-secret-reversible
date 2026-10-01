@@ -233,7 +233,9 @@ export function createLocalKeyProvider(options: LocalKeyProviderOptions): KeyPro
     if (!isObject(input)) fail("KEY_INVALID_ARGUMENT");
     const { keyRef, wrappedKey } = input;
     if (typeof keyRef !== "string" || !(wrappedKey instanceof Uint8Array)) fail("KEY_INVALID_ARGUMENT");
-    if (wrappedKey.byteLength > LIMITS.wrappedKeyMaxBytes) fail("KEY_INVALID_ARGUMENT");
+    if (keyRef.length === 0 || wrappedKey.byteLength === 0 || wrappedKey.byteLength > LIMITS.wrappedKeyMaxBytes) {
+      fail("KEY_INVALID_ARGUMENT");
+    }
     return { keyRef, wrappedKey: wrappedKey.slice(), context: snapshotContext(input.context) };
   }
 

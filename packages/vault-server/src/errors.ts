@@ -16,7 +16,19 @@ export type ServerVaultErrorCode =
   | "RESTORE_DENIED"
   | "INVARIANT_VIOLATION"
   | "VAULT_FAILURE"
-  | "DISPOSED";
+  | "DISPOSED"
+  // The codes below are thrown only by the persistent profile
+  // (`@redact-secret/vault-server/persistent`, docs/specs/persistent-vault.md §8.3).
+  | "UNSUPPORTED_STORE"
+  | "STORE_UNAVAILABLE"
+  | "STORE_QUARANTINED"
+  | "COMMIT_AMBIGUOUS"
+  | "RESTORE_CONFLICT"
+  | "CLOCK_SKEW"
+  | "LIMIT_EXCEEDED"
+  | "LIFECYCLE_DENIED"
+  | "KEY_UNAVAILABLE"
+  | "CLOSED";
 
 const MESSAGES: Readonly<Record<ServerVaultErrorCode, string>> = Object.freeze({
   INVALID_ARGUMENT: "The server vault operation received an invalid argument.",
@@ -24,6 +36,16 @@ const MESSAGES: Readonly<Record<ServerVaultErrorCode, string>> = Object.freeze({
   INVARIANT_VIOLATION: "The server vault rejected an inconsistent intermediate result.",
   VAULT_FAILURE: "The underlying vault rejected the operation.",
   DISPOSED: "The server vault has been disposed or has expired.",
+  UNSUPPORTED_STORE: "The store does not declare the capabilities this server requires.",
+  STORE_UNAVAILABLE: "The store was unavailable; nothing was released.",
+  STORE_QUARANTINED: "The store namespace is not serving at the configured recovery epoch.",
+  COMMIT_AMBIGUOUS: "The store could not confirm whether the restore committed; nothing was released.",
+  RESTORE_CONFLICT: "The restore kept conflicting with concurrent changes; nothing was consumed.",
+  CLOCK_SKEW: "The server clock and the store clock differ by more than the allowed bound.",
+  LIMIT_EXCEEDED: "The operation exceeds a configured limit or a store capability.",
+  LIFECYCLE_DENIED: "The lifecycle operation was denied.",
+  KEY_UNAVAILABLE: "The key provider could not supply a key; nothing was stored.",
+  CLOSED: "The persistent server vault has been closed.",
 });
 
 export class VaultServerError extends Error {
@@ -38,6 +60,11 @@ export class VaultServerError extends Error {
    * `NOT_INITIALIZED`), passed through from the wrapped `VaultError`.
    */
   readonly coreCode: string | undefined;
+  /**
+   * Set only for `COMMIT_AMBIGUOUS`: the opaque attempt identifier to pass to
+   * `resolveAttempt`. Never a token or a value.
+   */
+  readonly attemptId: string | undefined;
 
   constructor(
     code: ServerVaultErrorCode,
@@ -45,6 +72,7 @@ export class VaultServerError extends Error {
       reason?: ServerDenialReason | undefined;
       vaultCode?: VaultErrorCode | undefined;
       coreCode?: string | undefined;
+      attemptId?: string | undefined;
     } = {},
   ) {
     super(MESSAGES[code]);
@@ -53,5 +81,6 @@ export class VaultServerError extends Error {
     this.reason = detail.reason;
     this.vaultCode = detail.vaultCode;
     this.coreCode = code === "VAULT_FAILURE" && detail.vaultCode === "CORE_FAILURE" ? detail.coreCode : undefined;
+    this.attemptId = code === "COMMIT_AMBIGUOUS" ? detail.attemptId : undefined;
   }
 }
