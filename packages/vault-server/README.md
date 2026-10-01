@@ -124,7 +124,7 @@ Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the sh
 
 ## Core compatibility
 
-This package adds no direct dependency on `@redact-secret/core`; its `@redact-secret/core` peer is pinned exactly to `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)), the same core `@redact-secret/vault@0.1.0-beta.2` requires. The published `0.1.0-alpha.2` through `0.1.0-beta.1` pin `0.1.0-beta.10` (see the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md)). Before `0.1.0-alpha.2`, the unpublished package on `main` pinned `0.1.0-beta.9`.
+This package adds no direct dependency on `@redact-secret/core`; its `@redact-secret/core` peer is pinned exactly to `0.1.0-beta.12` on `main` (`0.1.0-beta.11` in the published `0.1.0-beta.2`, [#96](https://github.com/redact-secret/redact-secret-vault/issues/96)), the same core `@redact-secret/vault` requires. The published `0.1.0-alpha.2` through `0.1.0-beta.1` pin `0.1.0-beta.10` (see the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md)). Before `0.1.0-alpha.2`, the unpublished package on `main` pinned `0.1.0-beta.9`.
 
 ## Security reports
 

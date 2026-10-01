@@ -70,7 +70,7 @@ The agreed JavaScript package names describe two different responsibilities:
 | `@redact-secret/store-*` | Optional persistent backend implementations (**proposed**; [contract](docs/decisions/define-persistent-store-contract.md) only) | None | Backend-specific server environments |
 | `redact-secret-vault` (Python, [packages/vault-py](packages/vault-py/README.md)) | Native Python implementation of the same server-authority contract, in-memory storage, capture via a qualified Node.js boundary to the core (**research-grade**) | `0.1.0b2` (`0.1.0b1` on PyPI) | Python 3.10+ server processes with a `node` executable available |
 
-All packages on `main` pin `@redact-secret/core@0.1.0-beta.11` exactly ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)); `0.1.0-beta.1` pinned `0.1.0-beta.10`:
+All packages on `main` pin `@redact-secret/core@0.1.0-beta.12` exactly; the published `0.1.0-beta.2` pins `0.1.0-beta.11` ([#96](https://github.com/redact-secret/redact-secret-vault/issues/96)) and `0.1.0-beta.1` pinned `0.1.0-beta.10`:
 
 ```bash
 npm install @redact-secret/vault@0.1.0-beta.2 @redact-secret/core@0.1.0-beta.11
