@@ -66,7 +66,7 @@ test("the default ref is the vault version's tag, and RSV_README_REF overrides i
   }
 });
 
-for (const name of ["vault", "vault-server", "store-postgres"]) {
+for (const name of ["vault", "vault-server", "store-postgres", "store-sqlite"]) {
   test(`pin, npm pack, restore (${name}): the tarball README is pinned, the working tree is unchanged`, () => {
     const packagePath = join(ROOT, "packages", name);
     const readme = join(packagePath, "README.md");

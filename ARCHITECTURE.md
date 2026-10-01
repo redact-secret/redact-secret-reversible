@@ -7,8 +7,8 @@ This is the design contract for an optional restoration product. It records wher
 State on `main` (2026-10-01):
 
 - **Current, published (beta).** The in-memory vault, `@redact-secret/vault`, and single-process, in-memory server authority, `@redact-secret/vault-server`, are on npm at `0.1.0-beta.3`. The research-grade Python package `redact-secret-vault` is on PyPI at `0.1.0b3`; it has in-memory storage only.
-- **Implemented, unpublished (alpha).** An opt-in persistent server profile: `@redact-secret/vault-server/persistent` (in `0.1.0-beta.4`), with `@redact-secret/vault-contracts`, `@redact-secret/vault-crypto`, `@redact-secret/vault-conformance`, `@redact-secret/store-memory`, `@redact-secret/store-postgres`, and `@redact-secret/key-provider-aws-kms` at `0.1.0-alpha.1`. It is qualified only for the profiles the [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md) names: Node.js 22 with PostgreSQL 17.11 as a single primary or a primary with one synchronous standby.
-- **Not implemented.** Python persistence, browser or Worker persistence, streaming, arbitrary-text restore, and any store other than the two above. DynamoDB, Redis, and SQLite exist as [research](docs/research/persistent-backend-capabilities.md) only.
+- **Implemented, unpublished (alpha).** An opt-in persistent server profile: `@redact-secret/vault-server/persistent` (in `0.1.0-beta.4`), with `@redact-secret/vault-contracts`, `@redact-secret/vault-crypto`, `@redact-secret/vault-conformance`, `@redact-secret/store-memory`, `@redact-secret/store-postgres`, `@redact-secret/store-sqlite`, and `@redact-secret/key-provider-aws-kms` at `0.1.0-alpha.1`. It is qualified only for the profiles the [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md) names: Node.js 22 with PostgreSQL 17.11 as a single primary or a primary with one synchronous standby. `store-sqlite` has a [partial record](docs/research/qualification-store-sqlite-0.1.0-alpha.1.md) (one machine, Node.js 22.16.0; power loss not simulated) and is not a supported profile.
+- **Not implemented.** Python persistence, browser or Worker persistence, streaming, arbitrary-text restore, and any store other than the three above, and any claim for `store-sqlite` beyond its record. DynamoDB and Redis exist as [research](docs/research/persistent-backend-capabilities.md) only.
 
 ## Package and language boundaries
 
@@ -23,7 +23,7 @@ The persistent profile splits ownership four ways. The [persistent vault specifi
 | Server | `@redact-secret/vault-server/persistent` | Principal, tenant, session, sink, path, and purpose authorization; policy evaluation; lifecycle orchestration | Open a database or key-service client |
 | Crypto layer | `@redact-secret/vault-crypto` | Canonical encoding and AES-256-GCM envelope encryption of each record | Store or authorize |
 | Key provider | `@redact-secret/vault-crypto/local-key-provider`, `@redact-secret/key-provider-aws-kms`, or the application's own | Generate, wrap, and unwrap one data key per capture | See a payload, store, or authorize |
-| Store | `@redact-secret/store-postgres`, `@redact-secret/store-memory` (non-durable, tests only), or the application's own | Ciphertext I/O and conditional transactions | See a value, a token, a key, a principal, or a policy |
+| Store | `@redact-secret/store-postgres`, `@redact-secret/store-sqlite` (one host), `@redact-secret/store-memory` (non-durable, tests only), or the application's own | Ciphertext I/O and conditional transactions | See a value, a token, a key, a principal, or a policy |
 
 `@redact-secret/vault-contracts` holds the shared types, limits, validators, and error classes and has no dependency. `@redact-secret/vault-conformance` holds the store and key-provider harnesses. An application may inject its own `Store`, `KeyProvider`, or `RecordCrypto`. An injected implementation runs inside the trusted process: an interface does not isolate the vault from it, and passing the conformance harness shows a correct adapter behaves, not that a hostile one is safe.
 
@@ -32,7 +32,7 @@ The persistent profile splits ownership four ways. The [persistent vault specifi
 These are checked on the packed artifacts, in CI, by two scripts:
 
 - `qualification/check-boundaries.mjs` (`npm run check:boundaries`): `@redact-secret/vault` packs only its build output; its root and Worker entry points use no storage, network, or console API and do not re-export the internal capture plan.
-- `qualification/check-persistence-boundaries.mjs` (`npm run check:persistence-boundaries`): for each of `vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `key-provider-aws-kms`, and `vault-server`, the exact set of runtime dependencies, peers, and import specifiers its packed JavaScript may contain.
+- `qualification/check-persistence-boundaries.mjs` (`npm run check:persistence-boundaries`): for each of `vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`, and `vault-server`, the exact set of runtime dependencies, peers, and import specifiers its packed JavaScript may contain.
 
 The rules they enforce:
 
@@ -40,7 +40,7 @@ The rules they enforce:
 - `@redact-secret/vault-contracts` has no dependency.
 - `vault-crypto`, `vault-conformance`, and each store depend on `vault-contracts` only. Workspace dependencies are pinned to exact versions.
 - `@redact-secret/vault-server` depends on `@redact-secret/vault` and `vault-contracts`. Its default entry reaches no file of the persistent profile and does not import `vault-contracts`.
-- Only a `store-*` or `key-provider-*` package may name a database driver, a key-service SDK, or another adapter, and it declares the driver or SDK as a peer: `pg` for `store-postgres`, `@aws-sdk/client-kms` for `key-provider-aws-kms`. `store-postgres` imports no driver; the application passes a pool.
+- Only a `store-*` or `key-provider-*` package may name a database driver, a key-service SDK, or another adapter, and it declares the driver or SDK as a peer: `pg` for `store-postgres`, `@aws-sdk/client-kms` for `key-provider-aws-kms`. `store-postgres` imports no driver; the application passes a pool. `store-sqlite` imports none either and declares no peer: the application loads `better-sqlite3` or `node:sqlite` and passes it in. `store-sqlite` is the only package that may import `node:fs` and `node:path`, for its restore marker file and path canonicalization.
 - A store calls no cipher and no key provider.
 - No packed file uses `console`, the network, browser storage, `process.env`, or dynamic code, and no package has an install-time script.
 
