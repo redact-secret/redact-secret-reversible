@@ -32,6 +32,7 @@
 **Not released. Python persistence is not implemented and not supported.** `redact-secret-vault` stays at `0.1.0b3`, with no runtime dependency in the base install. These entries are internal modules under the [plan](docs/plans/python-persistence-parity.md); support is stated only by the qualification record of [#128](https://github.com/redact-secret/redact-secret-vault/issues/128). Decisions: [record](docs/decisions/python-persistence-api-and-packaging.md).
 
 - `redact_secret_vault.persistent` ([#119](https://github.com/redact-secret/redact-secret-vault/issues/119)): contracts, errors, limits, and validators mirroring `@redact-secret/vault-contracts`, standard library only. Needs Python 3.11 or later; the in-memory server is unchanged.
+- `redact_secret_vault.persistent` ([#120](https://github.com/redact-secret/redact-secret-vault/issues/120)): canonical encoding of the entry identifier, associated data, payload, and envelope framing; the session tag and request digest. Standard library only. The `entryId`, AAD, payload, envelope-framing, request-digest, and session-tag groups of [`conformance/persistent/v1/vectors.json`](conformance/persistent/v1/vectors.json) are reproduced byte for byte, and every negative case of the envelope and payload decoders is rejected with the listed code. [`verify_vectors.py`](conformance/persistent/v1/verify_vectors.py) is kept as the independent cross-check (see the decision record).
 
 ### New packages at 0.1.0-alpha.1
 
