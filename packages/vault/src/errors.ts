@@ -1,7 +1,8 @@
 /**
  * The single sanitized error type this package throws.
  *
- * Every message is a fixed string chosen by `code`. No error carries input
+ * Every message is a fixed string chosen by `code` (and, for an uninitialized
+ * core, by the core's fixed code). No error carries input
  * text, a matched value, an issued token, a restored value, a field path, or
  * the message of an exception thrown by a consumer callback. `cause` is never
  * set, so a structured logger cannot walk into a payload-bearing error.
@@ -46,6 +47,14 @@ const MESSAGES: Readonly<Record<VaultErrorCode, string>> = Object.freeze({
   PII_ACTIVATION_MISMATCH: "The redaction core's PII activation differs from the expected activation.",
 });
 
+/**
+ * A second fixed message for the one core failure an application fixes by
+ * changing its own call: the core was never initialized. Chosen by the core's
+ * fixed code alone, so it carries nothing from the input.
+ */
+const CORE_NOT_INITIALIZED_MESSAGE =
+  "The redaction core is not initialized. Pass `pii: []` when creating the vault to initialize it with PII detection off, or await the core's initialize() first.";
+
 /** Every fixed error code, derived from {@link MESSAGES} so the two cannot drift. */
 export const VAULT_ERROR_CODES: readonly VaultErrorCode[] = Object.freeze(
   Object.keys(MESSAGES) as VaultErrorCode[],
@@ -77,7 +86,7 @@ export class VaultError extends Error {
     code: VaultErrorCode,
     detail: { coreCode?: string | undefined; reason?: DenialReason | undefined } = {},
   ) {
-    super(MESSAGES[code]);
+    super(code === "CORE_FAILURE" && detail.coreCode === "NOT_INITIALIZED" ? CORE_NOT_INITIALIZED_MESSAGE : MESSAGES[code]);
     this.name = "VaultError";
     this.code = code;
     this.coreCode = detail.coreCode;

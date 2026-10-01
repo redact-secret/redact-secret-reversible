@@ -48,6 +48,14 @@ const MESSAGES: Readonly<Record<ServerVaultErrorCode, string>> = Object.freeze({
   CLOSED: "The persistent server vault has been closed.",
 });
 
+/**
+ * A second fixed message for the one failure an application fixes by changing
+ * its own call: the redaction core was never initialized. Chosen by fixed
+ * codes alone, so it carries nothing from the input.
+ */
+const CORE_NOT_INITIALIZED_MESSAGE =
+  "The redaction core is not initialized. Pass `pii: []` when creating the server vault to initialize it with PII detection off, or await the core's initialize() first.";
+
 export class VaultServerError extends Error {
   readonly code: ServerVaultErrorCode;
   /** Set only for `RESTORE_DENIED`. */
@@ -75,7 +83,11 @@ export class VaultServerError extends Error {
       attemptId?: string | undefined;
     } = {},
   ) {
-    super(MESSAGES[code]);
+    super(
+      code === "VAULT_FAILURE" && detail.vaultCode === "CORE_FAILURE" && detail.coreCode === "NOT_INITIALIZED"
+        ? CORE_NOT_INITIALIZED_MESSAGE
+        : MESSAGES[code],
+    );
     this.name = "VaultServerError";
     this.code = code;
     this.reason = detail.reason;

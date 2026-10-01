@@ -30,6 +30,7 @@ jobs:
       - run: npm run check:boundaries
       - run: npm run check:persistence-boundaries
       - run: npm run check:links
+      - run: npm run test:scripts
       - name: Validate conformance corpus JSON
         run: node -e 'JSON.parse(require("fs").readFileSync("conformance/v1/corpus.json","utf8"))'
 
@@ -51,6 +52,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:vault-server
+      # The runnable examples (examples/README.md): each asserts its own output.
+      - run: npm run examples
 
   node:
     name: node ${{ matrix.node }} (${{ matrix.os }})
@@ -141,6 +144,13 @@ jobs:
       - name: Create the serving role
         run: node packages/store-postgres/scripts/create-app-role.mjs
       - run: npm run test:postgres
+      # The persistent example (examples/persistent): setup twice to show it is
+      # idempotent, then capture in one process and restore in another.
+      - name: Persistent example
+        run: |
+          node examples/persistent/setup.mjs
+          node examples/persistent/setup.mjs
+          node examples/persistent/demo.mjs
       # Packed tarballs in clean projects outside the repository: the base
       # packages install no driver or SDK, and the persistent profile runs over
       # the reference store and this PostgreSQL.
@@ -226,3 +236,5 @@ jobs:
         working-directory: packages/vault-py
       - run: pytest -q
         working-directory: packages/vault-py
+      - name: Python example
+        run: python examples/05-python-server.py

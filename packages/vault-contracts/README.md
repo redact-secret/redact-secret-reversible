@@ -4,7 +4,7 @@
 
 This package has no runtime dependency and performs no I/O. It contains no detector logic, no cipher, no database driver, and no key-service client. The semantics of everything it names are defined by the [persistent vault specification](../../docs/specs/persistent-vault.md); the types here are transcribed from that document.
 
-It is for authors of a `Store`, a `KeyProvider`, or a `RecordCrypto`. Applications that only use a vault do not need to import it.
+It is for authors of a `Store`, a `KeyProvider`, or a `RecordCrypto`. Applications that only use a vault do not need to import it; they start at the [persistent server guide](../../docs/guides/persistent-server.md).
 
 ## What it exports
 

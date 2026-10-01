@@ -40,7 +40,7 @@ Not in scope: performance (nothing was measured for these packages), and every p
 | `ci` job `boundaries`: lint, typecheck, `check:boundaries`, `check:persistence-boundaries`, `check:links` | Same run | 22 | Passed |
 | `ci` job `postgres 17`: `npm run test:postgres`, then `npm run qualify:persistence` | Same run, Linux x86_64 | 22.23.3 | 281 tests, 270 passed, 0 failed, 11 skipped (the store-clock cases of section 2.5). Clean-consumer check passed over `store-memory` and the PostgreSQL service |
 | `npm run qualify -w @redact-secret/store-postgres` (every suite, Docker topologies) | Local, macOS arm64, Docker 28.3.3 | 22.16.0 | 295 passed, 0 failed, 13 skipped ([report](../../packages/store-postgres/qualification/report/report.md)) |
-| Real AWS KMS suite | Local, as the [package README](../../packages/key-provider-aws-kms/README.md#what-was-qualified) states | 22.16.0 | 23 passed, none skipped. Not re-run for this record |
+| Real AWS KMS suite | Local, as the [package README](../reference/key-provider-aws-kms.md#what-was-qualified) states | 22.16.0 | 23 passed, none skipped. Not re-run for this record |
 
 The same CI run's `node`, `browser`, `worker`, and `python` jobs passed; they cover the existing in-memory packages, not persistence. The `sast` run [36910248429](https://github.com/redact-secret/redact-secret-vault/actions/runs/36910248429) and the CodeQL run [36910248388](https://github.com/redact-secret/redact-secret-vault/actions/runs/36910248388) on the same commit passed.
 
@@ -191,9 +191,9 @@ Each row names the test file, scenario, or report section that is the evidence, 
 | Acceptance item | Evidence |
 | --- | --- |
 | Root and browser `vault` imports resolve no driver, SDK, persistence, or provider code; base packages stay driver-free | `qualification/check-boundaries.mjs`, `qualification/check-persistence-boundaries.mjs`, `qualification/persistence-consumer.mjs` consumer A (module graph observed with `node:module` hooks) |
-| Consumer-supplied clients and who closes them | [`store-postgres` README](../../packages/store-postgres/README.md#connection-ownership), [`key-provider-aws-kms` README](../../packages/key-provider-aws-kms/README.md#what-the-application-owns), [`vault-server` README](../../packages/vault-server/README.md#persistent-profile) |
+| Consumer-supplied clients and who closes them | [`store-postgres` README](../reference/store-postgres.md#connection-ownership), [`key-provider-aws-kms` README](../reference/key-provider-aws-kms.md#what-the-application-owns), [`vault-server` README](../../packages/vault-server/README.md#persistent-profile) |
 | Threat model and capability matrix name the qualified topology and versions | [Threat model](../specs/threat-model.md#persistent-mappings--implemented-on-main-qualified-for-two-postgresql-profiles); this record |
-| Deny-by-default example | [Root README](../../README.md#persistent-quick-start) |
+| Deny-by-default example | [Root README](../guides/persistent-server.md#quick-start) |
 | Documentation reconciled with the registries | Section 1; verified with `npm view <package> dist-tags` and the PyPI JSON API on 2026-10-01 |
 | Release workflow covers the new packages | `.github/workflows/release.yml`, `scripts/publish-workspace.mjs`, [RELEASING.md](../../RELEASING.md#persistence-packages). The publish path itself has **not been exercised**: no release has run |
 
@@ -300,4 +300,4 @@ node conformance/persistent/v1/generate-vectors.mjs --check
 uv run --with cryptography python conformance/persistent/v1/verify_vectors.py
 ```
 
-The real-KMS suite needs two test keys and is described in the [package README](../../packages/key-provider-aws-kms/README.md#tests).
+The real-KMS suite needs two test keys and is described in the [package README](../reference/key-provider-aws-kms.md#tests).

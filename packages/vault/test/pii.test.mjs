@@ -225,6 +225,19 @@ test("pii omitted on an uninitialized PII-capable core: CORE_FAILURE / NOT_INITI
   assert.throws(() => fake.module.piiActivation(), (e) => e.code === "NOT_INITIALIZED", "the core stays uninitialized");
 });
 
+test("an uninitialized core gets a fixed message that names the fix; other core failures keep the generic one (#133)", async () => {
+  const error = await openVault(createFakeCore().module).then(() => undefined, (e) => e);
+  assert.equal(
+    error.message,
+    "The redaction core is not initialized. Pass `pii: []` when creating the vault to initialize it with PII detection off, or await the core's initialize() first.",
+  );
+  assert.equal(error.cause, undefined);
+  assert.equal(new VaultError("CORE_FAILURE", { coreCode: "PII_ACTIVATION_CONFLICT" }).message, "The redaction core rejected the operation.");
+  assert.equal(new VaultError("CORE_FAILURE").message, "The redaction core rejected the operation.");
+  // The message follows the vault's code, not a core code attached to another code.
+  assert.equal(new VaultError("INVALID_ARGUMENT", { coreCode: "NOT_INITIALIZED" }).message, "The vault operation received an invalid argument.");
+});
+
 test("selector errors surface as CORE_FAILURE with the core's code", async () => {
   await assert.rejects(openVault(createFakeCore().module, { pii: ["PII!"] }), isVaultError("CORE_FAILURE", "PII_SELECTOR_INVALID"));
   await assert.rejects(openVault(createFakeCore().module, { pii: ["pii:zz"] }), isVaultError("CORE_FAILURE", "PII_SELECTOR_UNSUPPORTED"));

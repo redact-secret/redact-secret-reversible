@@ -140,7 +140,9 @@ for (const [dirName, rule] of Object.entries(PACKAGES)) {
       }
     }
     for (const file of reachable) check(!file.startsWith("persistent/"), `vault-server: the default entry reaches ${file}`);
-    check(JSON.stringify(Object.keys(pkg.exports).sort()) === JSON.stringify([".", "./package.json", "./persistent"]), "vault-server: exports must be '.', './persistent', './package.json'");
+    check(JSON.stringify(Object.keys(pkg.exports).sort()) === JSON.stringify([".", "./package.json", "./persistent", "./policies"]), "vault-server: exports must be '.', './persistent', './policies', './package.json'");
+    // The reference policies are plain functions: no import beyond their own types.
+    check(!/\bimport\b|\brequire\(/.test(readFileSync(join(out, "dist/policies.js"), "utf8")), "vault-server: dist/policies.js imports something");
   }
 
   summary.push(`${name}@${pkg.version}: ${files.length} files, deps [${Object.keys(pkg.dependencies ?? {}).join(", ")}], peers [${Object.keys(pkg.peerDependencies ?? {}).join(", ")}]`);

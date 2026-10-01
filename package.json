@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run test:vault && npm run test:vault-server && npm run test:persistence && npm run test:bench",
+    "test": "npm run test:vault && npm run test:vault-server && npm run test:persistence && npm run test:bench && npm run test:scripts",
     "lint": "biome lint",
     "build": "npm run build -w @redact-secret/vault-contracts && npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-crypto && npm run build -w @redact-secret/vault-conformance && npm run build -w @redact-secret/store-memory && npm run build -w @redact-secret/store-postgres && npm run build -w @redact-secret/key-provider-aws-kms && npm run build -w @redact-secret/vault-server",
     "typecheck": "npm run build",
@@ -15,8 +15,12 @@
     "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs",
     "check:links": "node scripts/check-links.mjs",
+    "test:scripts": "node --test scripts/test/*.test.mjs",
+    "readme:pin": "node scripts/pin-readme-links.mjs pin",
+    "readme:restore": "node scripts/pin-readme-links.mjs restore",
     "test:vault": "npm run build -w @redact-secret/vault && npm run test -w @redact-secret/vault",
     "test:vault-server": "npm run build && npm run test -w @redact-secret/vault-server",
+    "examples": "npm run build && node examples/run.mjs",
     "test:bench": "npm run build && node --test bench/test/*.test.mjs",
     "bench": "npm run build && node bench/run.mjs",
     "bench:smoke": "npm run build && node bench/run.mjs --quick",

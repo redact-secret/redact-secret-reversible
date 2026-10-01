@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./policies": {
+      "types": "./dist/policies.d.ts",
+      "import": "./dist/policies.js"
+    },
     "./persistent": {
       "types": "./dist/persistent/index.d.ts",
       "import": "./dist/persistent/index.js"

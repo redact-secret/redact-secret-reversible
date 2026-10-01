@@ -4,6 +4,24 @@
 
 The persistent server profile of `@redact-secret/vault-server` uses it through the `RecordCrypto` contract. What was tested, and with which stores and providers, is in the [qualification record](../../docs/research/qualification-persistence-0.1.0-alpha.1.md); nothing beyond that record is a support claim. It depends on [`@redact-secret/vault-contracts`](../vault-contracts/README.md) and on nothing else.
 
+## Use
+
+```js
+import { createRecordCrypto } from "@redact-secret/vault-crypto";
+import { createLocalKeyProvider } from "@redact-secret/vault-crypto/local-key-provider";
+
+const keyProvider = createLocalKeyProvider({
+  keys: [
+    { id: "2026-10", material, state: "active" },
+    { id: "2026-07", material: previous, state: "decrypt-only" },
+  ],
+  scope: { namespaces: ["support-prod"] },
+});
+const crypto = createRecordCrypto({ keyProvider });
+```
+
+Pass `crypto` to `createPersistentServerVault` ([guide](../../docs/guides/persistent-server.md)). `material` is 32 bytes from your own secret manager: never a literal, and never from this library. To use AWS KMS instead, see [`@redact-secret/key-provider-aws-kms`](../key-provider-aws-kms/README.md).
+
 ## What it does
 
 - `createRecordCrypto({ keyProvider, keyTimeoutMs? })` returns a `RecordCrypto` with profile `aes-256-gcm-hkdf-v1`.
@@ -25,20 +43,6 @@ Errors are the contract's `RecordCryptoError` and `KeyProviderError`: a fixed me
 - It does not re-encrypt payloads under a new data key. Version 1 of the format has no such operation.
 
 ## Local key provider
-
-```js
-import { createRecordCrypto } from "@redact-secret/vault-crypto";
-import { createLocalKeyProvider } from "@redact-secret/vault-crypto/local-key-provider";
-
-const keyProvider = createLocalKeyProvider({
-  keys: [
-    { id: "2026-10", material, state: "active" },
-    { id: "2026-07", material: previous, state: "decrypt-only" },
-  ],
-  scope: { namespaces: ["support-prod"] },
-});
-const crypto = createRecordCrypto({ keyProvider });
-```
 
 `material` is 32 bytes, or a non-extractable HKDF `CryptoKey` with the `deriveKey` usage. Bytes are copied and imported as a non-extractable key, so the application can overwrite its own array once the provider exists. `id` is 1 to 64 characters of `[A-Za-z0-9._-]`, and the key reference is `local:<id>`. Exactly one key is `active`. `scope.namespaces` is required; `scope.tenants` is optional and, when given, limits the provider to those tenants.
 
