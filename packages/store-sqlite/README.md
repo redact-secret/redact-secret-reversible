@@ -6,35 +6,42 @@ A SQLite store for the [persistent vault server](../../docs/guides/persistent-se
 
 ## Use
 
-```sh
-npm install @redact-secret/store-sqlite better-sqlite3
-```
+The package imports no SQLite driver. You install one, load it, and pass it in. Two are supported:
 
-`better-sqlite3` is an optional peer dependency (`^12.11.1`) that only this package names. Without it the store refuses to start (`STORE_CAPABILITY`).
+| Driver | Install | Notes |
+| --- | --- | --- |
+| `better-sqlite3` `^12.11.1` | `npm install better-sqlite3` | A native addon, with an install script. Bundles SQLite 3.53.2 (12.11.1). Node.js 20, 22, 24 |
+| `node:sqlite` | Nothing | Built into Node.js 22 and later, experimental. It bundles whatever SQLite that Node.js release carries, so it is usable only where that is 3.51.3 or later: measured **22.22.3 and later 22.x (22.22.2 has 3.51.2), 24.15.0 and later 24.x (24.14.1 has 3.51.2), and 25.9.0**. Node.js 20 has none. Other releases are not measured |
 
 ```js
-import { createSqliteStore, migrate } from "@redact-secret/store-sqlite";
+import Database from "better-sqlite3"; // or: import * as sqlite from "node:sqlite";
+import { betterSqlite3Driver, createSqliteStore, migrate, nodeSqliteDriver } from "@redact-secret/store-sqlite";
+
+const driver = betterSqlite3Driver(Database); // or: nodeSqliteDriver(sqlite)
 
 // Once, before any server starts. Creates the file and the tables, and puts the file in WAL mode.
-await migrate({ filename: "/var/lib/vault/vault.sqlite" });
+await migrate({ driver, filename: "/var/lib/vault/vault.sqlite" });
 
 // In every server process, on the same host:
-const store = await createSqliteStore({ filename: "/var/lib/vault/vault.sqlite" });
+const store = await createSqliteStore({ driver, filename: "/var/lib/vault/vault.sqlite" });
 ```
+
+Without a usable `driver` the store throws `STORE_INVALID_ARGUMENT`. The startup checks below apply to both drivers alike.
 
 `createSqliteStore` refuses to return a store unless:
 
-- SQLite is 3.51.3 or later, or carries the backported fix (3.44.6 or later in its line, 3.50.7 or later in its line), because of a WAL corruption bug documented at [sqlite.org/wal.html](https://www.sqlite.org/wal.html) that needs two connections to write at the same instant;
+- the SQLite the driver loaded is 3.51.3 or later, or carries the backported fix (3.44.6 or later in its line, 3.50.7 or later in its line), because of a WAL corruption bug documented at [sqlite.org/wal.html](https://www.sqlite.org/wal.html) that needs two connections to write at the same instant;
 - `journal_mode=WAL` with `synchronous=FULL` (or, with `journalMode: "delete"`, `DELETE` with `EXTRA`) is in effect, read back after it was set, and checked again in every transaction;
 - `busy_timeout` is set to a finite value;
 - foreign keys are enforced, `locking_mode` is `NORMAL`, and on macOS `fullfsync` is on;
 - the file exists and has this adapter's schema version;
 - the restore marker file, if used, can be written.
 
-The error is `STORE_CAPABILITY` and says nothing about which check failed. `checkDeployment({ filename })` runs the same checks and returns the names of the ones that failed.
+The error is `STORE_CAPABILITY` and says nothing about which check failed. `checkDeployment({ driver, filename })` runs the same checks and returns the names of the ones that failed.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
+| `driver` | required | `betterSqlite3Driver(...)` or `nodeSqliteDriver(...)` |
 | `filename` | required | The database file. In-memory, temporary, `file:` and empty names are refused. It is canonicalized, so a symlink and its target are one database |
 | `journalMode` | `"wal"` | `"wal"` (with `synchronous=FULL`) or `"delete"` (with `synchronous=EXTRA`) |
 | `busyTimeoutMs` | `5000` | How long a statement waits for another connection's write lock. 1 to 60 000. Keep it below the server's `storeTimeoutMs` (default 10 000) |

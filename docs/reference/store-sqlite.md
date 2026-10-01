@@ -17,7 +17,12 @@ Not offered, and refused or absent by design: any network file system in any jou
 
 ## The driver
 
-`better-sqlite3`, as an optional peer dependency (`^12.11.1`) that only this package names. The reason is in the [decision record](../decisions/choose-sqlite-driver.md): Node.js 20 has no `node:sqlite`, and the `node:sqlite` of the Node.js 22.16.0 measured here bundles SQLite 3.49.1, which the version check refuses. `better-sqlite3` 12.11.1 bundles SQLite 3.53.2. The base packages (`vault`, `vault-server`, `vault-contracts`, `vault-crypto`, `vault-conformance`) name no driver; `npm run check:persistence-boundaries` checks that on the packed tarballs, and checks that this package's only peer is the optional `better-sqlite3`.
+The package imports no driver. The application installs and loads one and passes it as `driver`: `betterSqlite3Driver(Database)` (`better-sqlite3` `^12.11.1`) or `nodeSqliteDriver(sqliteModule)` (`node:sqlite`). Both sit behind one thin interface (`SqliteDriver`: `name` and `open(path, { fileMustExist, busyTimeoutMs })`, returning a connection with `prepare`, `exec`, `close`, and `inTransaction`), and the startup checks below apply to both. The [decision record](../decisions/choose-sqlite-driver.md) has the reasons and the measured SQLite version of each Node.js release.
+
+- **`better-sqlite3`** bundles its own SQLite (3.53.2 in 12.11.1) and has an install script. It is the only choice on Node.js 20.
+- **`node:sqlite`** bundles the SQLite of the Node.js build, so the version check decides whether a Node.js release may be used. Measured: 22.22.3 and later 22.x, 24.15.0 and later 24.x, and 25.9.0 pass; 22.16.0 (3.49.1), 22.22.0 (3.50.4), 22.22.1 and 22.22.2 (3.51.2), and 24.14.1 (3.51.2) are refused; Node.js 20 has no module. It is experimental and prints a warning. `nodeSqliteDriver` also refuses a build without `DatabaseSync.prototype.isTransaction`.
+
+The base packages (`vault`, `vault-server`, `vault-contracts`, `vault-crypto`, `vault-conformance`) name no driver, and neither does this one; `npm run check:persistence-boundaries` checks that on the packed tarballs, including that this package imports only `vault-contracts`, `node:fs`, and `node:path` and declares no peer.
 
 ### The driver is synchronous
 
@@ -25,7 +30,7 @@ Every store call runs its transaction to completion in the calling thread. When 
 
 ## Startup verification
 
-`createSqliteStore` opens a connection, sets the pragmas below, reads each back, and refuses (`STORE_CAPABILITY`) on any mismatch. `checkDeployment` runs the same checks and returns the failed check names. Nothing in the error names a path, a value, or a driver message.
+`createSqliteStore` opens a connection through the driver it was given, sets the pragmas below, reads each back, and refuses (`STORE_CAPABILITY`) on any mismatch. `checkDeployment` runs the same checks and returns the failed check names. Nothing in the error names a path, a value, or a driver message.
 
 | Check name | Requirement |
 | --- | --- |
@@ -106,7 +111,7 @@ Place the marker outside the backup set (`restoreMarker`, on a volume that is no
 
 ## Backup and recovery
 
-**Routes that are safe for a live database**, each restored and checked in the tests: the SQLite backup API (`db.backup()` in `better-sqlite3`), `VACUUM INTO`, and a file copy **after** `PRAGMA wal_checkpoint(TRUNCATE)` completed with no other connection active. `sqlite3_rsync` is named by the research and **was not run**. A copy of the main file alone while the database is in use is shown by a test to be an older database: committed transactions can still be in the `-wal` file, which must be copied with it. `VACUUM INTO` also purges deleted content from the copy, as the research notes.
+**Routes that are safe for a live database**, each restored and checked in the tests: the SQLite backup API (`db.backup()` in `better-sqlite3`, `backup()` of `node:sqlite` where the Node.js has it), `VACUUM INTO`, and a file copy **after** `PRAGMA wal_checkpoint(TRUNCATE)` completed with no other connection active. `sqlite3_rsync` is named by the research and **was not run**. A copy of the main file alone while the database is in use is shown by a test to be an older database: committed transactions can still be in the `-wal` file, which must be copied with it. `VACUUM INTO` also purges deleted content from the copy, as the research notes.
 
 Replacing the database file with a backup is a silent rollback. **Run the [recovery runbook](../specs/persistent-operations.md#5-backup-recovery-runbook)**: stop every server of the namespace first, open a store on the recovered file with a maintenance process, `quarantine` and `invalidateRecovered` with a higher epoch for each namespace (`SELECT namespace, epoch, state FROM rsv_namespace` lists them), start servers with the new epoch, and capture again from the sources. Shown at the store level for all three backup routes: after the runbook every recovered capture was `revoked`, including one the backup held with a use left, and new captures under the new epoch worked. Shown through the persistent server for the backup-API route: a server configured with the old epoch refused to start (`STORE_QUARANTINED`), a restore of a recovered token was denied `revoked`, and capturing again worked.
 
@@ -123,14 +128,17 @@ The database holds the metadata of [specification §3.7](../specs/persistent-vau
 - Network file systems, in any journal mode. Multi-host access. Replication tools.
 - `synchronous=NORMAL`/`OFF`, `journal_mode=MEMORY`/`OFF`, `locking_mode=EXCLUSIVE`.
 - Power loss at the block device: **not simulated.** Behavior of a device that lies about sync is outside what SQLite or this adapter can detect.
-- `sqlite3_rsync`, the SQLite backport releases 3.44.6 and 3.50.7 (the version rule is unit-tested; no such library was run), `better-sqlite3` 13.x, Windows, and any Node.js, platform, or file system the record does not list.
+- `sqlite3_rsync`, the SQLite backport releases 3.44.6 and 3.50.7 (the version rule is unit-tested; no such library was run), `better-sqlite3` 13.x, `node:sqlite` on Node.js releases not in the [decision record](../decisions/choose-sqlite-driver.md)'s table, Windows, and any Node.js, platform, or file system the record does not list.
 - A decision on the unverified point the research leaves open about `fullfsync`: the adapter turns it on for macOS and reads it back; what that costs, and whether the documentation's wording on it holds, was not measured against a device.
 
 ## Running the tests
 
 ```sh
-npm run test:sqlite                         # builds, then runs the package's tests
+npm run install:sqlite-driver               # once: better-sqlite3 into qualification/sqlite-driver (runs its install script; nothing else does)
+npm run test:sqlite                         # builds, then runs the package's tests over every requested driver
 node packages/store-sqlite/qualification/measure-limits.mjs   # the measurements in the record
 ```
+
+`RSV_SQLITE_DRIVERS` lists the drivers a run must exercise (default `better-sqlite3,node:sqlite`; `better-sqlite3` alone for Node.js 20). A listed `better-sqlite3` that is not installed **fails** with the command to install it; `node:sqlite` is **skipped with its reason** when the Node.js has none or bundles a SQLite below the store's minimum. `RSV_SQLITE_DRIVER` picks the driver for the tests that are not per-driver (default: the first usable one), and `RSV_BETTER_SQLITE3_DIR` names another directory holding `better-sqlite3`. The root `npm ci` installs no driver.
 
 No service is needed: the databases are temporary files. `RSVQ_TRIALS` sets the number of race trials in the two-process test (default 25). The tests use unmistakably synthetic values and generated key material, and print no restored value.

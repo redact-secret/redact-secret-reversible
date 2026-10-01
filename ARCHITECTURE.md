@@ -40,7 +40,7 @@ The rules they enforce:
 - `@redact-secret/vault-contracts` has no dependency.
 - `vault-crypto`, `vault-conformance`, and each store depend on `vault-contracts` only. Workspace dependencies are pinned to exact versions.
 - `@redact-secret/vault-server` depends on `@redact-secret/vault` and `vault-contracts`. Its default entry reaches no file of the persistent profile and does not import `vault-contracts`.
-- Only a `store-*` or `key-provider-*` package may name a database driver, a key-service SDK, or another adapter, and it declares the driver or SDK as a peer: `pg` for `store-postgres`, `better-sqlite3` (an optional peer, loaded by a dynamic import) for `store-sqlite`, `@aws-sdk/client-kms` for `key-provider-aws-kms`. `store-postgres` imports no driver; the application passes a pool. `store-sqlite` is the only package that may import `node:fs` and `node:path`, for its restore marker file and path canonicalization.
+- Only a `store-*` or `key-provider-*` package may name a database driver, a key-service SDK, or another adapter, and it declares the driver or SDK as a peer: `pg` for `store-postgres`, `@aws-sdk/client-kms` for `key-provider-aws-kms`. `store-postgres` imports no driver; the application passes a pool. `store-sqlite` imports none either and declares no peer: the application loads `better-sqlite3` or `node:sqlite` and passes it in. `store-sqlite` is the only package that may import `node:fs` and `node:path`, for its restore marker file and path canonicalization.
 - A store calls no cipher and no key provider.
 - No packed file uses `console`, the network, browser storage, `process.env`, or dynamic code, and no package has an install-time script.
 

@@ -28,7 +28,7 @@ Dependency rules, checked on packed artifacts:
 - `vault-contracts` has no dependency.
 - `vault-crypto` depends on `vault-contracts` and on the platform's WebCrypto.
 - `vault-server` depends on `vault` and `vault-contracts`. The crypto layer, the store, and the key provider are injected by the application.
-- A store or provider package owns its driver or SDK as a peer dependency. No other package names one.
+- A store or provider package owns its driver or SDK as a peer dependency, or takes the driver from the application (`store-sqlite`). No other package names one.
 
 An application may inject its own `Store`, `KeyProvider`, identity resolver, and policy. An injected implementation runs inside the trusted process; a TypeScript interface does not isolate the vault from it (§10).
 

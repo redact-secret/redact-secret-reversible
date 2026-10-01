@@ -44,9 +44,9 @@ The `publish` job needs all of these jobs of the same `release.yml` run to pass:
 | `boundaries` | `npm run check:boundaries` |
 | `node` | `npm run qualify:node` |
 | `vault-server` | `npm run test:vault-server` (the in-memory and persistent server suites) |
-| `persistence` | `npm run test:persistence`, `npm run check:persistence-boundaries`, `npm run qualify:persistence` (packed tarballs in clean projects; over `store-memory` and a temporary SQLite file, and over PostgreSQL only when a database is configured; also installs `store-sqlite` without its optional driver and checks that it refuses to start) |
+| `persistence` | `npm run test:persistence`, `npm run check:persistence-boundaries`, `npm run qualify:persistence` (packed tarballs in clean projects; over `store-memory` and a temporary SQLite file, and over PostgreSQL only when a database is configured; also installs `store-sqlite` alone and checks that it loads no driver and refuses to start without one the application passes; it installs no `better-sqlite3`, and runs the SQLite flow over `node:sqlite` where the Node.js has a new enough one) |
 | `postgres` | `npm run test:postgres` against a `postgres:17` service container, as a serving role that is not a superuser |
-| `sqlite` | `npm run test:sqlite` on Node.js 22 (Linux): the shared conformance suite and the process, kill, and backup tests on real SQLite files. The `ci` workflow runs the same on Node.js 20, 22, and 24, Linux and macOS. No workflow simulates power loss |
+| `sqlite` | `npm run install:sqlite-driver` (the only step that installs `better-sqlite3` and runs its install script; the job has `contents: read` only), then `npm run test:sqlite` on Node.js 22 (Linux), over `better-sqlite3` and over `node:sqlite`: the shared conformance suite and the process, kill, and backup tests on real SQLite files. The `ci` workflow runs the same on Node.js 20 (`better-sqlite3` only), 22, and 24, Linux and macOS, and adds `npm run qualify:persistence` with `RSV_QUALIFY_BETTER_SQLITE3=1`. No workflow simulates power loss |
 | `browser` | `npm run qualify:browser` |
 
 Not run by any workflow: a power-loss simulation of the SQLite store (it has not been run at all; see its [qualification record](docs/research/qualification-store-sqlite-0.1.0-alpha.1.md)), the PostgreSQL topology scenarios (restart, failover, backup; `npm run qualify -w @redact-secret/store-postgres`, which needs Docker), the real AWS KMS suite, and the server mutation table (`node packages/vault-server/test/persistent/mutation-controls.mjs`). Run them by hand before a release that changes the store, the KMS provider, or the persistent server, and record the result in the [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md) or its successor.
@@ -97,7 +97,7 @@ mkdir /tmp/rsv-verify-persistence && cd /tmp/rsv-verify-persistence && npm init 
 npm install --save-exact @redact-secret/vault-server@<version> @redact-secret/vault@<version> \
   @redact-secret/core@<pinned core> @redact-secret/vault-contracts@<version> @redact-secret/vault-crypto@<version> \
   @redact-secret/store-memory@<version> @redact-secret/store-postgres@<version> pg@8.23.1 \
-  @redact-secret/store-sqlite@<version> better-sqlite3@12.11.1
+  @redact-secret/store-sqlite@<version>
 node --input-type=module -e 'await import("@redact-secret/vault-server/persistent"); await import("@redact-secret/vault-crypto/local-key-provider"); await import("@redact-secret/store-postgres"); await import("@redact-secret/store-sqlite"); console.log("ok")'
 npm audit signatures   # provenance, for versions the workflow published
 ```
