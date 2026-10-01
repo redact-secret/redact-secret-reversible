@@ -1,0 +1,55 @@
+{
+  "name": "@redact-secret/vault-crypto",
+  "version": "0.1.0-alpha.1",
+  "description": "Canonical encoding and AES-256-GCM envelope encryption of persistent Redact Secret vault records over WebCrypto, with a local key provider for injected key material.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./local-key-provider": {
+      "types": "./dist/local-key-provider.d.ts",
+      "import": "./dist/local-key-provider.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@redact-secret/vault-contracts": "0.1.0-alpha.1"
+  },
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-vault.git",
+    "directory": "packages/vault-crypto"
+  },
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-vault/issues"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-vault/tree/main/packages/vault-crypto#readme",
+  "keywords": [
+    "redaction",
+    "secrets",
+    "vault",
+    "aes-gcm",
+    "envelope-encryption"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  }
+}
