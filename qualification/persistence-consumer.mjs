@@ -18,6 +18,7 @@
 // no driver, and refuses to start without one the application passes.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as nodeModule from "node:module";
 import { join } from "node:path";
 
 import { CORE_VERSION, REPORTS, ROOT, run, WORK } from "./lib.mjs";
@@ -107,7 +108,10 @@ for (const name of installedA) {
 check(!installedA.some((name) => /^pg|@aws-sdk|store-|key-provider-|vault-crypto|better-sqlite3/.test(name.replace("@redact-secret/", ""))), "consumer A: a driver, SDK, store, provider, or crypto layer was installed");
 
 // The server's default entry must not load the contracts package or the persistent profile.
-const graph = execFileSync(
+// `registerHooks` exists from Node.js 22.15 and 23.5. Where it is missing (Node.js 20) the observation is skipped, with the
+// reason in the report; the Node.js 22 runs of this check (the `postgres` job and the release `persistence` job) make it.
+const hooksAvailable = typeof nodeModule.registerHooks === "function";
+const graph = !hooksAvailable ? "" : execFileSync(
   process.execPath,
   [
     "--input-type=module",
@@ -122,12 +126,15 @@ const graph = execFileSync(
   { cwd: a.dir, encoding: "utf8" },
 );
 let loadedUrls = null;
+let graphSkipped = null;
 try {
   loadedUrls = JSON.parse(graph.trim().split("\n").at(-1));
 } catch {
   loadedUrls = null;
 }
-if (loadedUrls === null) {
+if (!hooksAvailable) {
+  graphSkipped = `not run: node:module registerHooks is not in Node.js ${process.version}`;
+} else if (loadedUrls === null) {
   check(false, "consumer A: could not observe the module graph (node:module registerHooks unavailable)");
 } else {
   check(!loadedUrls.some((url) => /vault-contracts|\/persistent\//.test(url)), "consumer A: importing the root entry points loaded the contracts package or the persistent profile");
@@ -304,6 +311,7 @@ const report = {
   core: CORE_VERSION,
   versions,
   consumerA: { installed: installedA, result: a.result },
+  moduleGraph: graphSkipped ?? "observed",
   consumerC: { installed: installedC, result: c.result },
   consumerB: { memory: b.result.memory, sqlite: b.result.sqlite, postgres: withPostgres ? b.result.postgres : "not run: RSV_PG_ADMIN_URL and RSV_PG_APP_URL are not set" },
   failures,
