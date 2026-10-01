@@ -111,6 +111,20 @@
       "path": "qualification/check-persistence-boundaries.mjs",
       "rationale": "The pattern is an anchored allowlist for packed file names; each repeated group ends in a literal `/`, so alternatives cannot overlap and matching is linear. The input is the file list of a tarball this script just built, not external text. Development tooling, never published.",
       "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
+    },
+    "565ba857e070d946": {
+      "classification": "false_positive",
+      "line": 238,
+      "path": "packages/key-provider-aws-kms/src/provider.ts",
+      "rationale": "Each repetition of the group begins with a literal `-` and the letters it repeats cannot contain one, so no two ways of matching overlap and matching is linear. The input is the application's own configuration (`expected.region`), validated once at construction, not request data.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
+    },
+    "c5e31ddfc95e14a4": {
+      "classification": "false_positive",
+      "line": 240,
+      "path": "packages/key-provider-aws-kms/src/provider.ts",
+      "rationale": "Each repetition of the group begins with a literal `-` and the letters it repeats cannot contain one, so no two ways of matching overlap and matching is linear. The input is the application's own configuration (`expected.partition`), validated once at construction, not request data.",
+      "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
     }
   },
   "known_errors": {}

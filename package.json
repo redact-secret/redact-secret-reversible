@@ -8,7 +8,7 @@
   "scripts": {
     "test": "npm run test:vault && npm run test:vault-server && npm run test:persistence && npm run test:bench",
     "lint": "biome lint",
-    "build": "npm run build -w @redact-secret/vault-contracts && npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-crypto && npm run build -w @redact-secret/vault-conformance && npm run build -w @redact-secret/store-memory && npm run build -w @redact-secret/store-postgres && npm run build -w @redact-secret/vault-server",
+    "build": "npm run build -w @redact-secret/vault-contracts && npm run build -w @redact-secret/vault && npm run build -w @redact-secret/vault-crypto && npm run build -w @redact-secret/vault-conformance && npm run build -w @redact-secret/store-memory && npm run build -w @redact-secret/store-postgres && npm run build -w @redact-secret/key-provider-aws-kms && npm run build -w @redact-secret/vault-server",
     "typecheck": "npm run build",
     "qualify:node": "node qualification/node.mjs",
     "qualify:browser": "node qualification/browser.mjs",
@@ -24,7 +24,7 @@
     "bench:compare:smoke": "npm run build && node bench/compare.mjs --quick",
     "bench:worker": "npm run build && node bench/browser/worker-boundary.mjs",
     "bench:archive": "node bench/archive.mjs",
-    "test:persistence": "npm run build && npm run test -w @redact-secret/vault-contracts && npm run test -w @redact-secret/vault-crypto && npm run test -w @redact-secret/vault-conformance && npm run test -w @redact-secret/store-memory",
+    "test:persistence": "npm run build && npm run test -w @redact-secret/vault-contracts && npm run test -w @redact-secret/vault-crypto && npm run test -w @redact-secret/vault-conformance && npm run test -w @redact-secret/store-memory && npm run test -w @redact-secret/key-provider-aws-kms",
     "test:postgres": "npm run build && npm run test -w @redact-secret/store-postgres",
     "check:persistence-boundaries": "npm run build && node qualification/check-persistence-boundaries.mjs"
   },
