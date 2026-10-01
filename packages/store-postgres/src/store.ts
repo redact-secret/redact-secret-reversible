@@ -51,7 +51,7 @@ import { isSchemaName, migrationStatements, SCHEMA_VERSION } from "./schema.js";
  * configuration and credentials, and closes it.
  */
 export interface PgClientLike {
-  query(text: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+  query(text: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null; command?: string }>;
   release(destroy?: boolean | Error): void;
   /**
    * Optional, as on a `pg` client. When both are present the adapter listens
@@ -452,11 +452,19 @@ class PostgresStoreImpl implements PostgresStore {
       throw new StoreError("STORE_UNAVAILABLE");
     }
     const warningsBefore = held.warnings();
+    let completed: string | undefined;
     try {
-      await client.query("COMMIT");
+      completed = (await client.query("COMMIT")).command;
     } catch {
       held.release(true);
       throw new StoreError(mode === "write" ? "STORE_AMBIGUOUS" : "STORE_UNAVAILABLE");
+    }
+    // PostgreSQL answers COMMIT on a failed transaction with the tag ROLLBACK
+    // and no error. Every statement error above already left through the
+    // catch, so this is a second guard: such a transaction applied nothing.
+    if (completed !== undefined && completed !== "COMMIT") {
+      held.release(false);
+      throw new StoreError("STORE_UNAVAILABLE");
     }
     const warned = held.warnings() !== warningsBefore;
     held.release(false);
@@ -487,6 +495,12 @@ class PostgresStoreImpl implements PostgresStore {
       epoch: toNumber(row.epoch),
       state: sameDatabase && row.state === "serving" ? "serving" : "quarantined",
     };
+  }
+
+  /** The store clock, read inside the transaction at the moment of the call. */
+  async #clock(client: PgClientLike): Promise<number> {
+    const result = await client.query(`SELECT ${this.#nowSql} AS now`);
+    return toNumber(result.rows[0]?.now);
   }
 
   #skewed(head: Head, now: number): boolean {
@@ -699,6 +713,13 @@ class PostgresStoreImpl implements PostgresStore {
           if (toNumber(row.used) + use.count > toNumber(row.max_uses)) throw new Rollback(reject("budget"));
         }
 
+        // Expiry is judged again now that every lock is held: the time spent
+        // waiting for them must not let a capture be restored past its expiry.
+        const lockedAt = await this.#clock(client);
+        for (const capture of captures) {
+          if (lockedAt >= capture.expiresAt) throw new Rollback(reject("expired"));
+        }
+
         // 6. A receipt must outlive every capture it covers.
         if (input.receiptExpiresAt < latestExpiry) throw new StoreError("STORE_INVALID_ARGUMENT");
 
@@ -799,7 +820,7 @@ class PostgresStoreImpl implements PostgresStore {
         const [capture] = await this.#captures(client, scope.namespace, scope.tenant, [captureId], ns.epoch, " FOR UPDATE");
         if (capture === undefined) return reject("unknown");
         if (capture.state !== "live") return reject("revoked");
-        if (head.now >= capture.expiresAt) return reject("expired");
+        if ((await this.#clock(client)) >= capture.expiresAt) return reject("expired");
         if (capture.keyRevision !== input.keyRevision) return reject("stale");
         // Only the stored key changes: no envelope, counter, state, epoch, or time.
         await client.query(

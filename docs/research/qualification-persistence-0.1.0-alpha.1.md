@@ -216,7 +216,27 @@ Two passes by a reviewer that did not write the design, before any implementatio
 
 ### Implementation review
 
-**Pending.** An independent review of the implementation was in progress when this record was written. Its outcome, findings, and dispositions are recorded here when it completes. Until then, no statement in this record rests on it.
+A reviewer that wrote none of the code read the implementation and the claims on 2026-10-01, with instructions to break them, and ran its own probes against the built packages and a PostgreSQL 17 server. It could not make `restore` return a value for another tenant, an unnamed capture, another session, an ungranted sink or path, a revoked or expired capture, or past a budget; it found no partial consumption, no second release, and no plaintext, token, or key reaching a store. It found **no critical and no high defect**. It confirmed seven defects by reproduction; all are fixed, each with a regression test:
+
+| # | Severity | Finding | Change | Test |
+| --- | --- | --- | --- | --- |
+| A1 | Medium, hard to exploit | `revoke` and `deleteCaptureCiphertext` read `request.captureId` again after the session check and the lifecycle policy had approved the first value. A getter, or a request object changed while the call was pending, could redirect the operation to another capture of the same tenant. No value was exposed | The identifier is read once and that value is used throughout | `review-regressions.test.mjs` |
+| A2 | Low | A throwing `policyRevision` callback left a capture's encoded value unwiped and produced no audit event | The revision is read before any value is encoded, through the audited failure path; at restore it is a `policy-evaluation-error` denial | same |
+| A3 | Low | `resolveAttempt` had no bound on distinct tokens before deriving identifiers | The restore bound applies before any derivation | same |
+| A4 | Low | `store-postgres` judged expiry with the clock read at transaction start, so a commit that waited for a row lock could succeed after the capture expired | The clock is read again once every lock is held | `store-postgres/test/expiry-after-lock.test.mjs` (real database) |
+| A5 | Low | An `async` audit hook that rejected became an unhandled rejection | The rejection is absorbed, in both server profiles | `review-regressions.test.mjs` |
+| A6 | Low | `purpose` and `requestId` are echoed on audit events and could carry an issued token | Both are refused when they contain a token marker; `requestId` is bounded | same |
+| A7 | Note | `store-memory` checked the receipt horizon before the quarantine and receipt checks, against the order of specification §5.5 | Reordered | harness |
+
+Suspicions it could not reproduce, and what was done: the adapter now treats a `COMMIT` that PostgreSQL answers with a `ROLLBACK` tag as not applied; the server wipes its temporary copy of the digest key. Left as stated limits: a restore has per-call deadlines for policy but no overall deadline, so a slow policy keeps decrypted values in memory for as long as it runs; a tenant identifier containing U+0000 is accepted by the contract and cannot be stored by PostgreSQL (every operation fails closed with `STORE_UNAVAILABLE`); a provider result that arrives in the instant a call is being abandoned may not be wiped.
+
+Test gaps it demonstrated by mutating copies of the build, and their state:
+
+- Removing the branch that reports a cancelled synchronous-replication wait as ambiguous, or the per-transaction standby checks, fails no test in CI. Those branches are exercised only by the Docker failover scenario of the qualification run. **Still true.**
+- Removing a buffer wipe in the crypto layer, or the wipe on a denied capture, fails no test. Wipes on the restore path are tested (`plaintext-lifetime.test.mjs`); the others are not. **Still true.** The wipes are best effort in any case (specification §6.2).
+- Removing the entry row lock showed up as a hung test, not a failure. The package's tests now run with a timeout.
+
+The reviewer did not re-run the Docker topologies or the real AWS KMS tests, and only skimmed the conformance model.
 
 ## 6. Unsupported and unqualified profiles
 
@@ -254,10 +274,7 @@ None of these is supported. "Research only" means a document exists and no code 
 | Values are decrypted before grants and policy are checked, and exist in process memory for the duration of the call | Specification §7.2; `plaintext-lifetime.test.mjs` shows the bytes are overwritten afterwards | None in version 1 |
 | Throughput, latency, table growth, and behavior at the size ceilings were not measured | — | Measure in the target deployment |
 
-Open inconsistencies in the tree at the time of this record, none of which changes a result above:
-
-- The PostgreSQL report was generated from commit `7ad981b`, which is not an ancestor of the branch head. Its `outside` suite records the server accepting a 24-hour lifetime with a 24-hour receipt grace and failing restores with `INVARIANT_VIOLATION`. On the branch head the factory refuses that configuration with `INVALID_ARGUMENT` (`packages/vault-server/src/persistent/server.ts`; pinned by `packages/store-postgres/test/outside-findings.test.mjs` and by server mutation `ac`). The operations specification §2.3 still describes the earlier behavior.
-- One persistent server test stays skipped with a "specification ambiguity" reason although specification §7.3 now states the behavior the server has (`budget` for a replay of an attempt that exhausted its entry).
+The PostgreSQL report was generated from commit `7ad981b`, before later changes to the server and to the adapter (the receipt-horizon check at creation, and the changes listed under the implementation review). Its `outside` suite therefore records an earlier server behavior: a 24-hour lifetime with a 24-hour receipt grace was accepted and restores failed closed. The server now refuses that configuration at creation. The single-node suites were re-run on the final code, locally and in CI; the Docker topology scenarios (restart, failover, backup restore, server log) were not re-run after those changes, and the adapter changes since then do not touch the code paths those scenarios exercise except the commit acknowledgement and the expiry re-check.
 
 ## 8. How to reproduce
 

@@ -148,6 +148,17 @@ function utf8Length(text: string): number {
   return bytes;
 }
 
+/** Text that is echoed on audit events must not be able to carry an issued token. */
+function hasMarker(text: string): boolean {
+  return countMatches(MARKER_PATTERN, text) > 0;
+}
+
+/** A caller correlation id: optional, at most 256 code units, well-formed, and free of token markers. */
+function isRequestId(value: unknown): value is string | undefined {
+  if (value === undefined) return true;
+  return typeof value === "string" && value.length <= LIMITS.identifierMaxLength && isWellFormed(value) && !hasMarker(value);
+}
+
 function newAttemptId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -397,7 +408,7 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
     if (typeof input !== "string") throw new VaultServerError("INVALID_ARGUMENT");
     if (typeof options !== "object" || options === null) throw new VaultServerError("INVALID_ARGUMENT");
     const { context, requestId, ...captureOptions } = options;
-    if (requestId !== undefined && typeof requestId !== "string") throw new VaultServerError("INVALID_ARGUMENT");
+    if (!isRequestId(requestId)) throw new VaultServerError("INVALID_ARGUMENT");
     const at = this.#now();
     const fail = (code: ServerVaultErrorCode, who?: Resolved, detail: { vaultCode?: VaultError["code"]; coreCode?: string | undefined } = {}): never => {
       this.#audit({
@@ -431,6 +442,13 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
 
     const captureId = this.#i.planner.newCaptureId();
     if (!isCaptureId(captureId)) return fail("INVARIANT_VIOLATION", who);
+    // Read before any value is encoded, so a failing callback leaves no plaintext buffer behind.
+    let revision: string | null;
+    try {
+      revision = this.#policyRevision();
+    } catch {
+      return fail("INVALID_ARGUMENT", who);
+    }
     const expiresAt = at + this.#i.limits.entryTtlMs;
     const { capabilities } = this.#i;
     if (plan.retained.length > capabilities.maxCreateEntries) return fail("LIMIT_EXCEEDED", who);
@@ -485,7 +503,6 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
 
     const scope: StoreScope = { namespace: this.#i.namespace, tenant: who.tenant };
     const context_ = { namespace: this.#i.namespace, tenant: who.tenant, captureId };
-    const revision = typeof this.#i.policyRevision === "function" ? this.#policyRevision() : (this.#i.policyRevision ?? null);
 
     let sealed: Awaited<ReturnType<RecordCrypto["sealCapture"]>>;
     let entryIds: string[];
@@ -832,7 +849,14 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
 
       // Step 7: the application's policy, fresh for every entry and path,
       // outside any store transaction.
-      const revisionBefore = typeof this.#i.policyRevision === "function" ? this.#policyRevision() : undefined;
+      const currentRevision = (): string | null => {
+        try {
+          return this.#policyRevision();
+        } catch {
+          return deny("policy-evaluation-error");
+        }
+      };
+      const revisionBefore = typeof this.#i.policyRevision === "function" ? currentRevision() : undefined;
       for (const use of uses.values()) {
         const entry = view.entries.get(use.entryId) as StoredEntry;
         const capture = view.captures.get(entry.captureId) as StoredCapture;
@@ -873,7 +897,7 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
         }
       }
       // §7.4: narrow, not close, the window between policy and commit.
-      if (revisionBefore !== undefined && this.#policyRevision() !== revisionBefore) return deny("stale-policy");
+      if (revisionBefore !== undefined && currentRevision() !== revisionBefore) return deny("stale-policy");
 
       // Step 8: values become strings only now, when they are about to be returned.
       const values = new Map<string, string>();
@@ -959,25 +983,24 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
 
   async revoke(request: LifecycleRequest<Context>): Promise<RevokeResult> {
     this.#open();
-    const { who, capture, scope, at, fail, done } = await this.#lifecycleStart("revoke", request);
+    const { who, capture, scope, captureId, fail, done } = await this.#lifecycleStart("revoke", request);
     if (capture === undefined) return done({ outcome: "not-found", entries: 0 }, 0);
-    const result = await this.#revokeInStore(scope, request.captureId, () => fail("STORE_UNAVAILABLE", who));
+    const result = await this.#revokeInStore(scope, captureId, () => fail("STORE_UNAVAILABLE", who));
     if (result === undefined) return fail("INVARIANT_VIOLATION", who);
-    void at;
     return done(result, result.entries);
   }
 
   async deleteCaptureCiphertext(request: LifecycleRequest<Context>): Promise<DeleteCiphertextResult> {
     this.#open();
-    const { who, capture, scope, fail, done } = await this.#lifecycleStart("delete-ciphertext", request);
+    const { who, capture, scope, captureId, fail, done } = await this.#lifecycleStart("delete-ciphertext", request);
     if (capture === undefined) return done({ outcome: "not-found", entries: 0, keyRetired: false }, 0);
-    const revoked = await this.#revokeInStore(scope, request.captureId, () => fail("STORE_UNAVAILABLE", who));
+    const revoked = await this.#revokeInStore(scope, captureId, () => fail("STORE_UNAVAILABLE", who));
     if (revoked === undefined) return fail("INVARIANT_VIOLATION", who);
     if (revoked.outcome === "not-found") return done({ outcome: "not-found", entries: 0, keyRetired: false }, 0);
     let deleted: Awaited<ReturnType<Store["deleteCiphertext"]>>;
     try {
       deleted = await this.#store(true, (signal) =>
-        this.#i.store.deleteCiphertext({ scope, captureId: request.captureId, now: this.#now() }, { signal }),
+        this.#i.store.deleteCiphertext({ scope, captureId, now: this.#now() }, { signal }),
       );
     } catch (thrown) {
       return fail(thrown instanceof StoreFailure && thrown.kind === "invalid" ? "INVARIANT_VIOLATION" : "STORE_UNAVAILABLE", who);
@@ -1026,6 +1049,8 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
     } catch {
       return fail("LIFECYCLE_DENIED");
     }
+    // The same bound a restore has: no attempt over it could have committed.
+    if (parsed.uses.size > this.#i.capabilities.maxRestoreEntries) return fail("INVALID_ARGUMENT");
     const uses = new Map<string, Use>();
     for (const [token, use] of parsed.uses) {
       const entryId = await deriveEntryId(this.#i.namespace, resolved.tenant, token);
@@ -1077,7 +1102,7 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
     if (typeof request !== "object" || request === null) throw new VaultServerError("INVALID_ARGUMENT");
     const { context, captureId, requestId } = request;
     if (!isCaptureId(captureId)) throw new VaultServerError("INVALID_ARGUMENT");
-    if (requestId !== undefined && typeof requestId !== "string") throw new VaultServerError("INVALID_ARGUMENT");
+    if (!isRequestId(requestId)) throw new VaultServerError("INVALID_ARGUMENT");
     const at = this.#now();
     const fail = (code: ServerVaultErrorCode, who?: Resolved): never => {
       this.#audit({
@@ -1143,7 +1168,9 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
     } catch {
       return fail("LIFECYCLE_DENIED", who);
     }
-    return { who, capture, scope, at, fail, done };
+    // `captureId` is the value read once above: the one the session check and
+    // the policy saw. Callers act on it, never on the request object again.
+    return { who, capture, scope, captureId, fail, done };
   }
 
   /** Revocation is idempotent, so an unknown outcome is reported as unavailable and the caller retries. */
@@ -1288,11 +1315,11 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
     if (typeof request !== "object" || request === null) throw new VaultServerError("INVALID_ARGUMENT");
     const { context, sink, purpose, captures, fields, attemptId, requestId } = request;
     if (!isIdentifier(sink)) throw new VaultServerError("INVALID_ARGUMENT");
-    if (typeof purpose !== "string" || !isWellFormed(purpose) || utf8Length(purpose) > LIMITS.purposeMaxBytes) {
+    if (typeof purpose !== "string" || !isWellFormed(purpose) || utf8Length(purpose) > LIMITS.purposeMaxBytes || hasMarker(purpose)) {
       throw new VaultServerError("INVALID_ARGUMENT");
     }
     if (attemptId !== undefined && !isAttemptId(attemptId)) throw new VaultServerError("INVALID_ARGUMENT");
-    if (requestId !== undefined && typeof requestId !== "string") throw new VaultServerError("INVALID_ARGUMENT");
+    if (!isRequestId(requestId)) throw new VaultServerError("INVALID_ARGUMENT");
     if (!Array.isArray(captures) || captures.length === 0 || captures.length > this.#i.capabilities.maxRestoreCaptures) {
       throw new VaultServerError("INVALID_ARGUMENT");
     }
@@ -1350,7 +1377,9 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
   #audit(event: ServerAuditEvent): void {
     if (this.#i.onAudit === undefined) return;
     try {
-      this.#i.onAudit(Object.freeze(event));
+      // A hook typed `void` can still be async; its rejection must not become an unhandled one.
+      const returned: unknown = this.#i.onAudit(Object.freeze(event));
+      if (returned instanceof Promise) returned.catch(() => undefined);
     } catch {
       // Audit delivery never changes an operation's outcome.
     }

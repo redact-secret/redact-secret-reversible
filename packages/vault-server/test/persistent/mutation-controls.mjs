@@ -218,7 +218,7 @@ const MUTATIONS = [
   {
     id: "r",
     name: "skip the stale-policy comparison",
-    steps: [[/if \(revisionBefore !== undefined && this\.#policyRevision\(\) !== revisionBefore\)/, "if (false)"]],
+    steps: [[/if \(revisionBefore !== undefined && currentRevision\(\) !== revisionBefore\)/, "if (false)"]],
     layer: "none",
   },
   {

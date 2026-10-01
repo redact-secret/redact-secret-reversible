@@ -521,10 +521,6 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
           }),
         ),
         (snapshot, now) => {
-          // §4.2: the one mechanical check that needs the store's clock.
-          if (snapshot.receiptExpiresAt - now > LIMITS.maxReceiptHorizonMs) {
-            throw new StoreError("STORE_INVALID_ARGUMENT");
-          }
           const { scope } = snapshot;
           // Step 1.
           if (notServing(scope.namespace, snapshot.epoch)) return { outcome: "rejected", reason: "quarantined" };
@@ -538,6 +534,11 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
           }
           // Step 3.
           if (skewed(now, snapshot.now)) return { outcome: "rejected", reason: "clock-skew" };
+          // §4.2: the one mechanical check that needs the store's clock. After
+          // steps 1 and 2, whose order §5.5 fixes.
+          if (snapshot.receiptExpiresAt - now > LIMITS.maxReceiptHorizonMs) {
+            throw new StoreError("STORE_INVALID_ARGUMENT");
+          }
           if (rows === undefined) return { outcome: "rejected", reason: "unknown" };
           // Step 4.
           let latestExpiry = 0;

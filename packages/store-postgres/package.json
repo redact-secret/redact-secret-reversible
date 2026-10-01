@@ -55,7 +55,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --test-concurrency=1",
+    "test": "node --test --test-concurrency=1 --test-timeout=600000",
     "qualify": "node qualification/run.mjs"
   }
 }

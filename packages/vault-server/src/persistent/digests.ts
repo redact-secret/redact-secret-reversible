@@ -111,13 +111,13 @@ export async function createDigester(key: Uint8Array | null): Promise<Digester> 
   if (key === null) {
     mac = async (data) => new Uint8Array(await crypto.subtle.digest("SHA-256", data));
   } else {
-    const imported = await crypto.subtle.importKey(
-      "raw",
-      new Uint8Array(key),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
+    const copy = new Uint8Array(key);
+    let imported: CryptoKey;
+    try {
+      imported = await crypto.subtle.importKey("raw", copy, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    } finally {
+      copy.fill(0);
+    }
     mac = async (data) => new Uint8Array(await crypto.subtle.sign("HMAC", imported, data));
   }
 

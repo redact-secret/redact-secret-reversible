@@ -702,7 +702,8 @@ class ServerVaultImpl<Context> implements ServerVault<Context> {
   #auditEvent(event: ServerAuditEvent): void {
     if (this.#onAudit === undefined) return;
     try {
-      this.#onAudit(Object.freeze(event));
+      const returned: unknown = this.#onAudit(Object.freeze(event));
+      if (returned instanceof Promise) returned.catch(() => undefined);
     } catch {
       // Audit delivery never changes an operation's outcome.
     }

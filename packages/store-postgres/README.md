@@ -155,7 +155,7 @@ A split brain, in which two nodes both believe they are primary, is outside what
 
 ## Clock
 
-The store clock is the database's: `clock_timestamp()`, in integer milliseconds, read at the start of each transaction. Expiry at commit is judged with it. A caller's `now` that differs from it by more than `maxClockSkewMs` is rejected `clock-skew`.
+The store clock is the database's: `clock_timestamp()`, in integer milliseconds, read at the start of each transaction for the skew check. Expiry at commit is judged with a second reading, taken after every row lock is held, so time spent waiting for a lock cannot carry a restore past its capture's expiry. A caller's `now` that differs from it by more than `maxClockSkewMs` is rejected `clock-skew`.
 
 The default bound is 2000 ms. A caller's `now` is taken before it waits for a pool connection and for row locks, so under heavy contention on one row a call can age past a small bound and be rejected `clock-skew` although the clocks agree. The conformance run uses 30 000 ms for its 100-way contention cases for that reason and checks the bound itself with a controlled clock. Choose the bound with your pool size and lock waits in mind; the lifetime extension a skewed database clock can cause is at most the bound (specification §7.5).
 
