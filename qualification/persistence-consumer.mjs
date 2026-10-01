@@ -9,11 +9,13 @@
 // is installed or loaded by them.
 // Consumer B installs the persistence packages and runs capture, restore,
 // revoke, and deletion through the persistent server profile over the
-// reference memory store, over SQLite (a temporary file, better-sqlite3 as the
-// consumer's own dependency), and over PostgreSQL when RSV_PG_ADMIN_URL and
-// RSV_PG_APP_URL name a disposable database.
-// Consumer C installs store-sqlite without its optional driver and shows that
-// the store refuses to start instead of loading anything else.
+// reference memory store, over SQLite files, and over PostgreSQL when
+// RSV_PG_ADMIN_URL and RSV_PG_APP_URL name a disposable database. The SQLite
+// flow runs over node:sqlite where this Node.js bundles SQLite 3.51.3 or later,
+// and over better-sqlite3 only when RSV_QUALIFY_BETTER_SQLITE3=1: that driver
+// has an install script, so the default run installs it nowhere.
+// Consumer C installs store-sqlite alone and shows that it imports and loads
+// no driver, and refuses to start without one the application passes.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -133,17 +135,18 @@ if (loadedUrls === null) {
 }
 
 // ---------------------------------------------------------------- consumer B
+const withBetterSqlite3 = process.env.RSV_QUALIFY_BETTER_SQLITE3 === "1";
 const withPostgres = typeof process.env.RSV_PG_ADMIN_URL === "string" && typeof process.env.RSV_PG_APP_URL === "string";
 const b = consumer(
   "persistence-full",
-  [...PACKAGES.map((directory) => tarballs[directory]), `@redact-secret/core@${CORE_VERSION}`, "pg@8.23.1", "better-sqlite3@12.11.1", "@aws-sdk/client-kms@3.1144.0"],
+  [...PACKAGES.map((directory) => tarballs[directory]), `@redact-secret/core@${CORE_VERSION}`, "pg@8.23.1", ...(withBetterSqlite3 ? ["better-sqlite3@12.11.1"] : []), "@aws-sdk/client-kms@3.1144.0"],
   `
 import { createPersistentServerVault } from "@redact-secret/vault-server/persistent";
 import { createRecordCrypto } from "@redact-secret/vault-crypto";
 import { createLocalKeyProvider } from "@redact-secret/vault-crypto/local-key-provider";
 import { createMemoryStore } from "@redact-secret/store-memory";
 import { createPostgresStore, grantStatements, migrate } from "@redact-secret/store-postgres";
-import { createSqliteStore, migrate as migrateSqlite } from "@redact-secret/store-sqlite";
+import { betterSqlite3Driver, createSqliteStore, migrate as migrateSqlite, nodeSqliteDriver, sqliteVersionAcceptable } from "@redact-secret/store-sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -202,15 +205,36 @@ if (process.env.RSV_PG_ADMIN_URL && process.env.RSV_PG_APP_URL) {
   await pool.end();
 }
 
-const sqliteDir = mkdtempSync(join(tmpdir(), "rsv-consumer-sqlite-"));
-const sqliteFile = join(sqliteDir, "vault.sqlite");
-await migrateSqlite({ filename: sqliteFile });
-const sqliteStore = await createSqliteStore({ filename: sqliteFile });
-const sqlite = await exercise(sqliteStore, "consumer-sqlite", {});
-sqlite.profile = sqliteStore.capabilities().profile;
-sqlite.restoreDetection = sqliteStore.capabilities().restoreDetection;
-sqliteStore.close();
-rmSync(sqliteDir, { recursive: true, force: true });
+async function sqliteFlow(driver) {
+  const dir = mkdtempSync(join(tmpdir(), "rsv-consumer-sqlite-"));
+  const filename = join(dir, "vault.sqlite");
+  try {
+    await migrateSqlite({ driver, filename });
+    const store = await createSqliteStore({ driver, filename });
+    const flow = await exercise(store, "consumer-sqlite-" + (driver.name === "node:sqlite" ? "nodesqlite" : "bettersqlite3"), {});
+    flow.profile = store.capabilities().profile;
+    flow.restoreDetection = store.capabilities().restoreDetection;
+    store.close();
+    return flow;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const sqlite = {};
+try {
+  const nodeSqlite = await import("node:sqlite");
+  sqlite["node:sqlite"] = sqliteVersionAcceptable(process.versions.sqlite)
+    ? await sqliteFlow(nodeSqliteDriver(nodeSqlite))
+    : "not run: this Node.js bundles SQLite " + process.versions.sqlite;
+} catch {
+  sqlite["node:sqlite"] = "not run: no node:sqlite in this Node.js";
+}
+try {
+  const better = (await import("better-sqlite3")).default;
+  sqlite["better-sqlite3"] = await sqliteFlow(betterSqlite3Driver(better));
+} catch (error) {
+  sqlite["better-sqlite3"] = error?.code === "ERR_MODULE_NOT_FOUND" ? "not run: not installed" : "failed: " + (error?.code ?? error?.name);
+}
 
 console.log(JSON.stringify({
   memory, sqlite, postgres,
@@ -231,11 +255,22 @@ const expectFlow = (label, flow) => {
   check(flow.deleted === "deleted" && flow.keyRetired === false, `${label}: ciphertext deletion reported ${flow.deleted}, keyRetired ${flow.keyRetired}`);
 };
 expectFlow("consumer B (store-memory)", b.result.memory);
-expectFlow("consumer B (store-sqlite)", b.result.sqlite);
-check(b.result.sqlite.profile === "sqlite-local-wal/synchronous=FULL", `consumer B (store-sqlite): profile was ${b.result.sqlite.profile}`);
+const installedB = installedPackages(b.dir);
+const sqliteRan = [];
+for (const [driverName, flow] of Object.entries(b.result.sqlite)) {
+  if (typeof flow === "string") {
+    check(!flow.startsWith("failed"), `consumer B (store-sqlite over ${driverName}): ${flow}`);
+    continue;
+  }
+  sqliteRan.push(driverName);
+  expectFlow(`consumer B (store-sqlite over ${driverName})`, flow);
+  check(flow.profile === "sqlite-local-wal/synchronous=FULL", `consumer B (store-sqlite over ${driverName}): profile was ${flow.profile}`);
+}
+if (withBetterSqlite3) check(sqliteRan.includes("better-sqlite3"), `consumer B: the better-sqlite3 flow did not run: ${b.result.sqlite["better-sqlite3"]}`);
+check(!installedB.includes("better-sqlite3") || withBetterSqlite3, "consumer B: better-sqlite3 was installed without RSV_QUALIFY_BETTER_SQLITE3=1");
 
 // ---------------------------------------------------------------- consumer C
-// store-sqlite alone: its driver is an optional peer that npm does not install, and the store says so.
+// store-sqlite alone: it imports no driver and installs none; the application passes one.
 const c = consumer(
   "persistence-sqlite-without-driver",
   [tarballs["vault-contracts"], tarballs["store-sqlite"]],
@@ -246,8 +281,8 @@ console.log(JSON.stringify({ outcome }));
 `,
 );
 const installedC = installedPackages(c.dir);
-check(c.result.outcome === "STORE_CAPABILITY", `consumer C: store-sqlite without its driver reported ${c.result.outcome}`);
-check(!installedC.includes("better-sqlite3"), "consumer C: the optional driver was installed");
+check(c.result.outcome === "STORE_INVALID_ARGUMENT", `consumer C: store-sqlite without a driver reported ${c.result.outcome}`);
+check(!installedC.includes("better-sqlite3"), "consumer C: a driver was installed");
 if (withPostgres) expectFlow("consumer B (store-postgres)", b.result.postgres);
 for (const required of ["StoreError", "KeyProviderError", "RecordCryptoError", "LIMITS", "missingCapabilities"]) {
   check(b.result.exports.contracts.includes(required), `vault-contracts does not export ${required}`);
@@ -279,4 +314,4 @@ if (failures.length) {
   console.error(`persistence consumer qualification failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`persistence consumer qualification passed on ${process.version}: base packages install ${installedA.length} package(s) and no driver or SDK; persistent flow over store-memory and ${b.result.sqlite.profile}${withPostgres ? ` and ${b.result.postgres.profile}` : " (PostgreSQL not run: no database configured)"}`);
+console.log(`persistence consumer qualification passed on ${process.version}: base packages install ${installedA.length} package(s) and no driver or SDK; persistent flow over store-memory and SQLite (${sqliteRan.length === 0 ? "no driver usable on this Node.js" : sqliteRan.join(", ")})${withPostgres ? ` and ${b.result.postgres.profile}` : " (PostgreSQL not run: no database configured)"}`);

@@ -52,10 +52,15 @@ import {
   sqliteVersionAcceptable,
   writeMarker,
 } from "./deployment.js";
-import type { Database, JournalMode, Marker, Statement } from "./deployment.js";
+import type { Database, JournalMode, Marker, SqliteDriver, Statement } from "./deployment.js";
 import { migrationStatements, SCHEMA_VERSION } from "./schema.js";
 
 export interface SqliteStoreOptions {
+  /**
+   * The SQLite driver, wrapped by `betterSqlite3Driver` or `nodeSqliteDriver`
+   * around a module the application loaded. This package imports no driver.
+   */
+  readonly driver: SqliteDriver;
   /**
    * The database file, on a local file system of this host. It must exist and
    * have been migrated (`migrate`). In-memory, temporary, and URI names are
@@ -99,6 +104,7 @@ export interface SqliteStore extends Store {
 }
 
 export interface MigrateOptions {
+  readonly driver: SqliteDriver;
   readonly filename: string;
   readonly journalMode?: JournalMode;
   readonly busyTimeoutMs?: number;
@@ -108,6 +114,8 @@ export interface MigrateOptions {
 export interface DeploymentReport {
   readonly ok: boolean;
   readonly sqliteVersion: string;
+  /** The driver's `name`. */
+  readonly driver: string;
   /** Fixed names of the checks that failed: `sqlite-version`, `journal-mode`, `synchronous`, `busy-timeout`, `foreign-keys`, `locking-mode`, `fullfsync`, `schema`, `pragma`. */
   readonly failures: readonly string[];
 }
@@ -215,7 +223,7 @@ export async function migrate(options: MigrateOptions): Promise<void> {
   if (typeof options !== "object" || options === null) throw new StoreError("STORE_INVALID_ARGUMENT");
   const journalMode = journalOption(options.journalMode);
   const busyTimeoutMs = busyOption(options.busyTimeoutMs);
-  const opened = await openConnection({ filename: options.filename, journalMode, busyTimeoutMs }, false);
+  const opened = openConnection(options.driver, { filename: options.filename, journalMode, busyTimeoutMs }, false);
   const { db, path } = opened;
   const markerPath = resolveMarker(path, options.restoreMarker);
   try {
@@ -262,14 +270,15 @@ export async function migrate(options: MigrateOptions): Promise<void> {
  * check; `createSqliteStore` runs the same checks and refuses on any failure.
  */
 export async function checkDeployment(options: SqliteStoreOptions): Promise<DeploymentReport> {
-  const opened = await openConnection(
+  const opened = openConnection(
+    options.driver,
     { filename: options.filename, journalMode: journalOption(options.journalMode), busyTimeoutMs: busyOption(options.busyTimeoutMs) },
     true,
   );
   try {
     const failures = [...opened.failures];
     if (failures.length === 0 && !schemaMatches(opened.db)) failures.push("schema");
-    return { ok: failures.length === 0, sqliteVersion: opened.sqliteVersion, failures };
+    return { ok: failures.length === 0, sqliteVersion: opened.sqliteVersion, driver: opened.driverName, failures };
   } finally {
     try {
       opened.db.close();
@@ -331,7 +340,7 @@ export async function openSqliteStore(options: SqliteStoreOptions, internals: Sq
     maxEnvelopeBytes: boundedOption(options.maxEnvelopeBytes, LIMITS.maxEnvelopeBytes, LIMITS.maxEnvelopeBytes),
   });
 
-  const opened = await openConnection({ filename: options.filename, journalMode, busyTimeoutMs }, true);
+  const opened = openConnection(options.driver, { filename: options.filename, journalMode, busyTimeoutMs }, true);
   const markerPath = resolveMarker(opened.path, options.restoreMarker);
   try {
     if (opened.failures.length > 0 || !schemaMatches(opened.db)) throw new StoreError("STORE_CAPABILITY");

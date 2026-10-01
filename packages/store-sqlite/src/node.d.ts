@@ -1,6 +1,7 @@
 // The few Node.js built-ins this package uses, declared here so the repository
 // needs no `@types/node`. Not emitted.
 declare module "node:fs" {
+  export function existsSync(path: string): boolean;
   export function mkdirSync(path: string, options?: { recursive?: boolean }): unknown;
   export function readFileSync(path: string, encoding: "utf8"): string;
   export function realpathSync(path: string): string;

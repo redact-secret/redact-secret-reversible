@@ -31,10 +31,10 @@ const PACKAGES = {
   // The adapter declares the driver as a peer and types it structurally: its
   // own code imports no driver, the application passes a pool.
   "store-postgres": { deps: [CONTRACTS], peers: ["pg"], imports: [CONTRACTS], nodeBuiltins: false },
-  // The one package that names the SQLite driver, as an optional peer: it is loaded by a dynamic import inside
-  // the store and never reaches the base packages. The store reads and writes its marker file and canonicalizes
-  // the database path, so it alone may import Node built-ins.
-  "store-sqlite": { deps: [CONTRACTS], peers: ["better-sqlite3"], imports: [CONTRACTS, "better-sqlite3"], nodeBuiltins: ["node:fs", "node:path"], optionalPeers: ["better-sqlite3"] },
+  // The SQLite store imports no driver and declares no peer: the application loads better-sqlite3 or node:sqlite
+  // itself and passes it in (drivers.ts wraps a module it is handed). It reads and writes its restore marker file and
+  // canonicalizes the database path, so it alone may import node:fs and node:path.
+  "store-sqlite": { deps: [CONTRACTS], peers: [], imports: [CONTRACTS], nodeBuiltins: ["node:fs", "node:path"] },
   "key-provider-aws-kms": { deps: [CONTRACTS], peers: ["@aws-sdk/client-kms"], imports: [CONTRACTS, "@aws-sdk/client-kms"], nodeBuiltins: false },
   "vault-server": {
     deps: [VAULT, CONTRACTS],
@@ -45,7 +45,7 @@ const PACKAGES = {
 };
 
 /** Driver, SDK, and adapter names that must not appear outside the package that owns them. */
-const ADAPTER_ONLY = [/@aws-sdk\//, /\bfrom\s+["']pg["']/, /require\(["']pg["']\)/, /\bioredis\b/, /\bbetter-sqlite3\b/, /@redact-secret\/store-/, /@redact-secret\/key-provider-/];
+const ADAPTER_ONLY = [/@aws-sdk\//, /\bfrom\s+["']pg["']/, /require\(["']pg["']\)/, /\bioredis\b/, /\bbetter-sqlite3\b/, /node:sqlite/, /@redact-secret\/store-/, /@redact-secret\/key-provider-/];
 
 const FORBIDDEN = [
   [/\bconsole\./, "console"],

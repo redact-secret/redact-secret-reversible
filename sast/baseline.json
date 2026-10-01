@@ -147,23 +147,23 @@
       "rationale": "The pattern is an anchored allowlist for packed file names; each repeated group ends in a literal `/`, so alternatives cannot overlap and matching is linear. The input is the file list of a tarball this script just built, not external text. Development tooling, never published.",
       "rule_id": "sast.rules.javascript.lang.security.audit.detect-redos"
     },
-    "63e1623582dcbc84": {
+    "2f80bc74ca757640": {
       "classification": "false_positive",
-      "line": 71,
+      "line": 78,
       "path": "packages/store-sqlite/support/process-worker.mjs",
       "rationale": "Test worker process: `run` is looked up in the `operations` object literal defined a few lines above, by an operation name the parent test sends over IPC. An unknown name yields `undefined` and is answered UNKNOWN_OPERATION. Never request data, and the file is not part of the published package (`files` ships `dist` only).",
       "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
     },
-    "2d6c60e90dc28d4a": {
+    "fe52d3daffbe7310": {
       "classification": "false_positive",
-      "line": 81,
+      "line": 88,
       "path": "packages/store-sqlite/support/process-worker.mjs",
       "rationale": "Test worker process: `method` arrives over IPC from the parent test in the same run, which sends only `Store` operation names. It is never request data and the file is not part of the published package (`files` ships `dist` only).",
       "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"
     },
-    "428e50822b971005": {
+    "36ed27b594a8f706": {
       "classification": "false_positive",
-      "line": 21,
+      "line": 23,
       "path": "packages/store-sqlite/support/store-worker.mjs",
       "rationale": "Test worker thread: `method` is a `Store` operation name the conformance harness calls on its second-connection proxy in the same process. It is never request data and the file is not part of the published package (`files` ships `dist` only).",
       "rule_id": "sast.rules.javascript.lang.security.audit.unsafe-dynamic-method"

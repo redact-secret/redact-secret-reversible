@@ -26,7 +26,7 @@ import {
   syntheticKeys,
   wire,
 } from "../support/fixtures.mjs";
-import { Database, freshDatabase, sql } from "./helpers.mjs";
+import { driver, Database, freshDatabase, sql } from "./helpers.mjs";
 
 const TENANT = { tenant: "tenant-synthetic-a", principal: "user-synthetic-1" };
 

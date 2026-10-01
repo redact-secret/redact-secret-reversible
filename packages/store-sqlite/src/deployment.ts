@@ -10,14 +10,14 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import { StoreError } from "@redact-secret/vault-contracts";
 
-/** The part of a `better-sqlite3` statement this adapter uses. Declared here so no public type names the driver. */
+/** The part of a driver's statement this adapter uses. Declared here so no public type names a driver. */
 export interface Statement {
   run(...parameters: unknown[]): { changes: number | bigint };
   get(...parameters: unknown[]): Record<string, unknown> | undefined;
   all(...parameters: unknown[]): Record<string, unknown>[];
 }
 
-/** The part of a `better-sqlite3` connection this adapter uses. */
+/** The part of a driver's connection this adapter uses. */
 export interface Database {
   readonly inTransaction: boolean;
   prepare(source: string): Statement;
@@ -64,6 +64,7 @@ export interface Opened {
   /** The canonical path the connection was opened under. */
   readonly path: string;
   readonly sqliteVersion: string;
+  readonly driverName: string;
   /** Names of the checks that failed. Empty when the deployment is acceptable. */
   readonly failures: readonly string[];
 }
@@ -94,19 +95,20 @@ export function canonicalPath(filename: unknown): string {
   }
 }
 
-let driver: (new (filename: string, options?: { fileMustExist?: boolean; timeout?: number }) => Database) | undefined;
+/**
+ * A SQLite driver the application supplies. This package imports no driver:
+ * `betterSqlite3Driver` and `nodeSqliteDriver` (drivers.ts) wrap the two it
+ * supports around a module the application loaded itself.
+ */
+export interface SqliteDriver {
+  /** `"better-sqlite3"` or `"node:sqlite"`. Descriptive. */
+  readonly name: string;
+  /** Opens one connection. `fileMustExist` makes a missing file an error instead of creating it. Throws on any failure. */
+  open(path: string, options: { readonly fileMustExist: boolean; readonly busyTimeoutMs: number }): Database;
+}
 
-async function loadDriver(): Promise<NonNullable<typeof driver>> {
-  if (driver !== undefined) return driver;
-  try {
-    const loaded = (await import("better-sqlite3")) as unknown as { default?: unknown };
-    if (typeof loaded.default !== "function") throw new Error("no default export");
-    driver = loaded.default as NonNullable<typeof driver>;
-    return driver;
-  } catch {
-    // The driver is an optional peer: its absence is a capability the deployment lacks, not a bug.
-    throw new StoreError("STORE_CAPABILITY");
-  }
+export function isDriver(value: unknown): value is SqliteDriver {
+  return typeof value === "object" && value !== null && typeof (value as SqliteDriver).open === "function" && typeof (value as SqliteDriver).name === "string";
 }
 
 function pragma(db: Database, text: string): unknown {
@@ -121,12 +123,13 @@ function pragma(db: Database, text: string): unknown {
  * pragma the profile requires. The connection is returned even when a check
  * failed, so the caller can close it; it must not be used then.
  */
-export async function openConnection(options: OpenOptions, mustExist: boolean): Promise<Opened> {
+export function openConnection(driver: unknown, options: OpenOptions, mustExist: boolean): Opened {
+  // A missing driver is an application error: the package has none of its own.
+  if (!isDriver(driver)) throw new StoreError("STORE_INVALID_ARGUMENT");
   const path = canonicalPath(options.filename);
-  const Driver = await loadDriver();
   let db: Database;
   try {
-    db = new Driver(path, { fileMustExist: mustExist, timeout: options.busyTimeoutMs });
+    db = driver.open(path, { fileMustExist: mustExist, busyTimeoutMs: options.busyTimeoutMs });
   } catch {
     throw new StoreError(mustExist ? "STORE_CAPABILITY" : "STORE_UNAVAILABLE");
   }
@@ -157,7 +160,7 @@ export async function openConnection(options: OpenOptions, mustExist: boolean): 
   } catch {
     failures.push("pragma");
   }
-  return { db, path, sqliteVersion, failures };
+  return { db, path, sqliteVersion, driverName: driver.name, failures };
 }
 
 /** The pragmas a transaction re-checks, because another process can change `journal_mode` of a file. */

@@ -2,7 +2,6 @@
 // synthetic. Each test works in a fresh temporary directory.
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
@@ -12,9 +11,16 @@ import { StoreError } from "@redact-secret/vault-contracts";
 import { migrate } from "../dist/index.js";
 // Not a package export: the store with test seams.
 import { openSqliteStore } from "../dist/store.js";
+import { selectedDriver } from "../support/drivers.mjs";
 
-const require = createRequire(import.meta.url);
-export const Database = require("better-sqlite3");
+/** The driver the tests other than the conformance runs use (RSV_SQLITE_DRIVER, else the first requested one). */
+export const selected = await selectedDriver();
+export const driver = selected.driver;
+
+/** A raw connection on the selected driver, for the tests' own SQL: `new Database(file, { readonly })`. */
+export function Database(filename, options = {}) {
+  return selected.open(filename, { readonly: options.readonly === true });
+}
 
 export const WORKER_URL = new URL("../support/store-worker.mjs", import.meta.url);
 
@@ -34,14 +40,14 @@ export const BUSY_MS = 30_000;
 export async function freshDatabase(options = {}) {
   const temp = tempDir();
   const filename = join(temp.dir, "vault.sqlite");
-  await migrate({ filename, busyTimeoutMs: BUSY_MS, ...options });
+  await migrate({ driver, filename, busyTimeoutMs: BUSY_MS, ...options });
   return { ...temp, filename };
 }
 
 /** A store in another thread, behind the `Store` interface. */
-async function remoteStore(options, nowSql) {
+async function remoteStore(options, nowSql, driverName) {
   const done = new Int32Array(new SharedArrayBuffer(4));
-  const worker = new Worker(WORKER_URL, { workerData: { options, nowSql, done: done.buffer } });
+  const worker = new Worker(WORKER_URL, { workerData: { options, nowSql, done: done.buffer, driverName } });
   const pending = new Map();
   let next = 1;
   const ready = new Promise((resolve, reject) => {
@@ -91,17 +97,17 @@ async function remoteStore(options, nowSql) {
  * in this thread, the second connection in a worker thread, so the competing
  * call of an interleaved schedule really waits for the primary's write lock.
  */
-export function makeFactory({ controlledClock }) {
+export function makeFactory({ controlledClock, loaded }) {
   return async function factory() {
-    const database = await freshDatabase();
-    const options = { filename: database.filename, busyTimeoutMs: BUSY_MS, maxClockSkewMs: controlledClock ? 2000 : 30_000 };
+    const database = await freshDatabase({ driver: loaded.driver });
+    const options = { driver: loaded.driver, filename: database.filename, busyTimeoutMs: BUSY_MS, maxClockSkewMs: controlledClock ? 2000 : 30_000 };
     let clock = null;
     let nowSql;
     let control;
     let now = 1_800_000_000_000;
     if (controlledClock) {
       // A test-owned clock row, in the same database file, read by both stores inside their transactions.
-      control = new Database(database.filename);
+      control = loaded.open(database.filename);
       control.pragma("busy_timeout = 30000");
       control.exec("CREATE TABLE rsv_test_clock (id INTEGER PRIMARY KEY, now_ms INTEGER NOT NULL)");
       control.prepare("INSERT INTO rsv_test_clock (id, now_ms) VALUES (1, ?)").run(now);
@@ -124,7 +130,7 @@ export function makeFactory({ controlledClock }) {
       ...(nowSql === undefined ? {} : { nowSql }),
       beforeCommit: () => beforeCommit?.(),
     });
-    const second = await remoteStore(options, nowSql);
+    const second = await remoteStore({ filename: options.filename, busyTimeoutMs: options.busyTimeoutMs, maxClockSkewMs: options.maxClockSkewMs }, nowSql, loaded.name);
     return {
       store,
       clock,
@@ -158,7 +164,7 @@ export function makeFactory({ controlledClock }) {
 
 /** Reads the database with SQL on a connection of its own, as an operator would. */
 export function sql(filename, text, ...params) {
-  const db = new Database(filename, { readonly: true });
+  const db = Database(filename, { readonly: true });
   try {
     db.pragma("busy_timeout = 30000");
     return db.prepare(text).all(...params);

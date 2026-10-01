@@ -1,7 +1,7 @@
 // Measures what `maxCreateBytes` should be, and what one writer's commit costs,
 // on the machine that runs it. Synthetic random bytes only. Prints JSON.
 //
-//   npm run build && node packages/store-sqlite/qualification/measure-limits.mjs
+//   npm run build && npm run install:sqlite-driver && node packages/store-sqlite/qualification/measure-limits.mjs
 //
 // The figures describe this machine, this file system, and this run. They are
 // the basis of the default, not a claim about any deployment.
@@ -11,6 +11,7 @@ import { cpus, platform, release, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createSqliteStore, migrate } from "../dist/index.js";
+import { selectedDriver } from "../support/drivers.mjs";
 import { initialized, rawCapture, rawCommit, randomNamespace } from "../support/fixtures.mjs";
 
 const MIB = 1024 * 1024;
@@ -21,8 +22,10 @@ const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.l
 const ms = (start) => Number(process.hrtime.bigint() - start) / 1e6;
 
 try {
-  await migrate({ filename, busyTimeoutMs: 60_000 });
+  const { driver, name: driverName } = await selectedDriver();
+await migrate({ driver, filename, busyTimeoutMs: 60_000 });
   const store = await createSqliteStore({
+    driver,
     filename,
     busyTimeoutMs: 60_000,
     maxClockSkewMs: 60_000,
@@ -76,6 +79,7 @@ try {
       {
         machine: { platform: platform(), release: release(), cpu: cpus()[0]?.model, node: process.version },
         profile: "sqlite-local-wal/synchronous=FULL",
+        driver: driverName,
         create,
         singleEntryCommits: { count: commits.length, totalMs: Math.round(elapsed), perCommitMs: Number((elapsed / commits.length).toFixed(2)) },
         restore1024Entries: { ms: Math.round(wideMs) },

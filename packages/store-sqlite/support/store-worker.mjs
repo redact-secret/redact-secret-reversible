@@ -5,9 +5,11 @@
 import { parentPort, workerData } from "node:worker_threads";
 
 import { openSqliteStore } from "../dist/store.js";
+import { loadDriver } from "./drivers.mjs";
 
 const done = new Int32Array(workerData.done);
-const store = await openSqliteStore(workerData.options, { nowSql: workerData.nowSql });
+const loaded = await loadDriver(workerData.driverName);
+const store = await openSqliteStore({ ...workerData.options, driver: loaded.driver }, { nowSql: workerData.nowSql });
 
 parentPort.postMessage({ ready: true, capabilities: store.capabilities() });
 parentPort.on("message", async (message) => {

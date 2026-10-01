@@ -8,7 +8,7 @@ import { StoreError } from "@redact-secret/vault-contracts";
 import { checkDeployment, createSqliteStore } from "../dist/index.js";
 import { openSqliteStore } from "../dist/store.js";
 import { initialized, randomNamespace, rawCapture } from "../support/fixtures.mjs";
-import { BUSY_MS, freshDatabase, tempDir } from "./helpers.mjs";
+import { driver, BUSY_MS, freshDatabase, tempDir } from "./helpers.mjs";
 
 const DISTINCTIVE = "synthetic-distinctive-directory-name";
 
@@ -26,7 +26,7 @@ describe("diagnostics", () => {
     const temp = tempDir(`${DISTINCTIVE}-`);
     cleanups.push(temp.cleanup);
     const missing = join(temp.dir, "missing.sqlite");
-    for (const open of [() => createSqliteStore({ filename: missing }), () => createSqliteStore({ filename: join(temp.dir, "no", "such", "dir", "x.sqlite") }), () => createSqliteStore({ filename: ":memory:" })]) {
+    for (const open of [() => createSqliteStore({ driver, filename: missing }), () => createSqliteStore({ driver, filename: join(temp.dir, "no", "such", "dir", "x.sqlite") }), () => createSqliteStore({ driver, filename: ":memory:" })]) {
       await assert.rejects(open(), (thrown) => {
         assert.ok(thrown instanceof StoreError);
         const text = describeError(thrown);
@@ -43,7 +43,7 @@ describe("diagnostics", () => {
     cleanups.push(database.cleanup);
     let armed = false;
     const store = await openSqliteStore(
-      { filename: database.filename, busyTimeoutMs: BUSY_MS },
+      { driver, filename: database.filename, busyTimeoutMs: BUSY_MS },
       {
         beforeCommit: () => {
           if (armed) throw new Error(`synthetic failure mentioning ${database.filename}`);
@@ -74,8 +74,8 @@ describe("diagnostics", () => {
     cleanups.push(temp.cleanup);
     const database = await freshDatabase();
     cleanups.push(database.cleanup);
-    const report = await checkDeployment({ filename: database.filename });
-    assert.deepEqual(Object.keys(report).sort(), ["failures", "ok", "sqliteVersion"]);
+    const report = await checkDeployment({ driver, filename: database.filename });
+    assert.deepEqual(Object.keys(report).sort(), ["driver", "failures", "ok", "sqliteVersion"]);
     assert.ok(!JSON.stringify(report).includes(database.dir));
   });
 });

@@ -9,6 +9,7 @@ import { createLocalKeyProvider } from "@redact-secret/vault-crypto/local-key-pr
 import { createPersistentServerVault } from "@redact-secret/vault-server/persistent";
 
 import { createSqliteStore } from "../dist/index.js";
+import { selectedDriver } from "./drivers.mjs";
 
 export const PROCESS_WORKER = fileURLToPath(new URL("./process-worker.mjs", import.meta.url));
 
@@ -245,5 +246,5 @@ export async function initialized(store, namespace, epoch = 1) {
 }
 
 export async function openStore(filename, extra = {}) {
-  return createSqliteStore({ filename, busyTimeoutMs: 30_000, maxClockSkewMs: 30_000, ...extra });
+  return createSqliteStore({ driver: (await selectedDriver()).driver, filename, busyTimeoutMs: 30_000, maxClockSkewMs: 30_000, ...extra });
 }

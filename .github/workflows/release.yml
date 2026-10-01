@@ -124,6 +124,10 @@ jobs:
   # and restore. No power-loss simulation is run here or anywhere else.
   sqlite:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RSV_SQLITE_DRIVERS: better-sqlite3,node:sqlite
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,6 +137,8 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: npm ci
+      - name: Install better-sqlite3 (the only install script this repository runs)
+        run: npm run install:sqlite-driver
       - run: npm run test:sqlite
 
   browser:

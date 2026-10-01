@@ -8,6 +8,7 @@
 // Replies are plain data: results, or the code and reason of a sanitized error.
 // No restored value is logged.
 import { openSqliteStore } from "../dist/store.js";
+import { selectedDriver } from "./drivers.mjs";
 import { openVault, settle, unwire, wire } from "./fixtures.mjs";
 
 const config = JSON.parse(process.env.RSVQ_WORKER_CONFIG ?? "null");
@@ -36,7 +37,7 @@ async function main() {
   let vault;
   try {
     store = await openSqliteStore(
-      { filename: config.filename, busyTimeoutMs: config.busyTimeoutMs ?? 30_000, maxClockSkewMs: 30_000, ...(config.storeOptions ?? {}) },
+      { driver: (await selectedDriver()).driver, filename: config.filename, busyTimeoutMs: config.busyTimeoutMs ?? 30_000, maxClockSkewMs: 30_000, ...(config.storeOptions ?? {}) },
       hooks.internals,
     );
     if (config.keyHex !== undefined) {
@@ -49,7 +50,13 @@ async function main() {
       }));
     }
   } catch (thrown) {
-    process.send({ event: "failed", code: thrown?.code ?? "unknown" });
+    // A process that failed to start must not linger holding a connection to the shared file.
+    try {
+      store?.close();
+    } catch {
+      // Nothing to add.
+    }
+    process.send({ event: "failed", code: thrown?.code ?? "unknown" }, () => process.exit(0));
     return;
   }
 

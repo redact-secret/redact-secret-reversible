@@ -8,7 +8,7 @@ import { StoreError } from "@redact-secret/vault-contracts";
 
 import { openSqliteStore } from "../dist/store.js";
 import { initialized, randomAttemptId, randomNamespace, rawCapture, rawCommit } from "../support/fixtures.mjs";
-import { BUSY_MS, Database, freshDatabase, sql } from "./helpers.mjs";
+import { driver, BUSY_MS, Database, freshDatabase, sql } from "./helpers.mjs";
 
 /** A connection that records every `exec` and lets a test replace one. */
 function spy(log, hooks = {}) {
@@ -39,7 +39,7 @@ describe("transactions", () => {
   test("every mutation runs in BEGIN IMMEDIATE and every read in a plain read transaction; none is deferred or exclusive", async () => {
     const database = await fresh();
     const log = [];
-    const store = await openSqliteStore({ filename: database.filename, busyTimeoutMs: BUSY_MS }, { wrapConnection: spy(log) });
+    const store = await openSqliteStore({ driver, filename: database.filename, busyTimeoutMs: BUSY_MS }, { wrapConnection: spy(log) });
     try {
       const namespace = randomNamespace("immediate");
       const writes = [];
@@ -83,7 +83,7 @@ describe("transactions", () => {
 
   test("a rejected outcome rolls back: the counter, like every row, is unchanged", async () => {
     const database = await fresh();
-    const store = await openSqliteStore({ filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
+    const store = await openSqliteStore({ driver, filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
     try {
       const namespace = randomNamespace("rollback");
       await initialized(store, namespace, 1);
@@ -101,7 +101,7 @@ describe("transactions", () => {
     const database = await fresh();
     let armed = false;
     const store = await openSqliteStore(
-      { filename: database.filename, busyTimeoutMs: BUSY_MS },
+      { driver, filename: database.filename, busyTimeoutMs: BUSY_MS },
       {
         beforeCommit: () => {
           if (armed) throw new Error("synthetic failure before COMMIT");
@@ -127,7 +127,7 @@ describe("transactions", () => {
     const log = [];
     let fail = false;
     const store = await openSqliteStore(
-      { filename: database.filename, busyTimeoutMs: BUSY_MS },
+      { driver, filename: database.filename, busyTimeoutMs: BUSY_MS },
       {
         wrapConnection: spy(log, {
           exec(text, db) {
@@ -157,7 +157,7 @@ describe("transactions", () => {
     let mode = "none";
     let commits = 0;
     const store = await openSqliteStore(
-      { filename: database.filename, busyTimeoutMs: BUSY_MS },
+      { driver, filename: database.filename, busyTimeoutMs: BUSY_MS },
       {
         wrapConnection: spy([], {
           exec(text, db) {
@@ -208,7 +208,7 @@ describe("transactions", () => {
 
   test("a writer that cannot get the write lock within the busy timeout fails STORE_UNAVAILABLE, applies nothing, and a WAL reader is not blocked", async () => {
     const database = await fresh();
-    const store = await openSqliteStore({ filename: database.filename, busyTimeoutMs: 150 }, {});
+    const store = await openSqliteStore({ driver, filename: database.filename, busyTimeoutMs: 150 }, {});
     const holder = new Database(database.filename);
     holder.pragma("busy_timeout = 30000");
     try {
@@ -235,7 +235,7 @@ describe("transactions", () => {
 
   test("a call cancelled before it starts has no effect; a closed store throws STORE_CLOSED", async () => {
     const database = await fresh();
-    const store = await openSqliteStore({ filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
+    const store = await openSqliteStore({ driver, filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
     const namespace = randomNamespace("abort");
     await initialized(store, namespace, 1);
     const input = rawCapture({ namespace });
@@ -251,8 +251,8 @@ describe("transactions", () => {
 
   test("a read transaction is one snapshot: entries and their captures come from the same moment", async () => {
     const database = await fresh();
-    const store = await openSqliteStore({ filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
-    const writer = await openSqliteStore({ filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
+    const store = await openSqliteStore({ driver, filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
+    const writer = await openSqliteStore({ driver, filename: database.filename, busyTimeoutMs: BUSY_MS }, {});
     try {
       const namespace = randomNamespace("snapshot");
       await initialized(store, namespace, 1);
