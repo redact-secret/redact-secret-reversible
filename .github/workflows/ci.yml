@@ -238,3 +238,29 @@ jobs:
         working-directory: packages/vault-py
       - name: Python example
         run: python examples/05-python-server.py
+
+  # The packed wheel, not an editable install: the base install has no runtime
+  # dependency, the three extras exist, and importing one optional module never
+  # loads another family's dependency (docs/plans/python-persistence-parity.md
+  # section 4.2). The isolation script builds clean virtualenvs outside the
+  # repository and installs from the package index.
+  python-wheel:
+    name: python wheel extras and import isolation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: python -m pip install build==1.6.1
+      - name: Build sdist and wheel
+        working-directory: packages/vault-py
+        run: python -m build
+      - name: Verify metadata (no Requires-Dist outside the extras) and contents
+        working-directory: packages/vault-py
+        run: python ../../scripts/verify-python-dist.py
+      - name: Import isolation in clean virtualenvs
+        run: python scripts/check-python-isolation.py packages/vault-py/dist/*.whl

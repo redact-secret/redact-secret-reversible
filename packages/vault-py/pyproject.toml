@@ -25,6 +25,12 @@ Homepage = "https://github.com/redact-secret/redact-secret-vault/tree/main/packa
 Issues = "https://github.com/redact-secret/redact-secret-vault/issues"
 
 [project.optional-dependencies]
+# Optional building blocks of the persistent vault groundwork (not supported; see
+# docs/plans/python-persistence-parity.md and docs/decisions/python-persistence-api-and-packaging.md).
+# The base install has no runtime dependency; each extra brings one dependency family.
+crypto = ["cryptography>=47"]
+postgres = ["psycopg>=3.2,<4"]
+aws-kms = ["boto3>=1.43"]
 test = ["pytest>=8.0,<9"]
 lint = ["ruff>=0.6,<1"]
 
