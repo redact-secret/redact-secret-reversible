@@ -230,7 +230,7 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: packages/vault-py/pyproject.toml
-      - run: pip install -e ".[test,lint]"
+      - run: pip install -e ".[test,lint,crypto]"
         working-directory: packages/vault-py
       - run: ruff check .
         working-directory: packages/vault-py
