@@ -20,8 +20,8 @@
     },
     "./internal/capture-plan": {
       "node": {
-        "types": "./dist/capture-plan.d.ts",
-        "import": "./dist/capture-plan.js"
+        "types": "./dist/internal-capture-plan.d.ts",
+        "import": "./dist/internal-capture-plan.js"
       }
     },
     "./package.json": "./package.json"

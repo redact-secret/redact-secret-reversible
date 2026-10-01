@@ -35,6 +35,8 @@ const REQUIRED_FILES = [
   // node-only "./internal/capture-plan" subpath (checked below).
   "dist/capture-plan.js",
   "dist/capture-plan.d.ts",
+  "dist/internal-capture-plan.js",
+  "dist/internal-capture-plan.d.ts",
 ];
 for (const required of REQUIRED_FILES) check(files.includes(required), `missing packed file ${required}`);
 
@@ -92,12 +94,19 @@ if (js.includes("worker-host.js")) {
 const PLAN_SUBPATH = "./internal/capture-plan";
 const planExport = pkg.exports?.[PLAN_SUBPATH];
 check(
-  JSON.stringify(planExport) === JSON.stringify({ node: { types: "./dist/capture-plan.d.ts", import: "./dist/capture-plan.js" } }),
-  `exports["${PLAN_SUBPATH}"] must have only the node condition, resolving to dist/capture-plan`,
+  JSON.stringify(planExport) === JSON.stringify({ node: { types: "./dist/internal-capture-plan.d.ts", import: "./dist/internal-capture-plan.js" } }),
+  `exports["${PLAN_SUBPATH}"] must have only the node condition, resolving to dist/internal-capture-plan`,
 );
 for (const [subpath, target] of Object.entries(pkg.exports ?? {})) {
   if (subpath === PLAN_SUBPATH) continue;
   check(!/capture-plan/.test(JSON.stringify(target)), `exports["${subpath}"] resolves to the capture plan`);
+}
+if (js.includes("internal-capture-plan.js")) {
+  // The subpath hands the server a planner and limit resolution, nothing else.
+  const entrySrc = readFileSync(join(pkgDir, "dist", "internal-capture-plan.js"), "utf8");
+  const named = [...entrySrc.matchAll(/export\s*\{([^}]*)\}/g)].flatMap((m) => m[1].split(",").map((n) => n.trim()).filter(Boolean)).sort();
+  check(JSON.stringify(named) === JSON.stringify(["openCapturePlanner", "resolveCaptureLimits"]), `dist/internal-capture-plan.js exports ${named.join(", ")}`);
+  check(!/export\s*\*/.test(entrySrc), "dist/internal-capture-plan.js has a star export");
 }
 if (js.includes("capture-plan.js")) {
   const planSrc = readFileSync(join(pkgDir, "dist", "capture-plan.js"), "utf8");

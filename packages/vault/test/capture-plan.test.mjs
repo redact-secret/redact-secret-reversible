@@ -540,6 +540,6 @@ test("the package root does not export the plan, and the subpath is node-only", 
   assert.deepEqual(Object.keys(root).sort(), ["DEFAULT_LIMITS", "LIMIT_CEILINGS", "VaultError", "createVault"]);
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.deepEqual(pkg.exports["./internal/capture-plan"], {
-    node: { types: "./dist/capture-plan.d.ts", import: "./dist/capture-plan.js" },
+    node: { types: "./dist/internal-capture-plan.d.ts", import: "./dist/internal-capture-plan.js" },
   });
 });
