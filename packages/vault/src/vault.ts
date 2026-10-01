@@ -1,31 +1,21 @@
-import type {
-  PlaceholderContext,
-  PlaceholderFormatter,
-  SecretFinding,
-} from "@redact-secret/core";
-
-import { activateCore, installedCore } from "./core-module.js";
+import { installedCore } from "./core-module.js";
 import type { CoreModule } from "./core-module.js";
-import { coreCodeOf, VaultError } from "./errors.js";
+import {
+  establishCapture,
+  isIdentifier,
+  MAX_GRANTS,
+  newCaptureIdFrom,
+  planCaptureWith,
+  resolveCaptureLimits,
+  TOKEN_ATTEMPTS,
+  utf8Length,
+} from "./capture-plan.js";
+import type { PlanRandom } from "./capture-plan.js";
+import { VaultError } from "./errors.js";
 import type { DenialReason, VaultErrorCode } from "./errors.js";
 import { ExpiryQueue } from "./expiry-queue.js";
-import {
-  isPiiActive,
-  isPiiFindingType,
-  resolveExpectedPiiActivation,
-  resolvePiiRetention,
-  resolvePiiSelection,
-} from "./pii.js";
-import {
-  countMatches,
-  holdsExactlyOnce,
-  MARKER_PATTERN,
-  newCaptureId,
-  newToken,
-  resolveRandomFill,
-  TOKEN_PATTERN,
-} from "./token.js";
-import type { RandomFill } from "./token.js";
+import { isPiiActive } from "./pii.js";
+import { countMatches, MARKER_PATTERN, TOKEN_PATTERN } from "./token.js";
 import type {
   AuditEvent,
   AuditHook,
@@ -41,37 +31,7 @@ import type {
   VaultStats,
 } from "./types.js";
 
-export const DEFAULT_LIMITS: Readonly<VaultLimits> = Object.freeze({
-  maxEntries: 256,
-  maxRetainedBytes: 64 * 1024,
-  maxValueBytes: 8 * 1024,
-  entryTtlMs: 10 * 60 * 1000,
-  vaultTtlMs: 60 * 60 * 1000,
-  maxInputBytes: 1024 * 1024,
-  maxFindings: 1024,
-  maxRestoreFields: 64,
-  maxRestoreFieldBytes: 1024 * 1024,
-  maxUsesPerEntry: 16,
-});
-
-/** Hard ceilings: a configured limit above these is rejected, not clamped. */
-export const LIMIT_CEILINGS: Readonly<VaultLimits> = Object.freeze({
-  maxEntries: 100_000,
-  maxRetainedBytes: 64 * 1024 * 1024,
-  maxValueBytes: 1024 * 1024,
-  entryTtlMs: 24 * 60 * 60 * 1000,
-  vaultTtlMs: 24 * 60 * 60 * 1000,
-  maxInputBytes: 64 * 1024 * 1024,
-  maxFindings: 50_000,
-  maxRestoreFields: 10_000,
-  maxRestoreFieldBytes: 64 * 1024 * 1024,
-  maxUsesPerEntry: 1_000,
-});
-
-const MAX_IDENTIFIER_LENGTH = 256;
-const MAX_GRANTS = 64;
-const MAX_PATHS_PER_GRANT = 256;
-const TOKEN_ATTEMPTS = 4;
+export { DEFAULT_LIMITS, LIMIT_CEILINGS } from "./capture-plan.js";
 
 interface Entry {
   readonly captureId: string;
@@ -94,79 +54,6 @@ interface CaptureExpiry {
 
 /** Stale queue items tolerated beyond the live captures before compacting. */
 const EXPIRY_QUEUE_SLACK = 64;
-
-interface Staged {
-  readonly findingId: string;
-  readonly token: string;
-  readonly value: string;
-  readonly bytes: number;
-  readonly type: string;
-}
-
-/** UTF-8 length without materializing an encoded copy of the value. */
-function utf8Length(text: string): number {
-  let bytes = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    const unit = text.charCodeAt(i);
-    if (unit < 0x80) bytes += 1;
-    else if (unit < 0x800) bytes += 2;
-    else if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) {
-      const next = text.charCodeAt(i + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        bytes += 4;
-        i += 1;
-      } else bytes += 3;
-    } else bytes += 3;
-  }
-  return bytes;
-}
-
-function isIdentifier(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTIFIER_LENGTH;
-}
-
-function isCount(value: unknown, ceiling: number): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= ceiling;
-}
-
-function resolveLimits(partial: Partial<VaultLimits> | undefined): VaultLimits {
-  if (partial !== undefined && (typeof partial !== "object" || partial === null)) {
-    throw new VaultError("INVALID_ARGUMENT");
-  }
-  const resolved: Record<string, number> = { ...DEFAULT_LIMITS };
-  for (const key of Object.keys(partial ?? {})) {
-    if (!Object.hasOwn(DEFAULT_LIMITS, key)) throw new VaultError("INVALID_ARGUMENT");
-    const value = (partial as Record<string, unknown>)[key];
-    if (value === undefined) continue;
-    if (!isCount(value, LIMIT_CEILINGS[key as keyof VaultLimits])) {
-      throw new VaultError("INVALID_ARGUMENT");
-    }
-    resolved[key] = value;
-  }
-  return Object.freeze(resolved) as unknown as VaultLimits;
-}
-
-function resolveGrants(release: unknown): Map<string, Set<string>> {
-  if (!Array.isArray(release) || release.length === 0 || release.length > MAX_GRANTS) {
-    throw new VaultError("INVALID_ARGUMENT");
-  }
-  const grants = new Map<string, Set<string>>();
-  for (const grant of release as unknown[]) {
-    if (typeof grant !== "object" || grant === null) throw new VaultError("INVALID_ARGUMENT");
-    const { sink, paths } = grant as { sink?: unknown; paths?: unknown };
-    if (!isIdentifier(sink) || !Array.isArray(paths)) throw new VaultError("INVALID_ARGUMENT");
-    if (paths.length === 0 || paths.length > MAX_PATHS_PER_GRANT) {
-      throw new VaultError("INVALID_ARGUMENT");
-    }
-    const set = grants.get(sink) ?? new Set<string>();
-    for (const path of paths as unknown[]) {
-      if (!isIdentifier(path)) throw new VaultError("INVALID_ARGUMENT");
-      set.add(path);
-    }
-    grants.set(sink, set);
-  }
-  return grants;
-}
 
 /**
  * The later of wall-clock time and a monotonic timeline anchored to it.
@@ -209,7 +96,7 @@ export async function createVault(options: VaultOptions = {}): Promise<Vault> {
  */
 export async function openVault(core: CoreModule, options: VaultOptions = {}): Promise<Vault> {
   if (typeof options !== "object" || options === null) throw new VaultError("INVALID_ARGUMENT");
-  const limits = resolveLimits(options.limits);
+  const limits = resolveCaptureLimits(options.limits);
   const releasePolicy: ReleasePolicy | undefined = options.releasePolicy;
   const onAudit: AuditHook | undefined = options.onAudit;
   const clock = options.now ?? monotonicEpochClock();
@@ -221,14 +108,8 @@ export async function openVault(core: CoreModule, options: VaultOptions = {}): P
   }
   if (typeof clock !== "function") throw new VaultError("INVALID_ARGUMENT");
 
-  const fill = resolveRandomFill();
-  if (fill === undefined) throw new VaultError("UNSUPPORTED_RUNTIME");
-
-  // ADR §3 step 1: shape only. The core owns selector grammar.
-  const selection = resolvePiiSelection(options.pii);
-  const expected = resolveExpectedPiiActivation(options.expectPiiActivation);
-  // Steps 2 to 6: forward the application's selection or adopt; observe once.
-  const piiActivation = await activateCore(core, selection, expected);
+  // The CSPRNG check (`UNSUPPORTED_RUNTIME`), then ADR §3 steps 1 to 6.
+  const { random, piiActivation } = await establishCapture(core, options);
 
   let latest = Number.NEGATIVE_INFINITY;
   const now = (): number => {
@@ -250,7 +131,7 @@ export async function openVault(core: CoreModule, options: VaultOptions = {}): P
     core,
     piiActivation,
     limits,
-    fill,
+    random,
     now,
     releasePolicy,
     onAudit,
@@ -263,7 +144,7 @@ class InMemoryVault implements Vault {
   readonly #core: CoreModule;
   readonly #piiActive: boolean;
   readonly #limits: VaultLimits;
-  readonly #fill: RandomFill;
+  readonly #random: PlanRandom;
   readonly #now: () => number;
   readonly #releasePolicy: ReleasePolicy | undefined;
   readonly #onAudit: AuditHook | undefined;
@@ -282,7 +163,7 @@ class InMemoryVault implements Vault {
     core: CoreModule,
     piiActivation: string | null,
     limits: VaultLimits,
-    fill: RandomFill,
+    random: PlanRandom,
     now: () => number,
     releasePolicy: ReleasePolicy | undefined,
     onAudit: AuditHook | undefined,
@@ -293,7 +174,7 @@ class InMemoryVault implements Vault {
     this.#piiActive = isPiiActive(piiActivation);
     Object.defineProperty(this, "piiActivation", { value: piiActivation, writable: false, enumerable: true, configurable: false });
     this.#limits = limits;
-    this.#fill = fill;
+    this.#random = random;
     this.#now = now;
     this.#releasePolicy = releasePolicy;
     this.#onAudit = onAudit;
@@ -402,175 +283,42 @@ class InMemoryVault implements Vault {
   }
 
   #capture(input: string, options: CaptureOptions, at: number): CaptureResult {
-    if (typeof input !== "string") throw new VaultError("INVALID_ARGUMENT");
-    if (typeof options !== "object" || options === null) throw new VaultError("INVALID_ARGUMENT");
-    const grants = resolveGrants(options.release);
-    const maxUses = options.maxUses ?? 1;
-    if (!isCount(maxUses, this.#limits.maxUsesPerEntry)) throw new VaultError("INVALID_ARGUMENT");
-    const mode = options.unredacted ?? "reject";
-    if (mode !== "reject" && mode !== "pass-through") throw new VaultError("INVALID_ARGUMENT");
-    const eligible = options.eligible;
-    const display: PlaceholderFormatter =
-      options.displayFormatter ?? this.#core.defaultPlaceholderFormatter;
-    if (eligible !== undefined && typeof eligible !== "function") {
-      throw new VaultError("INVALID_ARGUMENT");
-    }
-    if (typeof display !== "function") throw new VaultError("INVALID_ARGUMENT");
-    // PII retention allowlist (ADR §1): validated before the core runs, and
-    // refused outright when the core cannot produce PII findings at all.
-    const piiRetain = resolvePiiRetention(options.pii);
-    if (piiRetain !== undefined && !this.#piiActive) throw new VaultError("PII_UNAVAILABLE");
-
-    if (utf8Length(input) > this.#limits.maxInputBytes) throw new VaultError("LIMIT_EXCEEDED");
-    // A token-like literal in the input would be indistinguishable from an
-    // issued token after redaction; refuse rather than guess provenance.
-    MARKER_PATTERN.lastIndex = 0;
-    if (MARKER_PATTERN.test(input)) {
-      MARKER_PATTERN.lastIndex = 0;
-      throw new VaultError("TOKEN_LITERAL_IN_INPUT");
-    }
-    MARKER_PATTERN.lastIndex = 0;
-
-    this.#sweep(at);
-    const coreLimits = {
-      maxInputBytes: this.#limits.maxInputBytes,
-      maxFindings: this.#limits.maxFindings,
-    };
-
-    let findings: readonly SecretFinding[];
-    try {
-      findings = this.#core.scan(input, {
-        ...(options.policy === undefined ? {} : { policy: options.policy }),
-        ...(options.ruleset === undefined ? {} : { ruleset: options.ruleset }),
-        limits: coreLimits,
-      });
-    } catch (thrown) {
-      throw new VaultError("CORE_FAILURE", { coreCode: coreCodeOf(thrown) });
-    }
-
-    // Gate on every finalized action before staging anything.
-    let passedThrough = 0;
-    const passedTypes = new Set<string>();
-    const retain: SecretFinding[] = [];
-    let unrestorable = 0;
-    let previousEnd = 0;
-    for (const finding of findings) {
-      const { start, end } = finding;
-      if (
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end) ||
-        start < previousEnd ||
-        end <= start ||
-        end > input.length
-      ) {
-        throw new VaultError("INVARIANT_VIOLATION");
-      }
-      previousEnd = end;
-      switch (finding.action) {
-        case "block":
-          throw new VaultError("BLOCKED_FINDING");
-        case "warn":
-        case "allow":
-          passedThrough += 1;
-          passedTypes.add(finding.type);
-          break;
-        case "redact": {
-          let keep = true;
-          if (isPiiFindingType(finding.type) && (piiRetain === undefined || !piiRetain.has(finding.type))) {
-            // A PII finding outside the exact-type allowlist is never
-            // retained, and `eligible` is not consulted: it may narrow the
-            // allowlist, never widen it.
-            keep = false;
-          } else if (eligible !== undefined) {
-            try {
-              keep = eligible(finding) === true;
-            } catch {
-              throw new VaultError("INVALID_ARGUMENT");
-            }
-          }
-          if (keep) retain.push(finding);
-          else unrestorable += 1;
-          break;
-        }
-        default:
-          throw new VaultError("INVARIANT_VIOLATION");
-      }
-    }
-    if (passedThrough > 0 && mode === "reject") throw new VaultError("UNREDACTED_FINDINGS");
-
-    if (this.#entries.size + retain.length > this.#limits.maxEntries) {
-      throw new VaultError("LIMIT_EXCEEDED");
-    }
-
-    // Stage: nothing below is visible to any other operation until commit.
-    const staged = new Map<string, Staged>();
-    const stagedTokens = new Set<string>();
-    let stagedBytes = 0;
-    for (const finding of retain) {
-      const value = input.slice(finding.start, finding.end);
-      const bytes = utf8Length(value);
-      stagedBytes += bytes;
-      if (bytes > this.#limits.maxValueBytes || this.#retainedBytes + stagedBytes > this.#limits.maxRetainedBytes) {
-        throw new VaultError("LIMIT_EXCEEDED");
-      }
-      const token = this.#issueToken(stagedTokens);
-      stagedTokens.add(token);
-      staged.set(finding.id, { findingId: finding.id, token, value, bytes, type: finding.type });
-    }
-
-    const formatted = new Set<string>();
-    let formatterFault = false;
-    const formatter: PlaceholderFormatter = (finding: SecretFinding, context: PlaceholderContext) => {
-      const entry = staged.get(finding.id);
-      if (entry !== undefined) {
-        if (formatted.has(finding.id)) formatterFault = true;
-        formatted.add(finding.id);
-        return entry.token;
-      }
-      const label = display(finding, context);
-      MARKER_PATTERN.lastIndex = 0;
-      const spoof = typeof label !== "string" || MARKER_PATTERN.test(label);
-      MARKER_PATTERN.lastIndex = 0;
-      if (spoof) {
-        formatterFault = true;
-        throw new Error("display placeholder rejected");
-      }
-      return label;
-    };
-
-    let text: string;
-    try {
-      text = this.#core.redact(input, findings, { placeholderFormatter: formatter, limits: coreLimits });
-    } catch (thrown) {
-      if (thrown instanceof VaultError) throw thrown;
-      throw new VaultError("CORE_FAILURE", { coreCode: coreCodeOf(thrown) });
-    }
-
-    // Validate the output corresponds exactly to the staged tokens.
-    if (formatterFault || formatted.size !== staged.size) throw new VaultError("INVARIANT_VIOLATION");
-    // One pass over the output (#88): each staged token exactly once, no other marker.
-    if (stagedTokens.size !== staged.size || !holdsExactlyOnce(text, stagedTokens)) {
-      throw new VaultError("INVARIANT_VIOLATION");
-    }
+    // Everything up to the commit is the shared capture plan: validation, the
+    // core scan, the action gate, limits, token issuance, and output checks.
+    const plan = planCaptureWith(this.#core, this.#piiActive, input, options, this.#limits, {
+      random: this.#random,
+      isTaken: (token) => this.#entries.has(token),
+      budget: () => {
+        this.#sweep(at);
+        return { liveEntries: this.#entries.size, retainedBytes: this.#retainedBytes };
+      },
+    });
 
     // Commit.
     const captureId = this.#issueCaptureId();
     const expiresAt = at + this.#limits.entryTtlMs;
+    const grants = new Map<string, ReadonlySet<string>>();
+    for (const grant of plan.grants) grants.set(grant.sink, new Set(grant.paths));
+    const maxUses = plan.maxUses;
     const tokens: IssuedToken[] = [];
     const captureTokens = new Set<string>();
-    for (const entry of staged.values()) {
-      this.#entries.set(entry.token, {
+    let stagedBytes = 0;
+    for (const planned of plan.retained) {
+      const value = input.slice(planned.start, planned.end);
+      const bytes = utf8Length(value);
+      stagedBytes += bytes;
+      this.#entries.set(planned.token, {
         captureId,
-        value: entry.value,
-        bytes: entry.bytes,
-        type: entry.type,
+        value,
+        bytes,
+        type: planned.type,
         grants,
         maxUses,
         used: 0,
         expiresAt,
       });
-      captureTokens.add(entry.token);
-      tokens.push(Object.freeze({ token: entry.token, type: entry.type }));
+      captureTokens.add(planned.token);
+      tokens.push(Object.freeze({ token: planned.token, type: planned.type }));
     }
     this.#retainedBytes += stagedBytes;
     // A capture that retained nothing has nothing to revoke; do not track it.
@@ -578,16 +326,15 @@ class InMemoryVault implements Vault {
       this.#captures.set(captureId, captureTokens);
       this.#expiry.push({ expiresAt, captureId, tokens: captureTokens });
     }
-    staged.clear();
 
     this.#audit({ operation: "capture", outcome: "committed", at, entries: tokens.length });
     return Object.freeze({
       captureId,
-      text,
+      text: plan.text,
       tokens: Object.freeze(tokens),
-      passedThrough,
-      passedThroughTypes: Object.freeze([...passedTypes].sort()),
-      unrestorable,
+      passedThrough: plan.passedThrough,
+      passedThroughTypes: plan.passedThroughTypes,
+      unrestorable: plan.unrestorable,
       expiresAt,
     });
   }
@@ -714,27 +461,9 @@ class InMemoryVault implements Vault {
     return Object.freeze({ fields: Object.freeze(out), restored: occurrences });
   }
 
-  #issueToken(staged: ReadonlySet<string>): string {
-    for (let attempt = 0; attempt < TOKEN_ATTEMPTS; attempt += 1) {
-      let token: string;
-      try {
-        token = newToken(this.#fill);
-      } catch {
-        throw new VaultError("TOKEN_GENERATION_FAILED");
-      }
-      if (!this.#entries.has(token) && !staged.has(token)) return token;
-    }
-    throw new VaultError("TOKEN_GENERATION_FAILED");
-  }
-
   #issueCaptureId(): string {
     for (let attempt = 0; attempt < TOKEN_ATTEMPTS; attempt += 1) {
-      let id: string;
-      try {
-        id = newCaptureId(this.#fill);
-      } catch {
-        throw new VaultError("TOKEN_GENERATION_FAILED");
-      }
+      const id = newCaptureIdFrom(this.#random);
       if (!this.#captures.has(id)) return id;
     }
     throw new VaultError("TOKEN_GENERATION_FAILED");

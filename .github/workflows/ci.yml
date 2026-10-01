@@ -28,6 +28,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run check:boundaries
+      - run: npm run check:persistence-boundaries
       - run: npm run check:links
       - name: Validate conformance corpus JSON
         run: node -e 'JSON.parse(require("fs").readFileSync("conformance/v1/corpus.json","utf8"))'
@@ -77,6 +78,77 @@ jobs:
         if: always()
         with:
           name: reports-node-${{ matrix.node }}-${{ matrix.os }}
+          path: .qualification/reports/
+          if-no-files-found: error
+
+  # Persistence packages (#4): contracts, crypto and the local key provider,
+  # the conformance harness, and the non-durable reference store. No database
+  # and no key service: these are the parts every runtime in the matrix runs.
+  persistence:
+    name: persistence node ${{ matrix.node }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run test:persistence
+
+  # @redact-secret/store-postgres against a real PostgreSQL server (#20): the
+  # shared Store conformance suite, including the two-connection schedules.
+  # The serving role is not a superuser and holds only the adapter's grants.
+  # Synthetic, runner-local password; nothing here is a credential.
+  postgres:
+    name: postgres ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: synthetic-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RSV_PG_ADMIN_URL: postgres://postgres:synthetic-ci-only@127.0.0.1:5432/postgres
+      RSV_PG_APP_URL: postgres://rsv_app:synthetic-ci-only@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create the serving role
+        run: node packages/store-postgres/scripts/create-app-role.mjs
+      - run: npm run test:postgres
+      # Packed tarballs in clean projects outside the repository: the base
+      # packages install no driver or SDK, and the persistent profile runs over
+      # the reference store and this PostgreSQL.
+      - run: npm run qualify:persistence
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: reports-persistence-postgres-${{ matrix.postgres }}
           path: .qualification/reports/
           if-no-files-found: error
 

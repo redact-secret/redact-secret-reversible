@@ -14,7 +14,7 @@ Use **current** only for implemented and verified behavior, **proposed** for a d
 
 ## Package boundaries
 
-The portable `vault` package may own in-memory mappings and final-application restoration but must not claim that browser code can authenticate another tenant or defend against compromised same-page scripts. The `vault-server` layer owns multi-principal source-to-sink authorization and all-or-nothing restore preflight; it may use memory or a qualified external store. A `store-*` package supplies a backend under the shared lifecycle and atomicity contract; it must not bypass server authorization. Keep browser bundles free of server-only and backend SDK dependencies.
+The portable `vault` package may own in-memory mappings and final-application restoration but must not claim that browser code can authenticate another tenant or defend against compromised same-page scripts. The `vault-server` layer owns multi-principal source-to-sink authorization and all-or-nothing restore preflight; it may use memory or a qualified external store. A `store-*` package supplies a backend under the shared lifecycle and atomicity contract; it must not bypass server authorization. A store holds ciphertext only: it never decrypts, holds a key, or evaluates policy. A `key-provider-*` package wraps data keys and never sees a payload. Only those two kinds of package may name a database driver or a key-service SDK ([specification](docs/specs/persistent-vault.md) §2). Keep browser bundles free of server-only and backend SDK dependencies.
 
 Npm names apply to JavaScript only. Maintain language-neutral security requirements and shared adversarial cases for future Python, Rust, and Go surfaces. Do not claim an unimplemented language is supported.
 

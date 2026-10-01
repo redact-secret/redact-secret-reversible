@@ -202,6 +202,12 @@ Error codes: `INVALID_ARGUMENT`, `UNSUPPORTED_RUNTIME`, `CORE_FAILURE`, `BLOCKED
 
 `WorkerVault`: `piiActivation` (`string | null`, read-only), `capture(input, options) → Promise<CaptureResult>` (`options` is `release`, `maxUses`, `unredacted`, `ruleset`, `pii` only — no `policy`, `eligible`, or `displayFormatter`), `restore(request) → Promise<RestoreResult>`, `revoke(captureId) → Promise<number>`, `stats() → Promise<VaultStats>`, `dispose() → Promise<void>`, and `terminate()` (synchronous; stops the Worker immediately).
 
+## Internal entry points
+
+`@redact-secret/vault/internal/capture-plan` exists for `@redact-secret/vault-server`, which pins the exact vault version it was built with. It is not a supported public API and has no stability guarantee: it can change or disappear in any release. It is exported under the `node` condition only and is not re-exported from the package root or the Worker entry points.
+
+The module holds the part of a capture that comes before anything is retained: argument validation, the core scan, the action gate, the PII allowlist, `eligible`, limits, token issuance, and output validation. It returns the redacted text and, for each retained finding, the token, the type, and the range of the finding in the input. It returns no retained value, since the caller slices the input it already holds, and it reads no vault. Tokens come from the platform CSPRNG inside the module; no caller supplies a random source.
+
 ## Security reports
 
 Report vulnerabilities privately through [GitHub security advisories](https://github.com/redact-secret/redact-secret-vault/security/advisories/new). Never include live credentials. See [SECURITY.md](https://github.com/redact-secret/redact-secret-vault/blob/main/SECURITY.md).

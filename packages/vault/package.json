@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/vault",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "Opt-in, bounded, in-memory vault that restores values redacted by @redact-secret/core into application-designated fields.",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,12 @@
     "./worker/host": {
       "types": "./dist/worker-host.d.ts",
       "import": "./dist/worker-host.js"
+    },
+    "./internal/capture-plan": {
+      "node": {
+        "types": "./dist/internal-capture-plan.d.ts",
+        "import": "./dist/internal-capture-plan.js"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -53,6 +59,6 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/sweep.test.mjs test/capture-output.test.mjs test/pii.test.mjs test/pii-core.test.mjs test/worker-pii.test.mjs test/worker-pii-core.test.mjs"
+    "test": "node --test test/sweep.test.mjs test/capture-output.test.mjs test/capture-plan.test.mjs test/pii.test.mjs test/pii-core.test.mjs test/worker-pii.test.mjs test/worker-pii-core.test.mjs"
   }
 }

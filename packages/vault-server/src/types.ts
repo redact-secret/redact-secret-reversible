@@ -98,9 +98,22 @@ export type ServerDenialReason =
   | "revoked" // explicit revocation, distinct from "unknown-token" (see below)
   | "stale-policy" // policy revision changed since issuance, for a policy that binds to one
   | "rate-limited" // consumer-defined quota or backpressure control
-  | "policy-evaluation-error"; // the policy threw, rejected, or timed out — always a denial, never allow
+  | "policy-evaluation-error" // the policy threw, rejected, or timed out — always a denial, never allow
+  // Persistent profile only (docs/specs/persistent-vault.md §8.3):
+  | "integrity-failure" // a stored record did not authenticate for the trusted scope
+  | "key-unavailable" // the key provider could not unwrap the capture's data key
+  | "attempt-mismatch" // the attempt identifier was already used for a different request
+  | "attempt-already-committed"; // the attempt already committed; its output is never sent again
 
-export type ServerAuditOperation = "resolve-principal" | "restore" | "revoke" | "policy-error";
+export type ServerAuditOperation =
+  | "resolve-principal"
+  | "restore"
+  | "revoke"
+  | "policy-error"
+  // Persistent profile only:
+  | "capture"
+  | "delete-ciphertext"
+  | "resolve-attempt";
 
 export interface ServerAuditEvent {
   readonly operation: ServerAuditOperation;
@@ -119,6 +132,10 @@ export interface ServerAuditEvent {
   readonly policyRevision?: string;
   /** Caller/transport correlation id. Opaque; never restored content. */
   readonly requestId?: string;
+  /** Persistent profile only: the opaque capture identifier of a lifecycle operation. */
+  readonly captureId?: string;
+  /** Persistent profile only: the opaque attempt identifier of a restore. */
+  readonly attemptId?: string;
 }
 
 export type ServerAuditHook = (event: Readonly<ServerAuditEvent>) => void;

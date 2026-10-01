@@ -1,0 +1,2950 @@
+{
+  "package": "@redact-secret/store-postgres",
+  "status": "passed",
+  "startedAt": "2026-10-01T18:41:07.726Z",
+  "wallClockMs": 395366,
+  "environment": {
+    "node": "v22.16.0",
+    "pg": "8.23.1",
+    "os": "Darwin 25.5.0",
+    "arch": "arm64",
+    "commit": "7ad981bb5a1baab561a8dc8ff905d0a71b9e7320",
+    "dirty": false,
+    "docker": "28.3.3",
+    "image": {
+      "name": "postgres:17",
+      "id": "sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+      "digests": "postgres@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f"
+    },
+    "database": "a postgres:17 container started by this run, default configuration except max_connections=300",
+    "postgres": {
+      "version": "17.11 (Debian 17.11-1.pgdg13+2)",
+      "versionString": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "settings": {
+        "default_transaction_isolation": "read committed",
+        "fsync": "on",
+        "full_page_writes": "on",
+        "log_parameter_max_length": "-1",
+        "log_parameter_max_length_on_error": "0",
+        "log_statement": "none",
+        "max_connections": "300",
+        "synchronous_commit": "on",
+        "synchronous_standby_names": "",
+        "wal_level": "replica",
+        "wal_sync_method": "fdatasync"
+      }
+    }
+  },
+  "cleanup": "none",
+  "totals": {
+    "passed": 295,
+    "failed": 0,
+    "skipped": 13
+  },
+  "wholeSuitesSkipped": [],
+  "suites": [
+    {
+      "id": "conformance",
+      "title": "Store conformance suite (shared harness), as the serving role",
+      "file": "test/conformance.test.mjs",
+      "passed": 205,
+      "failed": 0,
+      "skipped": 11,
+      "wallClockMs": 31764,
+      "tests": [
+        {
+          "name": "[database clock] capabilities: declares every capability a persistent server requires, within the contract's limits",
+          "status": "passed",
+          "durationMs": 68,
+          "suite": false
+        },
+        {
+          "name": "[database clock] capabilities: declares bounds large enough for this harness to exercise it",
+          "status": "passed",
+          "durationMs": 10,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: createCapture rejects each invalid input with STORE_INVALID_ARGUMENT and creates nothing",
+          "status": "passed",
+          "durationMs": 250,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: commitRestore rejects each invalid input with STORE_INVALID_ARGUMENT and changes nothing",
+          "status": "passed",
+          "durationMs": 469,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: revokeCapture and deleteCiphertext reject invalid inputs and change nothing",
+          "status": "passed",
+          "durationMs": 40,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: replaceCaptureKey rejects invalid inputs and changes nothing",
+          "status": "passed",
+          "durationMs": 44,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: reads and inspectAttempt reject invalid inputs",
+          "status": "passed",
+          "durationMs": 21,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: reads over a declared bound throw STORE_CAPABILITY",
+          "status": "passed",
+          "durationMs": 21,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: commitRestore over a declared bound throws STORE_CAPABILITY and changes nothing",
+          "status": "passed",
+          "durationMs": 45,
+          "suite": false
+        },
+        {
+          "name": "[database clock] validation: sweepExpired and the recovery operations reject invalid inputs",
+          "status": "passed",
+          "durationMs": 20,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: creates the capture and every entry with initial counters",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: a capture that is not session-bound has a null session tag",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: rejects exists for a live capture identifier and overwrites nothing",
+          "status": "passed",
+          "durationMs": 36,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: rejects exists when any entry identifier exists under another capture, creating nothing",
+          "status": "passed",
+          "durationMs": 40,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: rejects fenced for a revoked capture identifier",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: rejects clock-skew when the caller's now or createdAt is outside the bound, in both directions",
+          "status": "passed",
+          "durationMs": 47,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: accepts a now and a createdAt exactly at the skew bound",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 10,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: rejects quarantined for an uninitialized namespace, a quarantined one, and an epoch mismatch",
+          "status": "passed",
+          "durationMs": 44,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: the same identifiers in another tenant and another namespace are independent rows",
+          "status": "passed",
+          "durationMs": 27,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: throws STORE_CAPABILITY for more entries than maxCreateEntries, before any write",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: throws STORE_CAPABILITY for more bytes than maxCreateBytes, before any write",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[database clock] create: throws for an envelope over maxEnvelopeBytes, before any write",
+          "status": "passed",
+          "durationMs": 19,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: unknown identifiers are simply absent",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: returns the known entries of several captures, each capture once",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: returns an entry of a revoked capture, with the capture's state revoked",
+          "status": "passed",
+          "durationMs": 23,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: an entry whose ciphertext was deleted is absent, and its capture row holds no key",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: another tenant's identifiers return nothing",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: another namespace's identifiers return nothing",
+          "status": "passed",
+          "durationMs": 22,
+          "suite": false
+        },
+        {
+          "name": "[database clock] read: readEntries carries the recovery state of its snapshot",
+          "status": "passed",
+          "durationMs": 23,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: applies a use, bumps the lifecycle revision, and writes the receipt",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: consumes the aggregate occurrence count of an entry in one step",
+          "status": "passed",
+          "durationMs": 22,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: applies every use of a batch across entries and captures",
+          "status": "passed",
+          "durationMs": 45,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: rejects unknown for an absent capture, an absent entry, and an entry stated under another capture",
+          "status": "passed",
+          "durationMs": 83,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: rejects stale for a different lifecycleRevision, ciphertextRevision, or generation",
+          "status": "passed",
+          "durationMs": 87,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: accepts a budget exactly at maxUses and rejects one over",
+          "status": "passed",
+          "durationMs": 116,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: rejects expired for a capture already expired on the store's clock",
+          "status": "passed",
+          "durationMs": 46,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: judges expiry on the store's clock: live one millisecond before expiresAt, expired exactly at it",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 17,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: rejects clock-skew when the caller's now is outside the bound, and applies nothing",
+          "status": "passed",
+          "durationMs": 79,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: is all-or-nothing: a batch whose last use fails leaves the earlier entries untouched",
+          "status": "passed",
+          "durationMs": 149,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: is all-or-nothing across captures: a revoked last capture leaves the first capture's entries untouched",
+          "status": "passed",
+          "durationMs": 80,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: answers already-committed for the same attempt and digest, and changes nothing",
+          "status": "passed",
+          "durationMs": 96,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: answers attempt-mismatch for the same attempt with another digest, and changes nothing",
+          "status": "passed",
+          "durationMs": 47,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: evaluates quarantine first, then the receipt, then everything else",
+          "status": "passed",
+          "durationMs": 45,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: throws STORE_INVALID_ARGUMENT for a receipt that would expire before the latest capture, and applies nothing",
+          "status": "passed",
+          "durationMs": 57,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: an attempt identifier is unique per tenant, not across tenants",
+          "status": "passed",
+          "durationMs": 37,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: rejects revoked after a revocation, with the generation read before or after it",
+          "status": "passed",
+          "durationMs": 27,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: cannot reach another tenant's or another namespace's rows",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[database clock] commit: rejects quarantined for an uninitialized namespace and for an epoch that differs",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: revokes a live capture, increments its generation, and reports its entry count",
+          "status": "passed",
+          "durationMs": 20,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: answers already-revoked the second time and does not increment the generation again",
+          "status": "passed",
+          "durationMs": 23,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: answers not-found for an absent capture and writes nothing",
+          "status": "passed",
+          "durationMs": 21,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: writes a fence for an absent capture when fenceAbsent is set, and the fence blocks creation",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: a fence is scoped to its tenant",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: works in a quarantined namespace",
+          "status": "passed",
+          "durationMs": 31,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: cannot revoke another tenant's capture",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[database clock] revoke: does not depend on the caller's clock",
+          "status": "passed",
+          "durationMs": 19,
+          "suite": false
+        },
+        {
+          "name": "[database clock] inspect: reports absent before a commit and committed with the digest after it",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "[database clock] inspect: reports absent for an attempt whose commit was rejected",
+          "status": "passed",
+          "durationMs": 45,
+          "suite": false
+        },
+        {
+          "name": "[database clock] rekey: replaces the stored key under the expected keyRevision and changes nothing else",
+          "status": "passed",
+          "durationMs": 40,
+          "suite": false
+        },
+        {
+          "name": "[database clock] rekey: rejects stale for another keyRevision",
+          "status": "passed",
+          "durationMs": 42,
+          "suite": false
+        },
+        {
+          "name": "[database clock] rekey: rejects unknown for an absent capture and for another tenant's capture",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[database clock] rekey: refuses a revoked capture, an expired one, and one whose ciphertext was deleted",
+          "status": "passed",
+          "durationMs": 55,
+          "suite": false
+        },
+        {
+          "name": "[database clock] rekey: a restore prepared before the re-wrap still commits, and its use is kept",
+          "status": "passed",
+          "durationMs": 36,
+          "suite": false
+        },
+        {
+          "name": "[database clock] delete: refuses a live, unexpired capture and an absent one",
+          "status": "passed",
+          "durationMs": 46,
+          "suite": false
+        },
+        {
+          "name": "[database clock] delete: deletes a revoked capture's ciphertext whatever the clocks say",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[database clock] delete: deletes an expired capture's ciphertext and marks the capture revoked",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[database clock] delete: rejects clock-skew when the decision rests on expiry and the clocks disagree",
+          "status": "passed",
+          "durationMs": 42,
+          "suite": false
+        },
+        {
+          "name": "[database clock] delete: the tombstone remains, still fences creation, and its entries can no longer be committed",
+          "status": "passed",
+          "durationMs": 32,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: rejects clock-skew when the caller's now is outside the bound, and removes nothing",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: never removes an unexpired capture, its entries, a revoked capture's unexpired entries, or an unexpired receipt",
+          "status": "passed",
+          "durationMs": 53,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: removes the entries and the row of an expired capture, and nothing of a live one",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: removes at most limit rows per kind and reports more until nothing is left",
+          "status": "passed",
+          "durationMs": 40,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: is scoped to its namespace",
+          "status": "passed",
+          "durationMs": 23,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: keeps a receipt until receiptExpiresAt, and a replay of the swept attempt is denied",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 8,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: an expired capture is denied at commit whether or not it was swept",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 7,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: keeps a revocation tombstone until the capture's expiry plus retention, and it fences creation meanwhile",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 9,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: keeps the tombstone of a capture revoked after its expiry for retention past the revocation",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 7,
+          "suite": false
+        },
+        {
+          "name": "[database clock] sweep: keeps a fence for its retention",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 8,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: a namespace is uninitialized until initializeNamespace, which refuses a second call",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: initializeNamespace refuses a namespace that already holds a row",
+          "status": "passed",
+          "durationMs": 22,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: quarantine does not create a record",
+          "status": "passed",
+          "durationMs": 17,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: quarantine blocks create and commit, and revocation still works",
+          "status": "passed",
+          "durationMs": 42,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: invalidateRecovered refuses an epoch that is not greater and an uninitialized namespace",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: invalidateRecovered raises the epoch and returns a quarantined namespace to serving",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: every capture of an earlier epoch is treated as revoked by every operation",
+          "status": "passed",
+          "durationMs": 45,
+          "suite": false
+        },
+        {
+          "name": "[database clock] recovery: captures under the new epoch work, and the old epoch no longer does",
+          "status": "passed",
+          "durationMs": 42,
+          "suite": false
+        },
+        {
+          "name": "[database clock] aliasing: a caller that changes its buffers after createCapture does not change the store",
+          "status": "passed",
+          "durationMs": 20,
+          "suite": false
+        },
+        {
+          "name": "[database clock] aliasing: a caller that changes returned buffers does not change the store",
+          "status": "passed",
+          "durationMs": 27,
+          "suite": false
+        },
+        {
+          "name": "[database clock] aliasing: a caller that changes its digest or key buffers after the call does not change the store",
+          "status": "passed",
+          "durationMs": 41,
+          "suite": false
+        },
+        {
+          "name": "[database clock] concurrency: parallel restores of one single-use entry: exactly one commits",
+          "status": "passed",
+          "durationMs": 388,
+          "suite": false
+        },
+        {
+          "name": "[database clock] concurrency: parallel restores of one entry with maxUses 7, retried on stale: exactly seven commit",
+          "status": "passed",
+          "durationMs": 876,
+          "suite": false
+        },
+        {
+          "name": "[database clock] concurrency: parallel restores racing one revocation are consistent with a single order",
+          "status": "passed",
+          "durationMs": 737,
+          "suite": false
+        },
+        {
+          "name": "[database clock] concurrency: parallel identical attempts: one commits, the others are already-committed, used moves once",
+          "status": "passed",
+          "durationMs": 120,
+          "suite": false
+        },
+        {
+          "name": "[database clock] concurrency: a creation racing a fence of the same identifier: created then revoked, or fenced",
+          "status": "passed",
+          "durationMs": 472,
+          "suite": false
+        },
+        {
+          "name": "[database clock] concurrency: multi-entry restores under contention never apply part of a batch",
+          "status": "passed",
+          "durationMs": 2833,
+          "suite": false
+        },
+        {
+          "name": "[database clock] interleave: a revocation committed between a restore's read and its commit: the restore does not commit",
+          "status": "passed",
+          "durationMs": 466,
+          "suite": false
+        },
+        {
+          "name": "[database clock] interleave: a quarantine committed between a creation's check and its commit: the creation does not succeed",
+          "status": "passed",
+          "durationMs": 426,
+          "suite": false
+        },
+        {
+          "name": "[database clock] interleave: a quarantine committed between a restore's read and its commit: the restore does not commit",
+          "status": "passed",
+          "durationMs": 428,
+          "suite": false
+        },
+        {
+          "name": "[database clock] interleave: an invalidation committed between a restore's read and its commit: the restore does not commit",
+          "status": "passed",
+          "durationMs": 440,
+          "suite": false
+        },
+        {
+          "name": "[database clock] interleave: a fence committed between a creation's check and its commit: the creation does not succeed",
+          "status": "passed",
+          "durationMs": 426,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 1 matches the reference model",
+          "status": "passed",
+          "durationMs": 668,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 2 matches the reference model",
+          "status": "passed",
+          "durationMs": 669,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 3 matches the reference model",
+          "status": "passed",
+          "durationMs": 823,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 4 matches the reference model",
+          "status": "passed",
+          "durationMs": 837,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 1 with time travel matches the reference model",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 8,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 2 with time travel matches the reference model",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 9,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 3 with time travel matches the reference model",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 9,
+          "suite": false
+        },
+        {
+          "name": "[database clock] model: random operation sequence 4 with time travel matches the reference model",
+          "status": "skipped",
+          "reason": "the factory supplies no controllable store clock (clock: null)",
+          "durationMs": 11,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] capabilities: declares every capability a persistent server requires, within the contract's limits",
+          "status": "passed",
+          "durationMs": 13,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] capabilities: declares bounds large enough for this harness to exercise it",
+          "status": "passed",
+          "durationMs": 9,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: createCapture rejects each invalid input with STORE_INVALID_ARGUMENT and creates nothing",
+          "status": "passed",
+          "durationMs": 185,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: commitRestore rejects each invalid input with STORE_INVALID_ARGUMENT and changes nothing",
+          "status": "passed",
+          "durationMs": 421,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: revokeCapture and deleteCiphertext reject invalid inputs and change nothing",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: replaceCaptureKey rejects invalid inputs and changes nothing",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: reads and inspectAttempt reject invalid inputs",
+          "status": "passed",
+          "durationMs": 11,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: reads over a declared bound throw STORE_CAPABILITY",
+          "status": "passed",
+          "durationMs": 12,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: commitRestore over a declared bound throws STORE_CAPABILITY and changes nothing",
+          "status": "passed",
+          "durationMs": 43,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] validation: sweepExpired and the recovery operations reject invalid inputs",
+          "status": "passed",
+          "durationMs": 19,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: creates the capture and every entry with initial counters",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: a capture that is not session-bound has a null session tag",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: rejects exists for a live capture identifier and overwrites nothing",
+          "status": "passed",
+          "durationMs": 31,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: rejects exists when any entry identifier exists under another capture, creating nothing",
+          "status": "passed",
+          "durationMs": 36,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: rejects fenced for a revoked capture identifier",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: rejects clock-skew when the caller's now or createdAt is outside the bound, in both directions",
+          "status": "passed",
+          "durationMs": 37,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: accepts a now and a createdAt exactly at the skew bound",
+          "status": "passed",
+          "durationMs": 17,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: rejects quarantined for an uninitialized namespace, a quarantined one, and an epoch mismatch",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: the same identifiers in another tenant and another namespace are independent rows",
+          "status": "passed",
+          "durationMs": 30,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: throws STORE_CAPABILITY for more entries than maxCreateEntries, before any write",
+          "status": "passed",
+          "durationMs": 22,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: throws STORE_CAPABILITY for more bytes than maxCreateBytes, before any write",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] create: throws for an envelope over maxEnvelopeBytes, before any write",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: unknown identifiers are simply absent",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: returns the known entries of several captures, each capture once",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: returns an entry of a revoked capture, with the capture's state revoked",
+          "status": "passed",
+          "durationMs": 27,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: an entry whose ciphertext was deleted is absent, and its capture row holds no key",
+          "status": "passed",
+          "durationMs": 30,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: another tenant's identifiers return nothing",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: another namespace's identifiers return nothing",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] read: readEntries carries the recovery state of its snapshot",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: applies a use, bumps the lifecycle revision, and writes the receipt",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: consumes the aggregate occurrence count of an entry in one step",
+          "status": "passed",
+          "durationMs": 38,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: applies every use of a batch across entries and captures",
+          "status": "passed",
+          "durationMs": 38,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: rejects unknown for an absent capture, an absent entry, and an entry stated under another capture",
+          "status": "passed",
+          "durationMs": 62,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: rejects stale for a different lifecycleRevision, ciphertextRevision, or generation",
+          "status": "passed",
+          "durationMs": 52,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: accepts a budget exactly at maxUses and rejects one over",
+          "status": "passed",
+          "durationMs": 58,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: rejects expired for a capture already expired on the store's clock",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: judges expiry on the store's clock: live one millisecond before expiresAt, expired exactly at it",
+          "status": "passed",
+          "durationMs": 52,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: rejects clock-skew when the caller's now is outside the bound, and applies nothing",
+          "status": "passed",
+          "durationMs": 32,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: is all-or-nothing: a batch whose last use fails leaves the earlier entries untouched",
+          "status": "passed",
+          "durationMs": 85,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: is all-or-nothing across captures: a revoked last capture leaves the first capture's entries untouched",
+          "status": "passed",
+          "durationMs": 61,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: answers already-committed for the same attempt and digest, and changes nothing",
+          "status": "passed",
+          "durationMs": 53,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: answers attempt-mismatch for the same attempt with another digest, and changes nothing",
+          "status": "passed",
+          "durationMs": 51,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: evaluates quarantine first, then the receipt, then everything else",
+          "status": "passed",
+          "durationMs": 45,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: throws STORE_INVALID_ARGUMENT for a receipt that would expire before the latest capture, and applies nothing",
+          "status": "passed",
+          "durationMs": 59,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: an attempt identifier is unique per tenant, not across tenants",
+          "status": "passed",
+          "durationMs": 34,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: rejects revoked after a revocation, with the generation read before or after it",
+          "status": "passed",
+          "durationMs": 33,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: cannot reach another tenant's or another namespace's rows",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] commit: rejects quarantined for an uninitialized namespace and for an epoch that differs",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: revokes a live capture, increments its generation, and reports its entry count",
+          "status": "passed",
+          "durationMs": 30,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: answers already-revoked the second time and does not increment the generation again",
+          "status": "passed",
+          "durationMs": 31,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: answers not-found for an absent capture and writes nothing",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: writes a fence for an absent capture when fenceAbsent is set, and the fence blocks creation",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: a fence is scoped to its tenant",
+          "status": "passed",
+          "durationMs": 19,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: works in a quarantined namespace",
+          "status": "passed",
+          "durationMs": 31,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: cannot revoke another tenant's capture",
+          "status": "passed",
+          "durationMs": 23,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] revoke: does not depend on the caller's clock",
+          "status": "passed",
+          "durationMs": 17,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] inspect: reports absent before a commit and committed with the digest after it",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] inspect: reports absent for an attempt whose commit was rejected",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] rekey: replaces the stored key under the expected keyRevision and changes nothing else",
+          "status": "passed",
+          "durationMs": 38,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] rekey: rejects stale for another keyRevision",
+          "status": "passed",
+          "durationMs": 49,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] rekey: rejects unknown for an absent capture and for another tenant's capture",
+          "status": "passed",
+          "durationMs": 23,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] rekey: refuses a revoked capture, an expired one, and one whose ciphertext was deleted",
+          "status": "passed",
+          "durationMs": 51,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] rekey: a restore prepared before the re-wrap still commits, and its use is kept",
+          "status": "passed",
+          "durationMs": 38,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] delete: refuses a live, unexpired capture and an absent one",
+          "status": "passed",
+          "durationMs": 46,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] delete: deletes a revoked capture's ciphertext whatever the clocks say",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] delete: deletes an expired capture's ciphertext and marks the capture revoked",
+          "status": "passed",
+          "durationMs": 22,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] delete: rejects clock-skew when the decision rests on expiry and the clocks disagree",
+          "status": "passed",
+          "durationMs": 34,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] delete: the tombstone remains, still fences creation, and its entries can no longer be committed",
+          "status": "passed",
+          "durationMs": 38,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: rejects clock-skew when the caller's now is outside the bound, and removes nothing",
+          "status": "passed",
+          "durationMs": 26,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: never removes an unexpired capture, its entries, a revoked capture's unexpired entries, or an unexpired receipt",
+          "status": "passed",
+          "durationMs": 54,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: removes the entries and the row of an expired capture, and nothing of a live one",
+          "status": "passed",
+          "durationMs": 30,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: removes at most limit rows per kind and reports more until nothing is left",
+          "status": "passed",
+          "durationMs": 43,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: is scoped to its namespace",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: keeps a receipt until receiptExpiresAt, and a replay of the swept attempt is denied",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: an expired capture is denied at commit whether or not it was swept",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: keeps a revocation tombstone until the capture's expiry plus retention, and it fences creation meanwhile",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: keeps the tombstone of a capture revoked after its expiry for retention past the revocation",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] sweep: keeps a fence for its retention",
+          "status": "passed",
+          "durationMs": 34,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: a namespace is uninitialized until initializeNamespace, which refuses a second call",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: initializeNamespace refuses a namespace that already holds a row",
+          "status": "passed",
+          "durationMs": 20,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: quarantine does not create a record",
+          "status": "passed",
+          "durationMs": 16,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: quarantine blocks create and commit, and revocation still works",
+          "status": "passed",
+          "durationMs": 41,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: invalidateRecovered refuses an epoch that is not greater and an uninitialized namespace",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: invalidateRecovered raises the epoch and returns a quarantined namespace to serving",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: every capture of an earlier epoch is treated as revoked by every operation",
+          "status": "passed",
+          "durationMs": 52,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] recovery: captures under the new epoch work, and the old epoch no longer does",
+          "status": "passed",
+          "durationMs": 41,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] aliasing: a caller that changes its buffers after createCapture does not change the store",
+          "status": "passed",
+          "durationMs": 19,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] aliasing: a caller that changes returned buffers does not change the store",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] aliasing: a caller that changes its digest or key buffers after the call does not change the store",
+          "status": "passed",
+          "durationMs": 33,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] concurrency: parallel restores of one single-use entry: exactly one commits",
+          "status": "passed",
+          "durationMs": 360,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] concurrency: parallel restores of one entry with maxUses 7, retried on stale: exactly seven commit",
+          "status": "passed",
+          "durationMs": 823,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] concurrency: parallel restores racing one revocation are consistent with a single order",
+          "status": "passed",
+          "durationMs": 725,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] concurrency: parallel identical attempts: one commits, the others are already-committed, used moves once",
+          "status": "passed",
+          "durationMs": 127,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] concurrency: a creation racing a fence of the same identifier: created then revoked, or fenced",
+          "status": "passed",
+          "durationMs": 467,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] concurrency: multi-entry restores under contention never apply part of a batch",
+          "status": "passed",
+          "durationMs": 3104,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] interleave: a revocation committed between a restore's read and its commit: the restore does not commit",
+          "status": "passed",
+          "durationMs": 475,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] interleave: a quarantine committed between a creation's check and its commit: the creation does not succeed",
+          "status": "passed",
+          "durationMs": 428,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] interleave: a quarantine committed between a restore's read and its commit: the restore does not commit",
+          "status": "passed",
+          "durationMs": 430,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] interleave: an invalidation committed between a restore's read and its commit: the restore does not commit",
+          "status": "passed",
+          "durationMs": 428,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] interleave: a fence committed between a creation's check and its commit: the creation does not succeed",
+          "status": "passed",
+          "durationMs": 426,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 1 matches the reference model",
+          "status": "passed",
+          "durationMs": 595,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 2 matches the reference model",
+          "status": "passed",
+          "durationMs": 690,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 3 matches the reference model",
+          "status": "passed",
+          "durationMs": 722,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 4 matches the reference model",
+          "status": "passed",
+          "durationMs": 673,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 1 with time travel matches the reference model",
+          "status": "passed",
+          "durationMs": 833,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 2 with time travel matches the reference model",
+          "status": "passed",
+          "durationMs": 911,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 3 with time travel matches the reference model",
+          "status": "passed",
+          "durationMs": 774,
+          "suite": false
+        },
+        {
+          "name": "[controlled clock] model: random operation sequence 4 with time travel matches the reference model",
+          "status": "passed",
+          "durationMs": 782,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "A",
+      "title": "Two independent server processes",
+      "file": "test/two-process.test.mjs",
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 7034,
+      "tests": [
+        {
+          "name": "a capture made in process A is restored in process B",
+          "status": "passed",
+          "durationMs": 40,
+          "suite": false
+        },
+        {
+          "name": "100 concurrent restores of a single-use token, split across both processes: exactly one returns the value",
+          "status": "passed",
+          "durationMs": 319,
+          "suite": false
+        },
+        {
+          "name": "a token repeated across fields consumes one use per occurrence, in one commit",
+          "status": "passed",
+          "durationMs": 39,
+          "suite": false
+        },
+        {
+          "name": "a multi-entry request with one over-budget entry consumes nothing",
+          "status": "passed",
+          "durationMs": 22,
+          "suite": false
+        },
+        {
+          "name": "a three-entry restore racing a one-entry restore from the other process never applies partially",
+          "status": "passed",
+          "durationMs": 964,
+          "suite": false
+        },
+        {
+          "name": "restore racing revoke across processes is linearizable",
+          "status": "passed",
+          "durationMs": 2363,
+          "suite": false
+        },
+        {
+          "name": "a creation racing a fence of the same capture identifier across processes: one order or the other, always revoked",
+          "status": "passed",
+          "durationMs": 658,
+          "suite": false
+        },
+        {
+          "name": "the same attempt submitted by both processes commits once",
+          "status": "passed",
+          "durationMs": 1391,
+          "suite": false
+        },
+        {
+          "name": "an attempt identifier reused for a different request is a mismatch and consumes nothing",
+          "status": "passed",
+          "durationMs": 32,
+          "suite": false
+        },
+        {
+          "name": "kill -9 after the commit, before the reply: the use is spent, the receipt says committed, and the value is not available again",
+          "status": "passed",
+          "durationMs": 217,
+          "suite": false
+        },
+        {
+          "name": "tenants are isolated across processes",
+          "status": "passed",
+          "durationMs": 36,
+          "suite": false
+        },
+        {
+          "name": "envelopes swapped between two entries of one capture",
+          "status": "passed",
+          "durationMs": 19,
+          "suite": false
+        },
+        {
+          "name": "an envelope, and then the whole record, moved from another tenant",
+          "status": "passed",
+          "durationMs": 46,
+          "suite": false
+        },
+        {
+          "name": "expires_at extended",
+          "status": "passed",
+          "durationMs": 20,
+          "suite": false
+        },
+        {
+          "name": "max_uses raised on an exhausted entry",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "session_tag removed from a session-bound capture, and a foreign tag installed",
+          "status": "passed",
+          "durationMs": 61,
+          "suite": false
+        },
+        {
+          "name": "wrapped_key swapped between two captures",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "documented limit: a database writer who resets `used` to 0 makes a consumed value restorable again",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "after both processes restart, a capture is still restorable and its consumed uses stay consumed",
+          "status": "passed",
+          "durationMs": 357,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "B",
+      "title": "Failure around commit",
+      "file": "test/commit-failure.test.mjs",
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 5918,
+      "tests": [
+        {
+          "name": "a statement fails before it is sent, before COMMIT: STORE_UNAVAILABLE, nothing applied, and the attempt can be retried",
+          "status": "passed",
+          "durationMs": 204,
+          "suite": false
+        },
+        {
+          "name": "the applying UPDATE runs and the client then fails, before COMMIT: STORE_UNAVAILABLE, rolled back",
+          "status": "passed",
+          "durationMs": 67,
+          "suite": false
+        },
+        {
+          "name": "COMMIT is sent and succeeds, then the acknowledgement is lost: STORE_AMBIGUOUS, and inspectAttempt reports the truth",
+          "status": "passed",
+          "durationMs": 357,
+          "suite": false
+        },
+        {
+          "name": "the COMMIT call fails without reaching the server: still STORE_AMBIGUOUS, and inspectAttempt reports absent",
+          "status": "passed",
+          "durationMs": 242,
+          "suite": false
+        },
+        {
+          "name": "the socket is destroyed in the middle of the transaction: STORE_UNAVAILABLE, nothing applied, and the pool recovers",
+          "status": "passed",
+          "durationMs": 238,
+          "suite": false
+        },
+        {
+          "name": "pg_terminate_backend while the transaction waits for a row lock, before commit: STORE_UNAVAILABLE, nothing applied",
+          "status": "passed",
+          "durationMs": 38,
+          "suite": false
+        },
+        {
+          "name": "pg_terminate_backend after the last statement and before COMMIT is sent: STORE_AMBIGUOUS, and the truth is absent",
+          "status": "passed",
+          "durationMs": 217,
+          "suite": false
+        },
+        {
+          "name": "statement timeout while blocked: STORE_UNAVAILABLE and no partial application",
+          "status": "passed",
+          "durationMs": 330,
+          "suite": false
+        },
+        {
+          "name": "lock timeout: rejected `stale` and no partial application",
+          "status": "passed",
+          "durationMs": 319,
+          "suite": false
+        },
+        {
+          "name": "cancellation through AbortSignal before commit: STORE_UNAVAILABLE and nothing applied",
+          "status": "passed",
+          "durationMs": 224,
+          "suite": false
+        },
+        {
+          "name": "COMMIT reaches the server and the response never reaches the client: STORE_AMBIGUOUS, committed, and exactly one COMMIT on the wire",
+          "status": "passed",
+          "durationMs": 656,
+          "suite": false
+        },
+        {
+          "name": "the connection is lost as COMMIT is written, before the server receives it: STORE_AMBIGUOUS, not committed, one COMMIT attempted",
+          "status": "passed",
+          "durationMs": 573,
+          "suite": false
+        },
+        {
+          "name": "a failure before COMMIT is STORE_UNAVAILABLE with no fields, nothing is consumed, and the same attempt then succeeds",
+          "status": "passed",
+          "durationMs": 66,
+          "suite": false
+        },
+        {
+          "name": "a lost acknowledgement is COMMIT_AMBIGUOUS with the attempt identifier and no fields; resolveAttempt reports committed",
+          "status": "passed",
+          "durationMs": 384,
+          "suite": false
+        },
+        {
+          "name": "through the TCP proxy: COMMIT_AMBIGUOUS in both directions, one COMMIT on the wire, and resolveAttempt tells them apart",
+          "status": "passed",
+          "durationMs": 1110,
+          "suite": false
+        },
+        {
+          "name": "the server's store deadline passes while the commit waits for a lock: COMMIT_AMBIGUOUS, and the cancelled transaction applies nothing afterwards",
+          "status": "passed",
+          "durationMs": 445,
+          "suite": false
+        },
+        {
+          "name": "an ambiguous capture creation leaves a revoked capture: the server fences the identifier it issued",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        },
+        {
+          "name": "errors the adapter throws are StoreError instances only",
+          "status": "passed",
+          "durationMs": 65,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "probes",
+      "title": "Adapter probes",
+      "file": "test/adapter-probes.test.mjs",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 2216,
+      "tests": [
+        {
+          "name": "the receipt is claimed first: 60 identical attempts over two pools commit once, and a failed claimant frees the attempt",
+          "status": "passed",
+          "durationMs": 166,
+          "suite": false
+        },
+        {
+          "name": "revokeCapture waits for a commit that holds the capture, and reports STORE_UNAVAILABLE, not success, when it cannot get the lock",
+          "status": "passed",
+          "durationMs": 331,
+          "suite": false
+        },
+        {
+          "name": "an exhausted pool is STORE_UNAVAILABLE and applies nothing",
+          "status": "passed",
+          "durationMs": 436,
+          "suite": false
+        },
+        {
+          "name": "a pool whose driver parses bigint as BigInt, or as a number, still works",
+          "status": "passed",
+          "durationMs": 67,
+          "suite": false
+        },
+        {
+          "name": "a missing namespace record fails closed, and cannot be recreated over existing rows",
+          "status": "passed",
+          "durationMs": 35,
+          "suite": false
+        },
+        {
+          "name": "acknowledgeIdentityChange never lifts an operator's quarantine, never changes the epoch, and is a no-op on an unchanged database",
+          "status": "passed",
+          "durationMs": 60,
+          "suite": false
+        },
+        {
+          "name": "a connection is returned to the pool clean after every kind of aborted transaction",
+          "status": "passed",
+          "durationMs": 485,
+          "suite": false
+        },
+        {
+          "name": "the per-transaction settings override a weaker session default and do not outlive the transaction",
+          "status": "passed",
+          "durationMs": 30,
+          "suite": false
+        },
+        {
+          "name": "a connection that fails while the adapter holds it, between two statements, does not become an uncaught exception",
+          "status": "passed",
+          "durationMs": 437,
+          "suite": false
+        },
+        {
+          "name": "attempt identifiers are scoped by tenant and namespace",
+          "status": "passed",
+          "durationMs": 24,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "F",
+      "title": "Least privilege and migrations",
+      "file": "test/least-privilege.test.mjs",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 656,
+      "tests": [
+        {
+          "name": "the serving role is not a superuser and holds exactly the privileges of grantStatements",
+          "status": "passed",
+          "durationMs": 29,
+          "suite": false
+        },
+        {
+          "name": "the serving role cannot TRUNCATE, DROP, or ALTER the tables, create objects, read pg_authid, or weaken its session",
+          "status": "passed",
+          "durationMs": 140,
+          "suite": false
+        },
+        {
+          "name": "the serving role cannot run migrations",
+          "status": "passed",
+          "durationMs": 12,
+          "suite": false
+        },
+        {
+          "name": "migrations are idempotent and never rewrite stored state",
+          "status": "passed",
+          "durationMs": 76,
+          "suite": false
+        },
+        {
+          "name": "two processes migrating the same new schema at once both succeed",
+          "status": "passed",
+          "durationMs": 216,
+          "suite": false
+        },
+        {
+          "name": "migrations are forward-only: there is no down migration, and a store refuses a schema version it was not built for",
+          "status": "passed",
+          "durationMs": 59,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "G",
+      "title": "Cleanup under concurrency",
+      "file": "test/sweep-concurrency.test.mjs",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 1559,
+      "tests": [
+        {
+          "name": "a sweeper running throughout never removes a live row and never changes which restores succeed",
+          "status": "passed",
+          "durationMs": 1299,
+          "suite": false
+        },
+        {
+          "name": "a receipt outlives its capture by the skew bound and the configured grace, and a tombstone by its retention",
+          "status": "passed",
+          "durationMs": 99,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "H",
+      "title": "Diagnostics hygiene (adapter and server)",
+      "file": "test/diagnostics.test.mjs",
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 390,
+      "tests": [
+        {
+          "name": "a unique violation whose DETAIL carries the key value",
+          "status": "passed",
+          "durationMs": 25,
+          "suite": false
+        },
+        {
+          "name": "a check violation whose DETAIL prints the failing row, envelope included",
+          "status": "passed",
+          "durationMs": 14,
+          "suite": false
+        },
+        {
+          "name": "exceptions that quote an envelope and a wrapped key in their message, detail, and hint",
+          "status": "passed",
+          "durationMs": 41,
+          "suite": false
+        },
+        {
+          "name": "connection failures: no host, port, user, password, or connection string",
+          "status": "passed",
+          "durationMs": 28,
+          "suite": false
+        },
+        {
+          "name": "through the server: errors and audit events carry no driver text, stored bytes, or value",
+          "status": "passed",
+          "durationMs": 61,
+          "suite": false
+        },
+        {
+          "name": "pg_stat_activity shows the statement text with placeholders, not the bound envelope bytes",
+          "status": "passed",
+          "durationMs": 16,
+          "suite": false
+        },
+        {
+          "name": "nothing was written to the console",
+          "status": "passed",
+          "durationMs": 1,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "outside",
+      "title": "Findings outside this package, pinned down",
+      "file": "test/outside-findings.test.mjs",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 2,
+      "wallClockMs": 238,
+      "tests": [
+        {
+          "name": "vault-server: a configuration it accepts (24 h captures, 24 h receipt grace) makes every restore fail INVARIANT_VIOLATION; nothing is consumed",
+          "status": "passed",
+          "durationMs": 43,
+          "suite": false
+        },
+        {
+          "name": "vault-server: should refuse that configuration at creation, or cap the receipt lifetime at the store's 48-hour horizon",
+          "status": "skipped",
+          "reason": "defect in @redact-secret/vault-server (packages/vault-server/src/persistent/server.ts, receiptGraceMs bound); this package may not change it",
+          "durationMs": 0,
+          "suite": false
+        },
+        {
+          "name": "vault-server: replaying a committed attempt on a single-use entry is denied `budget`, not `attempt-already-committed`",
+          "status": "passed",
+          "durationMs": 27,
+          "suite": false
+        },
+        {
+          "name": "vault-server: a replay of a committed attempt should be denied `attempt-already-committed` whatever the budget",
+          "status": "skipped",
+          "reason": "specification §7.2 and §7.3 disagree for an exhausted entry, and the server follows §7.2; this package may not change either",
+          "durationMs": 0,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "packed",
+      "title": "Packed artifact in a clean consumer project",
+      "file": "qualification/scenarios/packed.scenario.mjs",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 2557,
+      "tests": [
+        {
+          "name": "the tarball holds only the build output, and a consumer outside the workspace can use it",
+          "status": "passed",
+          "durationMs": 2433,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "C",
+      "title": "Database restart and crash recovery",
+      "file": "qualification/scenarios/restart.scenario.mjs",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 11781,
+      "tests": [
+        {
+          "name": "the durability settings in effect are the qualified ones",
+          "status": "passed",
+          "durationMs": 18,
+          "suite": false
+        },
+        {
+          "name": "docker restart between capture and restore: the capture is still restorable, once",
+          "status": "passed",
+          "durationMs": 948,
+          "suite": false
+        },
+        {
+          "name": "docker kill (SIGKILL), then start: crash recovery, immediately after acknowledged commits: consumption, revocation, receipt, and fence all survive",
+          "status": "passed",
+          "durationMs": 1324,
+          "suite": false
+        },
+        {
+          "name": "docker restart, immediately after acknowledged commits: consumption, revocation, receipt, and fence all survive",
+          "status": "passed",
+          "durationMs": 1246,
+          "suite": false
+        },
+        {
+          "name": "docker kill (SIGKILL), then start: crash recovery, second round, immediately after acknowledged commits: consumption, revocation, receipt, and fence all survive",
+          "status": "passed",
+          "durationMs": 1845,
+          "suite": false
+        },
+        {
+          "name": "a store opened while the server is down fails closed, and works once it is back",
+          "status": "passed",
+          "durationMs": 1376,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "D",
+      "title": "Failover: synchronous standby, and the asynchronous negative control",
+      "file": "qualification/scenarios/failover.scenario.mjs",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 290754,
+      "tests": [
+        {
+          "name": "requireSynchronousStandby refuses a primary without a synchronous standby, and starts once one is configured",
+          "status": "passed",
+          "durationMs": 1026,
+          "suite": false
+        },
+        {
+          "name": "a store that requires a synchronous standby stops serving when the setting is removed while it runs",
+          "status": "passed",
+          "durationMs": 1331,
+          "suite": false
+        },
+        {
+          "name": "a store pointed at the standby refuses to serve: STORE_CAPABILITY at creation, STORE_UNAVAILABLE per transaction",
+          "status": "passed",
+          "durationMs": 49,
+          "suite": false
+        },
+        {
+          "name": "a commit is not acknowledged while the synchronous standby is down, even from a session whose default is synchronous_commit=off",
+          "status": "passed",
+          "durationMs": 5116,
+          "suite": false
+        },
+        {
+          "name": "a commit acknowledged on the primary is on the standby after the primary is hard-killed and the standby promoted; the namespace reads quarantined at once",
+          "status": "passed",
+          "durationMs": 4031,
+          "suite": false
+        },
+        {
+          "name": "after acknowledgeIdentityChange on the promoted synchronous standby, consumed stays consumed, revoked stays revoked, and untouched captures restore",
+          "status": "passed",
+          "durationMs": 104,
+          "suite": false
+        },
+        {
+          "name": "the primary acknowledges commits the stopped standby never received; the standby is then promoted",
+          "status": "passed",
+          "durationMs": 2925,
+          "suite": false
+        },
+        {
+          "name": "WRONG: acknowledgeIdentityChange on the stale node makes a consumed token consumable again and a revoked capture usable",
+          "status": "passed",
+          "durationMs": 59,
+          "suite": false
+        },
+        {
+          "name": "RUNBOOK: quarantine, raise the epoch, invalidateRecovered: every recovered capture is unusable",
+          "status": "passed",
+          "durationMs": 75,
+          "suite": false
+        },
+        {
+          "name": "measurement: how long pg_control_checkpoint() kept reporting the old timeline after promotion",
+          "status": "passed",
+          "durationMs": 260626,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "E",
+      "title": "Restore from backup (negative control)",
+      "file": "qualification/scenarios/backup.scenario.mjs",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 21416,
+      "tests": [
+        {
+          "name": "backups are taken before a consumption and a revocation",
+          "status": "passed",
+          "durationMs": 1494,
+          "suite": false
+        },
+        {
+          "name": "pg_dump restored into a fresh cluster: detected (system identifier), and the runbook invalidates every recovered capture",
+          "status": "passed",
+          "durationMs": 4001,
+          "suite": false
+        },
+        {
+          "name": "pg_dump restored into the SAME cluster: NOT detected; an old-epoch server serves stale state, and only the raised epoch and the runbook protect",
+          "status": "passed",
+          "durationMs": 1117,
+          "suite": false
+        },
+        {
+          "name": "base backup with point-in-time recovery to before the consumption: detected (timeline), and the runbook invalidates every recovered capture",
+          "status": "passed",
+          "durationMs": 1491,
+          "suite": false
+        },
+        {
+          "name": "base backup started as a plain copy, without recovery configuration: NOT detected; the raised epoch and the runbook protect",
+          "status": "passed",
+          "durationMs": 2248,
+          "suite": false
+        },
+        {
+          "name": "the restore-detection matrix",
+          "status": "passed",
+          "durationMs": 0,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "H-log",
+      "title": "What the PostgreSQL server log contains",
+      "file": "qualification/scenarios/server-log.scenario.mjs",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "wallClockMs": 12080,
+      "tests": [
+        {
+          "name": "default logging: no statement or parameter is logged for successful calls; a failing statement is logged with its row DETAIL",
+          "status": "passed",
+          "durationMs": 839,
+          "suite": false
+        },
+        {
+          "name": "log_statement=all: every bound parameter is in the server log, including envelopes and wrapped keys, never a plaintext value",
+          "status": "passed",
+          "durationMs": 2279,
+          "suite": false
+        },
+        {
+          "name": "log_statement=all with log_parameter_max_length=0: statements are logged without their parameters",
+          "status": "passed",
+          "durationMs": 2428,
+          "suite": false
+        }
+      ],
+      "status": "passed"
+    }
+  ],
+  "evidence": [
+    {
+      "scenario": "A",
+      "name": "processes",
+      "pids": 2,
+      "distinct": true
+    },
+    {
+      "scenario": "A",
+      "name": "capture-in-A-restore-in-B",
+      "restored": 2
+    },
+    {
+      "scenario": "A",
+      "name": "100-concurrent-single-use",
+      "attempts": 100,
+      "successes": 1,
+      "outcomes": {
+        "RESTORE_DENIED:budget": 99,
+        "ok": 1
+      }
+    },
+    {
+      "scenario": "A",
+      "name": "multi-field-repeated-token",
+      "maxUses": 5,
+      "committed": [
+        3,
+        2
+      ],
+      "deniedOverBudget": 1
+    },
+    {
+      "scenario": "A",
+      "name": "multi-entry-over-budget",
+      "entries": 3,
+      "consumedByDenied": 0
+    },
+    {
+      "scenario": "A",
+      "name": "multi-entry-race-no-partial",
+      "trials": 40,
+      "states": {
+        "three-entry-won": 6,
+        "one-entry-won": 34
+      }
+    },
+    {
+      "scenario": "A",
+      "name": "restore-vs-revoke",
+      "trials": 40,
+      "restoresPerTrial": 12,
+      "successes": 65,
+      "startedAfterAcknowledgedRevoke": 160,
+      "succeededAfterAcknowledgedRevoke": 0,
+      "conflicts": 0,
+      "outcomes": {
+        "RESTORE_DENIED:revoked": 415,
+        "ok": 65
+      }
+    },
+    {
+      "scenario": "A",
+      "name": "create-vs-fence",
+      "trials": 40,
+      "orders": {
+        "created/revoked": 40
+      }
+    },
+    {
+      "scenario": "A",
+      "name": "duplicate-attempt",
+      "trials": 80,
+      "multiUse": {
+        "ok": 40,
+        "attempt-already-committed": 40
+      },
+      "singleUseLoserReason": {
+        "attempt-already-committed": 40
+      }
+    },
+    {
+      "scenario": "A",
+      "name": "attempt-mismatch",
+      "consumedByMismatch": 0
+    },
+    {
+      "scenario": "A",
+      "name": "kill-9-after-commit",
+      "signal": "SIGKILL",
+      "used": 1,
+      "resolveAttempt": "committed",
+      "replay": "budget",
+      "freshAttempt": "budget"
+    },
+    {
+      "scenario": "A",
+      "name": "tenant-isolation",
+      "foreignRestore": "unknown-token",
+      "foreignRevoke": "not-found"
+    },
+    {
+      "scenario": "A",
+      "name": "substitution/envelope-swap-within-capture",
+      "reason": "integrity-failure",
+      "consumed": 0
+    },
+    {
+      "scenario": "A",
+      "name": "substitution/cross-tenant",
+      "envelopeOnly": "integrity-failure",
+      "wholeRecord": "integrity-failure",
+      "consumed": 0
+    },
+    {
+      "scenario": "A",
+      "name": "substitution/expires-at",
+      "reason": "integrity-failure",
+      "consumed": 0
+    },
+    {
+      "scenario": "A",
+      "name": "substitution/max-uses",
+      "reason": "integrity-failure",
+      "consumed": 0
+    },
+    {
+      "scenario": "A",
+      "name": "substitution/session-tag",
+      "wrongSessionBeforeTampering": "source",
+      "tagRemoved": "integrity-failure",
+      "tagRemovedNoSession": "integrity-failure",
+      "foreignTag": "source",
+      "consumed": 0
+    },
+    {
+      "scenario": "A",
+      "name": "substitution/wrapped-key-swap",
+      "reasons": [
+        "integrity-failure",
+        "integrity-failure"
+      ],
+      "consumed": 0
+    },
+    {
+      "scenario": "A",
+      "name": "limit/used-reset-by-database-writer",
+      "secondRestoreSucceeded": true,
+      "specification": "§9.3, §10"
+    },
+    {
+      "scenario": "A",
+      "name": "restart-both-processes",
+      "restoredAfterRestart": true,
+      "usedAfter": 2
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/fail-before-commit-unsent-statement",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/fail-after-apply-before-commit",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false,
+      "entries": 3
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/lost-acknowledgement",
+      "error": "STORE_AMBIGUOUS",
+      "applied": true,
+      "commitsSent": 1,
+      "inspectAttempt": "committed"
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/commit-call-fails-unsent",
+      "error": "STORE_AMBIGUOUS",
+      "applied": false,
+      "inspectAttempt": "absent"
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/socket-destroyed-mid-transaction",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/pg-terminate-backend-before-commit",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/pg-terminate-backend-at-commit",
+      "error": "STORE_AMBIGUOUS",
+      "applied": false,
+      "inspectAttempt": "absent"
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/statement-timeout",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false,
+      "statementTimeoutMs": 300
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/lock-timeout",
+      "outcome": "rejected:stale",
+      "applied": false,
+      "lockTimeoutMs": 300
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/abort-signal-before-commit",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false,
+      "cases": 3
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/proxy-drop-after-commit-forwarded",
+      "error": "STORE_AMBIGUOUS",
+      "applied": true,
+      "commitsOnWire": 1,
+      "inspectAttempt": "committed"
+    },
+    {
+      "scenario": "B",
+      "name": "adapter/proxy-drop-before-commit-forwarded",
+      "error": "STORE_AMBIGUOUS",
+      "applied": false,
+      "commitsOnWire": 0,
+      "inspectAttempt": "absent"
+    },
+    {
+      "scenario": "B",
+      "name": "server/fail-before-commit",
+      "error": "STORE_UNAVAILABLE",
+      "consumed": 0,
+      "retrySameAttempt": "ok"
+    },
+    {
+      "scenario": "B",
+      "name": "server/lost-acknowledgement",
+      "error": "COMMIT_AMBIGUOUS",
+      "fields": false,
+      "commitsSent": 1,
+      "resolveAttempt": "committed",
+      "replay": "budget"
+    },
+    {
+      "scenario": "B",
+      "name": "server/proxy-around-commit",
+      "afterForward": {
+        "error": "COMMIT_AMBIGUOUS",
+        "resolveAttempt": "committed",
+        "commitsOnWire": 1
+      },
+      "beforeForward": {
+        "error": "COMMIT_AMBIGUOUS",
+        "resolveAttempt": "absent",
+        "commitsAttempted": 1
+      }
+    },
+    {
+      "scenario": "B",
+      "name": "server/store-deadline-while-blocked",
+      "error": "COMMIT_AMBIGUOUS",
+      "applied": false,
+      "resolveAttempt": "absent"
+    },
+    {
+      "scenario": "B",
+      "name": "server/ambiguous-create-is-fenced",
+      "error": "STORE_UNAVAILABLE",
+      "captureState": "revoked"
+    },
+    {
+      "scenario": "probe",
+      "name": "receipt-first-claim",
+      "identicalAttempts": 60,
+      "outcomes": {
+        "committed": 1,
+        "already-committed": 59
+      },
+      "usedIncrements": 1
+    },
+    {
+      "scenario": "probe",
+      "name": "revoke-after-contention",
+      "whileLocked": "STORE_UNAVAILABLE",
+      "applied": false,
+      "afterwards": "revoked"
+    },
+    {
+      "scenario": "probe",
+      "name": "pool-exhausted",
+      "error": "STORE_UNAVAILABLE",
+      "applied": false
+    },
+    {
+      "scenario": "probe",
+      "name": "bigint-type-parsers",
+      "parsers": [
+        "default (string)",
+        "BigInt",
+        "Number"
+      ],
+      "works": true
+    },
+    {
+      "scenario": "probe",
+      "name": "namespace-record-missing",
+      "commit": "quarantined",
+      "create": "quarantined",
+      "reinitialize": "not-empty"
+    },
+    {
+      "scenario": "probe",
+      "name": "acknowledge-identity-change",
+      "liftsExplicitQuarantine": false,
+      "changesEpoch": false,
+      "acceptsNewTimeline": true,
+      "acceptsNewSystemIdentifier": false
+    },
+    {
+      "scenario": "probe",
+      "name": "connection-state-after-abort",
+      "abortKinds": [
+        "quarantined",
+        "stale",
+        "STORE_UNAVAILABLE",
+        "STORE_UNAVAILABLE",
+        "STORE_UNAVAILABLE"
+      ],
+      "sameBackend": true,
+      "sessionSettingsUnchanged": true
+    },
+    {
+      "scenario": "probe",
+      "name": "set-config-scope",
+      "sessionDefault": "synchronous_commit=off",
+      "insideTransaction": {
+        "synchronous_commit": "on",
+        "statement_timeout": "4321ms",
+        "lock_timeout": "1234ms",
+        "isolation": "read committed"
+      },
+      "afterTransaction": {
+        "synchronous_commit": "off",
+        "statement_timeout": "0",
+        "lock_timeout": "0"
+      }
+    },
+    {
+      "scenario": "probe",
+      "name": "client-error-event-while-checked-out",
+      "uncaughtExceptions": 0
+    },
+    {
+      "scenario": "F",
+      "name": "role-privileges",
+      "role": "serving role of RSV_PG_APP_URL",
+      "attributes": {
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false
+      },
+      "schema": {
+        "usage": true,
+        "can_create": false
+      },
+      "tables": {
+        "rsv_schema": [
+          "SELECT"
+        ],
+        "rsv_namespace": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "rsv_capture": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "rsv_entry": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "rsv_receipt": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ]
+      }
+    },
+    {
+      "scenario": "F",
+      "name": "denied-statements",
+      "statements": 24,
+      "sqlstate": "42501"
+    },
+    {
+      "scenario": "F",
+      "name": "migrate-idempotent",
+      "reruns": 3,
+      "rowsPreserved": true,
+      "objects": 14
+    },
+    {
+      "scenario": "F",
+      "name": "migrate-concurrently",
+      "processes": 2,
+      "migrationsEach": 5,
+      "failures": 0
+    },
+    {
+      "scenario": "F",
+      "name": "forward-only",
+      "refusedVersions": [
+        2,
+        0
+      ],
+      "error": "STORE_CAPABILITY"
+    },
+    {
+      "scenario": "G",
+      "name": "sweep-vs-restores",
+      "commitsPerRun": 110,
+      "liveEntries": 20,
+      "withoutSweeper": {
+        "committed": 60,
+        "budget": 40,
+        "expiredCaptureReasons": {
+          "expired": 10
+        }
+      },
+      "withSweeper": {
+        "committed": 60,
+        "budget": 40,
+        "expiredCaptureReasons": {
+          "unknown": 10
+        },
+        "sweepCalls": 18,
+        "sweptEntries": 60,
+        "sweptCaptures": 30
+      },
+      "liveRowsRemoved": 0
+    },
+    {
+      "scenario": "G",
+      "name": "retention",
+      "receiptOutlivesCaptureByMs": 3602000,
+      "graceMs": 3600000,
+      "skewBoundMs": 2000,
+      "tombstoneRetentionMs": 86400000,
+      "deniedBeforeSweep": "expired",
+      "deniedAfterSweep": "unknown-token"
+    },
+    {
+      "scenario": "H",
+      "name": "unique-violation",
+      "sqlstate": "23505",
+      "driverErrorCarriedBytes": true,
+      "storeError": "STORE_UNAVAILABLE"
+    },
+    {
+      "scenario": "H",
+      "name": "check-violation",
+      "sqlstate": "23514",
+      "driverErrorCarriedEnvelopeBytes": true,
+      "storeError": "STORE_UNAVAILABLE"
+    },
+    {
+      "scenario": "H",
+      "name": "server-exceptions-with-row-data",
+      "operations": {
+        "createCapture": "STORE_UNAVAILABLE",
+        "revokeCapture": "STORE_UNAVAILABLE",
+        "replaceCaptureKey": "STORE_UNAVAILABLE"
+      },
+      "driverErrorsCarriedBytes": true
+    },
+    {
+      "scenario": "H",
+      "name": "connection-failures",
+      "wrong password": "STORE_UNAVAILABLE",
+      "closed port": "STORE_UNAVAILABLE"
+    },
+    {
+      "scenario": "H",
+      "name": "server-error-and-audit",
+      "error": "STORE_UNAVAILABLE",
+      "auditEvents": 3
+    },
+    {
+      "scenario": "H",
+      "name": "pg-stat-activity",
+      "showsStatementText": true,
+      "showsBoundParameters": false
+    },
+    {
+      "scenario": "H",
+      "name": "console",
+      "lines": 0
+    },
+    {
+      "scenario": "outside",
+      "name": "vault-server/receipt-horizon",
+      "configuration": "entryTtlMs=24h, receiptGraceMs=24h",
+      "restore": "INVARIANT_VIOLATION",
+      "consumed": 0,
+      "specification": "§4.2, §7.5"
+    },
+    {
+      "scenario": "outside",
+      "name": "vault-server/replay-reason-single-use",
+      "replay": "budget",
+      "specificationSays": "attempt-already-committed",
+      "resolveAttempt": "committed",
+      "specification": "§7.2 step 4, §7.3"
+    },
+    {
+      "scenario": "packed",
+      "name": "clean-consumer",
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "dist/schema.d.ts",
+        "dist/schema.js",
+        "dist/store.d.ts",
+        "dist/store.js",
+        "package.json"
+      ],
+      "pg": "8.23.1",
+      "node": "v22.16.0",
+      "exports": [
+        "SCHEMA_VERSION",
+        "createPostgresStore",
+        "grantStatements",
+        "migrate",
+        "migrationStatements"
+      ],
+      "profile": "postgres-single-primary/synchronous_commit=on"
+    },
+    {
+      "scenario": "C",
+      "name": "settings",
+      "settings": {
+        "fsync": "on",
+        "full_page_writes": "on",
+        "synchronous_commit": "on",
+        "synchronous_standby_names": "",
+        "wal_level": "replica",
+        "wal_sync_method": "fdatasync"
+      },
+      "profile": "postgres-single-primary/synchronous_commit=on",
+      "server": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit"
+    },
+    {
+      "scenario": "C",
+      "name": "restart-between-capture-and-restore",
+      "method": "docker restart",
+      "restored": true,
+      "unavailableCallsBeforeReconnect": 0
+    },
+    {
+      "scenario": "C",
+      "name": "restart-after-acknowledged-commit",
+      "method": "docker kill (SIGKILL), then start: crash recovery",
+      "stoppedWithinMsOfAcknowledgement": 417,
+      "consumedStaysConsumed": true,
+      "revocationSurvived": true,
+      "receiptSurvived": true,
+      "fenceSurvived": true
+    },
+    {
+      "scenario": "C",
+      "name": "restart-after-acknowledged-commit",
+      "method": "docker restart",
+      "stoppedWithinMsOfAcknowledgement": 754,
+      "consumedStaysConsumed": true,
+      "revocationSurvived": true,
+      "receiptSurvived": true,
+      "fenceSurvived": true
+    },
+    {
+      "scenario": "C",
+      "name": "restart-after-acknowledged-commit",
+      "method": "docker kill (SIGKILL), then start: crash recovery, second round",
+      "stoppedWithinMsOfAcknowledgement": 377,
+      "consumedStaysConsumed": true,
+      "revocationSurvived": true,
+      "receiptSurvived": true,
+      "fenceSurvived": true
+    },
+    {
+      "scenario": "D",
+      "name": "sync/settings",
+      "settings": {
+        "fsync": "on",
+        "full_page_writes": "on",
+        "synchronous_commit": "on",
+        "synchronous_standby_names": "FIRST 1 (sync)",
+        "wal_level": "replica"
+      },
+      "replication": {
+        "application_name": "sync",
+        "state": "streaming",
+        "sync_state": "sync"
+      },
+      "profile": "postgres-primary-with-synchronous-standby/synchronous_commit=on",
+      "standbys": 1,
+      "synchronousCommitChosen": "on"
+    },
+    {
+      "scenario": "D",
+      "name": "sync/setting-removed-while-running",
+      "whileRemoved": "STORE_UNAVAILABLE",
+      "applied": false,
+      "afterRestored": "committed"
+    },
+    {
+      "scenario": "D",
+      "name": "sync/standby-refuses-to-serve",
+      "atCreation": "STORE_CAPABILITY",
+      "perTransaction": "STORE_UNAVAILABLE",
+      "operations": [
+        "recoveryState",
+        "readEntries",
+        "inspectAttempt",
+        "commitRestore",
+        "createCapture",
+        "revokeCapture"
+      ]
+    },
+    {
+      "scenario": "D",
+      "name": "sync/commit-waits-for-standby",
+      "waitedMs": 4000,
+      "waitEvent": "SyncRep",
+      "sessionDefault": "synchronous_commit=off",
+      "statementTimeoutMs": 1000,
+      "afterOperatorCancel": "STORE_AMBIGUOUS"
+    },
+    {
+      "scenario": "D",
+      "name": "sync/promotion",
+      "killedWithinMsOfAcknowledgement": 917,
+      "systemIdentifierChanged": false,
+      "timeline": {
+        "recorded": 1,
+        "insertAfterPromotion": 2,
+        "controlFileCheckpointAtFirstCall": 1
+      },
+      "controlFileLaggedAtFirstCall": true,
+      "recoveryStateOnFirstCall": "quarantined",
+      "acknowledgedCommitsOnPromotedNode": true
+    },
+    {
+      "scenario": "D",
+      "name": "sync/after-acknowledge",
+      "consumed": "budget",
+      "revoked": "revoked",
+      "untouchedRestored": true,
+      "epoch": 1
+    },
+    {
+      "scenario": "D",
+      "name": "async/promotion",
+      "acknowledgedOnPrimary": [
+        "consumption",
+        "revocation",
+        "receipt"
+      ],
+      "presentOnPromotedStandby": [],
+      "recoveryState": "quarantined"
+    },
+    {
+      "scenario": "D",
+      "name": "async/wrong-acknowledge",
+      "singleUseValueReleasedTwice": true,
+      "revokedCaptureRestored": true,
+      "receiptOfDeliveredRestore": "absent"
+    },
+    {
+      "scenario": "D",
+      "name": "async/runbook",
+      "recoveredCaptures": {
+        "consumed": "revoked",
+        "revoked": "revoked",
+        "untouched": "revoked"
+      },
+      "newEpoch": 2,
+      "oldEpochServer": "STORE_QUARANTINED",
+      "newCaptures": "ok"
+    },
+    {
+      "scenario": "D",
+      "name": "conclusion",
+      "text": "Both runs used the same adapter, the same READ COMMITTED transactions with the same row locks, and commits the primary acknowledged. What decided whether an acknowledged consumption survived failover was whether its WAL had reached the promoted node before the acknowledgement: with a synchronous standby it had, with an asynchronous one it had not. Transaction isolation orders concurrent transactions on one node; it says nothing about which commits another node holds."
+    },
+    {
+      "scenario": "D",
+      "name": "sync/control-file-timeline-lag",
+      "caughtUp": true,
+      "ms": 269565,
+      "waitedAtMostMs": 330000,
+      "source": "pg_control_checkpoint().timeline_id versus the WAL insert timeline"
+    },
+    {
+      "scenario": "E",
+      "name": "backups-taken",
+      "logical": "pg_dump -Fc",
+      "physical": "pg_basebackup -X stream",
+      "restorePoint": "rsvq_before_consumption",
+      "settings": {
+        "archive_mode": "on",
+        "fsync": "on",
+        "synchronous_commit": "on",
+        "wal_level": "replica"
+      },
+      "afterBackups": [
+        "consumption",
+        "revocation"
+      ]
+    },
+    {
+      "scenario": "E",
+      "name": "logical-into-fresh-cluster",
+      "method": "pg_dump restored into a fresh cluster (initdb)",
+      "systemIdentifierChanged": true,
+      "timelineChanged": false,
+      "detected": true,
+      "withoutOperatorAction": "quarantined",
+      "afterInvalidateRecovered": {
+        "consumedAfter": "revoked",
+        "revokedAfter": "revoked",
+        "untouched": "revoked",
+        "consumedBefore": "revoked",
+        "afterBaseBackup": "revoked"
+      }
+    },
+    {
+      "scenario": "E",
+      "name": "logical-into-same-cluster",
+      "method": "pg_dump restored into the same cluster (another database, or the same one)",
+      "systemIdentifierChanged": false,
+      "timelineChanged": false,
+      "detected": false,
+      "withoutOperatorAction": "serving",
+      "raisedEpochServer": "STORE_QUARANTINED",
+      "oldEpochServerServedStale": {
+        "consumedTokenReleasedAgain": true,
+        "revokedCaptureRestored": true
+      },
+      "afterInvalidateRecovered": {
+        "consumedAfter": "revoked",
+        "revokedAfter": "revoked",
+        "untouched": "revoked",
+        "consumedBefore": "revoked",
+        "afterBaseBackup": "revoked"
+      },
+      "dumpRestoredAgainOverInvalidatedDatabase": {
+        "databaseEpoch": 1,
+        "epoch2Server": "STORE_QUARANTINED"
+      }
+    },
+    {
+      "scenario": "E",
+      "name": "physical-pitr",
+      "method": "pg_basebackup + WAL archive, recovery_target_name, promote (PITR)",
+      "systemIdentifierChanged": false,
+      "timelineChanged": true,
+      "detected": true,
+      "withoutOperatorAction": "quarantined",
+      "afterInvalidateRecovered": {
+        "consumedAfter": "revoked",
+        "revokedAfter": "revoked",
+        "untouched": "revoked",
+        "consumedBefore": "revoked",
+        "afterBaseBackup": "revoked"
+      }
+    },
+    {
+      "scenario": "E",
+      "name": "physical-plain-copy",
+      "method": "pg_basebackup copy (or a file-system snapshot) started without recovery.signal",
+      "systemIdentifierChanged": false,
+      "timelineChanged": false,
+      "detected": false,
+      "withoutOperatorAction": "serving",
+      "raisedEpochServer": "STORE_QUARANTINED",
+      "oldEpochServerServedStale": true,
+      "afterInvalidateRecovered": {
+        "consumedAfter": "revoked",
+        "revokedAfter": "revoked",
+        "untouched": "revoked",
+        "consumedBefore": "revoked"
+      }
+    },
+    {
+      "scenario": "E",
+      "name": "restore-detection-matrix",
+      "rows": [
+        {
+          "method": "pg_dump restored into a fresh cluster (initdb)",
+          "systemIdentifierChanged": true,
+          "timelineChanged": false,
+          "detected": true
+        },
+        {
+          "method": "pg_dump restored into the same cluster (another database, or the same one)",
+          "systemIdentifierChanged": false,
+          "timelineChanged": false,
+          "detected": false
+        },
+        {
+          "method": "pg_basebackup + WAL archive, recovery_target_name, promote (PITR)",
+          "systemIdentifierChanged": false,
+          "timelineChanged": true,
+          "detected": true
+        },
+        {
+          "method": "pg_basebackup copy (or a file-system snapshot) started without recovery.signal",
+          "systemIdentifierChanged": false,
+          "timelineChanged": false,
+          "detected": false
+        }
+      ]
+    },
+    {
+      "scenario": "H",
+      "name": "server-log/default",
+      "settings": {
+        "log_error_verbosity": "default",
+        "log_min_duration_statement": "-1",
+        "log_min_error_statement": "error",
+        "log_parameter_max_length": "-1",
+        "log_parameter_max_length_on_error": "0",
+        "log_statement": "none"
+      },
+      "successfulCallsLogged": false,
+      "failingStatementLogged": true,
+      "failingRowDetail": {
+        "identifiers": true,
+        "envelopeBytes": true
+      },
+      "boundParameters": false,
+      "plaintextValueOrToken": false
+    },
+    {
+      "scenario": "H",
+      "name": "server-log/log_statement=all",
+      "found": {
+        "envelope": true,
+        "wrappedKey": true,
+        "captureId": true,
+        "entryId": true,
+        "tenant": true,
+        "attemptId": true
+      },
+      "plaintextValueOrToken": false
+    },
+    {
+      "scenario": "H",
+      "name": "server-log/log_parameter_max_length=0",
+      "statementTextLogged": true,
+      "boundParameters": false
+    }
+  ]
+}
