@@ -76,7 +76,12 @@ export interface PersistentServerVaultOptions<Context = unknown> {
   readonly cryptoTimeoutMs?: number;
   /** Re-reads after a `stale` commit before failing `RESTORE_CONFLICT`. Default 3, at most 10. */
   readonly maxCommitRetries?: number;
-  /** Added to the latest capture expiry and the skew bound to set a receipt's lifetime. Default one hour. */
+  /**
+   * Added to the latest capture expiry and the skew bound to set a receipt's
+   * lifetime. Default one hour. `limits.entryTtlMs`, twice the store's
+   * `maxClockSkewMs`, and this must together stay within the 48 hours a
+   * store accepts for a receipt, or creation fails `INVALID_ARGUMENT`.
+   */
   readonly receiptGraceMs?: number;
   /** How long a revocation tombstone outlives its capture. Default 24 hours. */
   readonly tombstoneRetentionMs?: number;

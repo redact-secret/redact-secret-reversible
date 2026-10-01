@@ -294,6 +294,14 @@ export async function createPersistentServerVault<Context = unknown>(
     throw new VaultServerError("INVARIANT_VIOLATION");
   }
   if (limits.entryTtlMs > LIMITS.maxCaptureLifetimeMs) throw new VaultServerError("INVALID_ARGUMENT");
+  // §7.5 sets a receipt's expiry to the latest capture expiry plus the skew
+  // bound plus the grace; §4.2 has the store refuse one more than
+  // `maxReceiptHorizonMs` past its own clock, which may itself be a skew
+  // bound behind this server's. A configuration that can produce such a
+  // receipt would fail restores of a fresh capture, so it is refused here.
+  if (limits.entryTtlMs + 2 * capabilities.maxClockSkewMs + receiptGraceMs > LIMITS.maxReceiptHorizonMs) {
+    throw new VaultServerError("INVALID_ARGUMENT");
+  }
 
   const digester = await createDigester(digestKey);
 
@@ -415,6 +423,12 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
       return fail("INVARIANT_VIOLATION", who);
     }
 
+    // §8.3: an identifier with a lone surrogate is the caller's argument
+    // error. The plan checks only length; the record format refuses the rest.
+    for (const grant of plan.grants) {
+      if (!isIdentifier(grant.sink) || !grant.paths.every((path) => isIdentifier(path))) return fail("INVALID_ARGUMENT", who);
+    }
+
     const captureId = this.#i.planner.newCaptureId();
     if (!isCaptureId(captureId)) return fail("INVARIANT_VIOLATION", who);
     const expiresAt = at + this.#i.limits.entryTtlMs;
@@ -530,6 +544,17 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
     }
     if (envelopeBytes > capabilities.maxCreateBytes) return fail("LIMIT_EXCEEDED", who);
 
+    // The capture may exist. No token left this call, so it is unusable
+    // either way; a fence makes that durable. One attempt, never awaited
+    // into the caller's outcome (§8.2).
+    const fence = (): Promise<unknown> =>
+      this.#store(true, (signal) =>
+        this.#i.store.revokeCapture(
+          { scope, captureId, now: this.#now(), retentionMs: this.#i.tombstoneRetentionMs, fenceAbsent: true },
+          { signal },
+        ),
+      ).catch(() => undefined);
+
     let created: Awaited<ReturnType<Store["createCapture"]>>;
     try {
       created = await this.#store(true, (signal) =>
@@ -558,27 +583,23 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
       );
     } catch (thrown) {
       if (thrown instanceof StoreFailure && thrown.kind === "ambiguous") {
-        // The capture may exist. No token left this call, so it is unusable
-        // either way; a fence makes that durable. One attempt, never awaited
-        // into the caller's outcome.
-        await this.#store(true, (signal) =>
-          this.#i.store.revokeCapture(
-            { scope, captureId, now: this.#now(), retentionMs: this.#i.tombstoneRetentionMs, fenceAbsent: true },
-            { signal },
-          ),
-        ).catch(() => undefined);
+        await fence();
         return fail("STORE_UNAVAILABLE", who);
       }
       if (thrown instanceof StoreFailure && thrown.kind === "invalid") return fail("INVARIANT_VIOLATION", who);
       return fail("STORE_UNAVAILABLE", who);
     }
 
-    if (typeof created !== "object" || created === null) return fail("INVARIANT_VIOLATION", who);
-    if (created.outcome !== "created") {
-      const reason = created.outcome === "rejected" ? created.reason : undefined;
+    const outcome = typeof created === "object" && created !== null ? created.outcome : undefined;
+    if (outcome !== "created") {
+      const reason = outcome === "rejected" ? (created as { reason?: unknown }).reason : undefined;
       if (reason === "quarantined") return fail("STORE_QUARANTINED", who);
       if (reason === "clock-skew") return fail("CLOCK_SKEW", who);
       if (reason === "stale") return fail("STORE_UNAVAILABLE", who);
+      if (reason === "exists" || reason === "fenced") return fail("INVARIANT_VIOLATION", who);
+      // A result this server cannot interpret says nothing about whether the
+      // capture was created: the outcome is unknown, as after a lost response.
+      await fence();
       return fail("INVARIANT_VIOLATION", who);
     }
 
@@ -779,6 +800,13 @@ class PersistentServerVaultImpl<Context> implements PersistentServerVault<Contex
               },
               { signal },
             );
+            // The deadline may have passed while this was pending. The caller
+            // was already denied and `release` already ran, so a late result
+            // is overwritten here instead of being kept (§7.2).
+            if (signal.aborted) {
+              if (Array.isArray(payloads)) wipe(payloads.filter((payload) => typeof payload === "object" && payload !== null));
+              throw new KeyProviderError("KEY_ABORTED");
+            }
             if (!Array.isArray(payloads) || payloads.length !== entries.length) throw new RecordCryptoError("RECORD_MALFORMED");
             entries.forEach((entry, index) => {
               const payload = payloads[index] as RecordPayload;
