@@ -65,9 +65,11 @@ test("a retired key and an unknown key reference are KEY_UNAVAILABLE", async () 
   const provider = rotated("retired");
   await keyError(() => provider.unwrapDataKey({ keyRef: "local:2026-07", wrappedKey: wrappedUnderOld.wrappedKey, context: CONTEXT }), "KEY_UNAVAILABLE");
   await keyError(() => provider.rewrapDataKey({ keyRef: "local:2026-07", wrappedKey: wrappedUnderOld.wrappedKey, context: CONTEXT }), "KEY_UNAVAILABLE");
-  for (const keyRef of ["local:2025-01", "local:", "2026-10", "LOCAL:2026-10", "local:2026-10 ", "kms:2026-10", "local:local:2026-10", ""]) {
+  for (const keyRef of ["local:2025-01", "local:", "2026-10", "LOCAL:2026-10", "local:2026-10 ", "kms:2026-10", "local:local:2026-10"]) {
     await keyError(() => provider.unwrapDataKey({ keyRef, wrappedKey: wrappedUnderOld.wrappedKey, context: CONTEXT }), "KEY_UNAVAILABLE");
   }
+  // An empty key reference violates the contract; it is not a key that happens to be unknown.
+  await keyError(() => provider.unwrapDataKey({ keyRef: "", wrappedKey: wrappedUnderOld.wrappedKey, context: CONTEXT }), "KEY_INVALID_ARGUMENT");
 });
 
 test("unwrapping under a different context is KEY_INTEGRITY, for each field", async () => {
@@ -184,7 +186,8 @@ test("a tampered or malformed wrapped key is KEY_INTEGRITY", async () => {
   const longer = new Uint8Array(62);
   longer.set(wrappedKey);
   await keyError(() => provider.unwrapDataKey({ keyRef, wrappedKey: longer, context: CONTEXT }), "KEY_INTEGRITY", secrets);
-  await keyError(() => provider.unwrapDataKey({ keyRef, wrappedKey: new Uint8Array(0), context: CONTEXT }), "KEY_INTEGRITY", secrets);
+  // An empty wrapped key violates the contract (§3.5: 1 to 4096 bytes).
+  await keyError(() => provider.unwrapDataKey({ keyRef, wrappedKey: new Uint8Array(0), context: CONTEXT }), "KEY_INVALID_ARGUMENT", secrets);
 });
 
 test("rewrap moves the key reference to the active key and keeps the data key", async () => {
