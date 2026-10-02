@@ -1,6 +1,6 @@
 # @redact-secret/vault-contracts
 
-**Status: alpha, unpublished.** Types, limits, validators, and error classes shared by a persistent Redact Secret vault server, its crypto layer, store adapters, and key providers.
+**Status: alpha.** Types, limits, validators, and error classes shared by a persistent Redact Secret vault server, its crypto layer, store adapters, and key providers.
 
 This package has no runtime dependency and performs no I/O. It contains no detector logic, no cipher, no database driver, and no key-service client. The semantics of everything it names are defined by the [persistent vault specification](../../docs/specs/persistent-vault.md); the types here are transcribed from that document.
 

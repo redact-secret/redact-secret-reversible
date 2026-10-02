@@ -13,12 +13,12 @@ Hide secrets from a model, then put them back where you allow it.
 
 [Redact Secret](https://github.com/redact-secret/redact-secret) finds secrets in text and redacts them for good. This repository adds the opt-in way back: `capture` swaps each secret for a random token before the text leaves your code, and `restore` swaps the tokens back, but only into the fields you named in advance.
 
-**Status: beta.** In-memory use is published for JavaScript and Python. Persistence is alpha and not on npm yet. Python persistence is in the source tree only and is not supported ([qualification record](docs/research/qualification-python-persistence-0.1.0b3.md)). Details: [release status](docs/status.md).
+**Status: beta.** In-memory use is published for JavaScript and Python. Persistence is alpha and published on npm. Python persistence is in the source tree only and is not supported ([qualification record](docs/research/qualification-python-persistence-0.1.0b3.md)). Details: [release status](docs/status.md).
 
 ## Quick start
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.3
+npm install @redact-secret/vault@0.1.0-beta.4
 ```
 
 npm also installs the one `@redact-secret/core` version this release works with.
@@ -57,7 +57,7 @@ Pin the exact version while the packages are beta. More programs you can run as 
 | A browser app, a CLI, or a server handling one user per vault | `@redact-secret/vault` | [README](packages/vault/README.md) |
 | A server with many users or tenants | `@redact-secret/vault-server` | [README](packages/vault-server/README.md) |
 | A Python server | `redact-secret-vault` (PyPI) | [README](packages/vault-py/README.md) |
-| A server whose captures must survive a restart or be restored by another process | `@redact-secret/vault-server/persistent` (alpha, not on npm yet) | [Persistent server guide](docs/guides/persistent-server.md) |
+| A server whose captures must survive a restart or be restored by another process | `@redact-secret/vault-server/persistent` (alpha) | [Persistent server guide](docs/guides/persistent-server.md) |
 
 The persistent profile is built from smaller packages you only meet in that guide: [`store-postgres`](packages/store-postgres/README.md), [`store-sqlite`](packages/store-sqlite/README.md) (partly qualified, see the [record](docs/research/qualification-store-sqlite-0.1.0-alpha.1.md)), [`store-memory`](packages/store-memory/README.md), [`vault-crypto`](packages/vault-crypto/README.md), [`key-provider-aws-kms`](packages/key-provider-aws-kms/README.md), [`vault-contracts`](packages/vault-contracts/README.md), and [`vault-conformance`](packages/vault-conformance/README.md).
 

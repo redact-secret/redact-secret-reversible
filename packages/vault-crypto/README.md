@@ -1,6 +1,6 @@
 # @redact-secret/vault-crypto
 
-**Status: alpha, unpublished.** The record format of the [persistent vault specification](../../docs/specs/persistent-vault.md) §3, implemented over the platform's WebCrypto: canonical encoding, AES-256-GCM envelope encryption, the request digest and session tag of §7.3 and §3.2, and the local key provider of §6.3.
+**Status: alpha.** The record format of the [persistent vault specification](../../docs/specs/persistent-vault.md) §3, implemented over the platform's WebCrypto: canonical encoding, AES-256-GCM envelope encryption, the request digest and session tag of §7.3 and §3.2, and the local key provider of §6.3.
 
 The persistent server profile of `@redact-secret/vault-server` uses it through the `RecordCrypto` contract. What was tested, and with which stores and providers, is in the [qualification record](../../docs/research/qualification-persistence-0.1.0-alpha.1.md); nothing beyond that record is a support claim. It depends on [`@redact-secret/vault-contracts`](../vault-contracts/README.md) and on nothing else.
 

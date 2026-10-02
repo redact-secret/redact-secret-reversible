@@ -1,6 +1,6 @@
 # @redact-secret/store-memory
 
-**Status: alpha, unpublished.** A ciphertext-only reference `Store` that keeps everything in process memory. It exists for tests and development of a persistent Redact Secret vault. It is not persistence.
+**Status: alpha.** A ciphertext-only reference `Store` that keeps everything in process memory. It exists for tests and development of a persistent Redact Secret vault. It is not persistence.
 
 It implements the store contract of the [persistent vault specification](../../docs/specs/persistent-vault.md) (§5) with the types and validators of [`@redact-secret/vault-contracts`](../vault-contracts/README.md). It stores envelopes, wrapped keys, counters, and receipts exactly as it is given them. It never decrypts, never holds a data key, never resolves a principal, and never evaluates a policy.
 

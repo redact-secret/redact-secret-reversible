@@ -1,6 +1,6 @@
 # Qualification record: `@redact-secret/store-sqlite` 0.1.0-alpha.1
 
-**Status: partial, and the profile is not supported.** This record covers [#130](https://github.com/redact-secret/redact-secret-vault/issues/130), the `sqlite-local-wal` profile of the [backend research](persistent-backend-capabilities.md) (section 8.1). Run on 2026-10-01 on one machine. The package is on `main` only and unpublished. **The power-loss simulation required by the issue was not run, and the Node.js 20 run, the better-sqlite3 runs on Node.js 20, 24, and 25, and every Linux run have not happened.** Nothing here is a support claim. A profile is supported only when a record says every gate was run and passed; this one says otherwise.
+**Status: partial, and the profile is not supported.** This record covers [#130](https://github.com/redact-secret/redact-secret-vault/issues/130), the `sqlite-local-wal` profile of the [backend research](persistent-backend-capabilities.md) (section 8.1). Run on 2026-10-01 on one machine. The package was published as `0.1.0-alpha.1` on 2026-10-02 (dist-tag `alpha`), after this record's runs; the registry tarball was not run through these gates. **The power-loss simulation required by the issue was not run, and the Node.js 20 run, the better-sqlite3 runs on Node.js 20, 24, and 25, and every Linux run have not happened.** Nothing here is a support claim. A profile is supported only when a record says every gate was run and passed; this one says otherwise.
 
 ## 1. Gates of the issue
 

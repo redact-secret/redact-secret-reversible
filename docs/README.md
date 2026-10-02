@@ -8,7 +8,7 @@ New here? Start with the [repository README](../README.md), then the README of t
 - [Examples](../examples/README.md): programs that run as they are, including a local PostgreSQL setup.
 - [Worker mode](guides/worker-mode.md): run the vault in a dedicated Worker.
 - [PII findings](guides/pii.md): turn PII detection on and choose what is retained.
-- [Persistent server](guides/persistent-server.md): capture in one process, restore in another, over PostgreSQL (alpha, unpublished).
+- [Persistent server](guides/persistent-server.md): capture in one process, restore in another, over PostgreSQL (alpha).
 
 ## Reference
 
@@ -33,13 +33,13 @@ New here? Start with the [repository README](../README.md), then the README of t
 - [Security policy](../SECURITY.md): private vulnerability reporting, response process, and release verification.
 - [Code of conduct](../CODE_OF_CONDUCT.md), [governance](../GOVERNANCE.md), and [roadmap](../ROADMAP.md).
 - [Assurance case](specs/assurance-case.md): why the security requirements are met.
-- [Decisions](decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](decisions/define-server-authority-interface.md) and [its in-memory implementation](decisions/implement-vault-server-in-memory.md), the earlier [persistent store contract](decisions/define-persistent-store-contract.md) (partly superseded), and the [ciphertext-only store decision](decisions/supersede-persistent-store-contract.md) that replaces it (implemented on `main`, unpublished).
+- [Decisions](decisions/README.md): accepted boundaries and open design questions, including the [server authority interface](decisions/define-server-authority-interface.md) and [its in-memory implementation](decisions/implement-vault-server-in-memory.md), the earlier [persistent store contract](decisions/define-persistent-store-contract.md) (partly superseded), and the [ciphertext-only store decision](decisions/supersede-persistent-store-contract.md) that replaces it (implemented and published as alpha).
 - [Persistent vault specification](specs/persistent-vault.md): record format, store and key-provider contracts, restore and failure semantics, recovery and erasure limits.
 - [Persistent vault operations](specs/persistent-operations.md): expiry and cleanup, the four deletion-related operations, and the backup-recovery and failover runbooks.
 - [SQLite store qualification record](research/qualification-store-sqlite-0.1.0-alpha.1.md): partial; what ran, what did not (power loss), and what remains.
 - [Persistence qualification record](research/qualification-persistence-0.1.0-alpha.1.md): tested matrix, evidence index, unqualified profiles, and remaining limitations, with the [PostgreSQL qualification report](../packages/store-postgres/qualification/report/report.md) and the [design review](research/persistent-vault-design-review.md).
 - [Persistent record test vectors](../conformance/persistent/v1/README.md): deterministic wire vectors every implementation must reproduce.
-- [Persistent backend research](research/persistent-backend-capabilities.md) (DynamoDB, Redis, SQLite; research only, no adapter) the [Python persistence parity plan](plans/python-persistence-parity.md), and the [Python qualification record](research/qualification-python-persistence-0.1.0b3.md) (Python persistent modules are in the source tree, unpublished, not supported).
+- [Persistent backend research](research/persistent-backend-capabilities.md) (DynamoDB, Redis, SQLite; research only, no adapter) the [Python persistence parity plan](plans/python-persistence-parity.md), and the [Python qualification record](research/qualification-python-persistence-0.1.0b3.md) (Python persistent modules are in the source tree, not on PyPI, not supported).
 - [Threat model](specs/threat-model.md): assets, attackers, boundary, and residual risk per mode.
 - [Browser in-memory security](specs/in-memory-security.md): guarantees, limits, and deployment alternatives.
 - [Qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-0.1.0-alpha.1.md) (archived): tested runtime/core matrix and evidence for 0.1.0-alpha.1.

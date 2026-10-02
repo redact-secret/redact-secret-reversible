@@ -2,7 +2,7 @@
 
 An optional AWS KMS key provider for the [persistent vault server](../../docs/guides/persistent-server.md). It generates, unwraps, and re-wraps the data keys that encrypt captures. It never sees a captured value.
 
-**Alpha, unpublished.** Tested against a fake on every run, and once against real KMS (`us-east-1`, Node.js 22, single-Region symmetric keys). Nothing else is qualified: see [what was qualified](../../docs/reference/key-provider-aws-kms.md#what-was-qualified).
+**Alpha.** Tested against a fake on every run, and once against real KMS (`us-east-1`, Node.js 22, single-Region symmetric keys). Nothing else is qualified: see [what was qualified](../../docs/reference/key-provider-aws-kms.md#what-was-qualified).
 
 ## Use
 

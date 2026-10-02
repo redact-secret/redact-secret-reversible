@@ -2,7 +2,7 @@
 
 Test harnesses for authors of a `Store` or a `KeyProvider` for the [persistent vault server](../../docs/guides/persistent-server.md), plus a fault-injecting store wrapper and an insecure key provider for tests. Applications that only use a vault do not need it.
 
-**Alpha, unpublished.** Its only dependency is [`@redact-secret/vault-contracts`](../vault-contracts/README.md). It imports no test runner, no `node:` module, and no driver.
+**Alpha.** Its only dependency is [`@redact-secret/vault-contracts`](../vault-contracts/README.md). It imports no test runner, no `node:` module, and no driver.
 
 ## Use
 

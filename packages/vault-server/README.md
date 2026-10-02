@@ -2,12 +2,12 @@
 
 [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault/README.md) for servers with many users: every restore is checked against the caller's identity, tenant, and purpose by a policy you supply.
 
-**Beta.** Node.js 20, 22, 24. In-memory and single-process by default; a [persistent profile](#persistent-profile) is alpha and not on npm yet.
+**Beta.** Node.js 20, 22, 24. In-memory and single-process by default; a [persistent profile](#persistent-profile) is alpha.
 
 ## Install
 
 ```bash
-npm install @redact-secret/vault-server@0.1.0-beta.3
+npm install @redact-secret/vault-server@0.1.0-beta.4
 ```
 
 npm also installs the matching `@redact-secret/vault` and `@redact-secret/core` (an exact dependency and an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
@@ -65,7 +65,7 @@ try {
 
 ## Ready-made policies
 
-From `0.1.0-beta.4` (on `main`, unpublished), `@redact-secret/vault-server/policies` has the common rules, so you do not write them by hand:
+From `0.1.0-beta.4`, `@redact-secret/vault-server/policies` has the common rules, so you do not write them by hand:
 
 ```ts
 import { allOf, allowSameTenantOnly, allowSinkPurposes } from "@redact-secret/vault-server/policies";
@@ -112,7 +112,7 @@ Every option, the exact evaluation order, concurrency, audit events, and residua
 
 ## Persistent profile
 
-**On `main`, unpublished, alpha.** `@redact-secret/vault-server/persistent` lets one process capture and another restore, with ciphertext in a store you inject and keys from a key provider you inject. Importing `@redact-secret/vault-server` loads none of it.
+**Alpha.** `@redact-secret/vault-server/persistent` lets one process capture and another restore, with ciphertext in a store you inject and keys from a key provider you inject. Importing `@redact-secret/vault-server` loads none of it.
 
 ```ts
 import { createPersistentServerVault } from "@redact-secret/vault-server/persistent";

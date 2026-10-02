@@ -2,7 +2,7 @@
 
 A PostgreSQL store for the [persistent vault server](../../docs/guides/persistent-server.md). It holds ciphertext, wrapped keys, counters, and receipts. It never decrypts, holds no key, and evaluates no policy.
 
-**Alpha, unpublished.** Qualified only on PostgreSQL 17.11, Node.js 22, and `pg` 8.23.1, in two profiles:
+**Alpha.** Qualified only on PostgreSQL 17.11, Node.js 22, and `pg` 8.23.1, in two profiles:
 
 | Profile | You must set |
 | --- | --- |

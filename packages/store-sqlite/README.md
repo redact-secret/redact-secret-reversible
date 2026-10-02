@@ -2,7 +2,7 @@
 
 A SQLite store for the [persistent vault server](../../docs/guides/persistent-server.md): one database file on a local file system, opened by one or more server processes **on the same host**. It holds ciphertext, wrapped keys, counters, and receipts. It never decrypts, holds no key, and evaluates no policy.
 
-**Alpha, unpublished, and not yet a supported profile.** The shared conformance suite, two server processes on one file, process kills around commit, and backup and restore were run (see the [qualification record](../../docs/research/qualification-store-sqlite-0.1.0-alpha.1.md)). **A power-loss simulation was not run**, so nothing here claims the store survives power loss. The record states what was run, on what, and what was not.
+**Alpha, and not yet a supported profile.** The shared conformance suite, two server processes on one file, process kills around commit, and backup and restore were run (see the [qualification record](../../docs/research/qualification-store-sqlite-0.1.0-alpha.1.md)). **A power-loss simulation was not run**, so nothing here claims the store survives power loss. The record states what was run, on what, and what was not.
 
 ## Use
 
