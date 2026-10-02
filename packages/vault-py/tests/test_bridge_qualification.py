@@ -47,7 +47,7 @@ def _unmet(results: dict[str, bq.Result]) -> list[str]:
 def test_adversarial_frames_are_refused_without_echo_hang_or_stderr(tmp_path: Path) -> None:
     results = _run(bq.run_protocol, tmp_path, heavy=False)
     assert _unmet(results) == []
-    assert "65 cases" in results["G5.protocol"].numbers
+    assert " cases, 0 violations" in results["G5.protocol"].numbers
 
 
 def test_a_seeded_fuzz_run_finds_no_violation_in_the_child_or_the_client_parser() -> None:

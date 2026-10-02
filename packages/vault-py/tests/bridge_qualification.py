@@ -298,6 +298,45 @@ def protocol_cases(workdir: Path) -> list[Case]:
         Case("id null", [frame(None, "x")], "error"),
         Case("id missing", [b'{"input":"x","pii":[]}\n'], "error"),
         Case("id repeated", [frame(1, "x") + frame(1, "y")], "either", frames_expected=2),
+        # The core integrity pins (the "integrity" field of the first request): a malformed one is refused as a
+        # request error before the core is touched, and a wrong one is refused as CORE_INTEGRITY_MISMATCH.
+        Case("integrity null", [frame(1, "x", integrity=None)], "error"),
+        Case("integrity an array", [frame(1, "x", integrity=[])], "error"),
+        Case("integrity a string", [frame(1, "x", integrity=needle.decode())], "error", needles=(needle,)),
+        Case("integrity an empty object", [frame(1, "x", integrity={})], "error"),
+        Case("integrity name outside the scope", [frame(1, "x", integrity={"evil/pkg": "0" * 64})], "error"),
+        Case(
+            "integrity name carrying a marker",
+            [frame(1, "x", integrity={"@redact-secret/" + PLAINTEXT_MARKER: "0" * 64})],
+            "error",
+            needles=(needle,),
+        ),
+        Case("integrity digest in upper case", [frame(1, "x", integrity={"@redact-secret/core": "A" * 64})], "error"),
+        Case("integrity digest of 63 characters", [frame(1, "x", integrity={"@redact-secret/core": "0" * 63})], "error"),
+        Case("integrity digest a number", [frame(1, "x", integrity={"@redact-secret/core": 7})], "error"),
+        Case(
+            "integrity with 33 packages",
+            [frame(1, "x", integrity={f"@redact-secret/p{i}": "0" * 64 for i in range(33)})],
+            "error",
+        ),
+        Case(
+            "integrity pins that do not match the installed core",
+            [frame(1, "x", integrity={"@redact-secret/core": "0" * 64, "@redact-secret/wasm": "1" * 64})],
+            "error",
+            needles=(needle,),
+        ),
+        Case(
+            "integrity pinning the core only (no WebAssembly package)",
+            [frame(1, "x", integrity={"@redact-secret/core": "0" * 64})],
+            "error",
+        ),
+        Case(
+            "integrity repeated on a second request",
+            [ok, frame(2, "y", integrity={"@redact-secret/core": "0" * 64, "@redact-secret/wasm": "1" * 64})],
+            "either",
+            frames_expected=2,
+            needles=(needle,),
+        ),
         Case("id fractional", [b'{"id":1.5,"input":"x","pii":[]}\n'], "error"),
         Case("id huge", [b'{"id":1e999,"input":"x","pii":[]}\n'], "error"),
         Case("input missing", [b'{"id":1,"pii":[]}\n'], "error"),
@@ -1562,11 +1601,22 @@ export function scan() {{ return []; }}
                 bridge.scan("x", policy=None, limits=LIMITS)
                 timings[label].append(time.monotonic() - started)
     pinned, unpinned = sorted(timings["pinned"]), sorted(timings["unpinned"])
+    # The cost of the one setting that leaves no live process holding an input: a new child for every scan.
+    per_scan: dict[str, float] = {}
+    for label, pins in (("pinned", PINNED_CORE_INTEGRITY), ("unpinned", None)):
+        with NodeCoreBridge(
+            node_modules=str(nm), expected_core_integrity=pins, timeout_s=60.0, max_scans_per_process=1
+        ) as bridge:
+            started = time.monotonic()
+            for _ in range(20):
+                bridge.scan("x", policy=None, limits=LIMITS)
+            per_scan[label] = 20 / (time.monotonic() - started)
     report.add(
         "G5.integrity.cost",
         None,
-        "the first scan of a new child with and without the integrity pin (the pin is verified once per child)",
-        f"10 runs each: with the pin p50 {pinned[5] * 1000:.0f} ms max {pinned[-1] * 1000:.0f} ms; without p50 {unpinned[5] * 1000:.0f} ms max {unpinned[-1] * 1000:.0f} ms",
+        "the first scan of a new child with and without the integrity pin (the pin is verified once per child), and the rate at max_scans_per_process=1 (a new child for every scan)",
+        f"10 runs each: with the pin p50 {pinned[5] * 1000:.0f} ms max {pinned[-1] * 1000:.0f} ms; without p50 {unpinned[5] * 1000:.0f} ms max {unpinned[-1] * 1000:.0f} ms; "
+        f"max_scans_per_process=1, 20 scans: {per_scan['pinned']:.1f} scans/s with the pin, {per_scan['unpinned']:.1f} without",
     )
 
 
