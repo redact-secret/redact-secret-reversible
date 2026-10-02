@@ -14,13 +14,21 @@ running the command supplied.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from .core_client import DEFAULT_BRIDGE_SCRIPT, NODE_MODULES_ENV, PINNED_CORE_VERSION, NodeCoreBridge
+from .core_client import (
+    DEFAULT_BRIDGE_SCRIPT,
+    NODE_MODULES_ENV,
+    PINNED_CORE_INTEGRITY,
+    PINNED_CORE_VERSION,
+    NodeCoreBridge,
+)
 from .errors import VaultServerError
 
 #: Node.js major versions the bridge is tested on.
@@ -39,6 +47,11 @@ _CORE_FIXES = {
     "BRIDGE_CORE_LOAD_FAILED": (
         "the core is there but did not load: reinstall it with "
         f"`npm install @redact-secret/core@{PINNED_CORE_VERSION}` using the same Node.js that is on PATH"
+    ),
+    "CORE_INTEGRITY_MISMATCH": (
+        "the installed core, its WebAssembly package or its platform addon is not the pinned release byte for byte "
+        "(another version, a modified, missing or extra file): reinstall exactly "
+        f"`npm install @redact-secret/core@{PINNED_CORE_VERSION}` in a clean directory"
     ),
     "BRIDGE_SPAWN_FAILED": "the node executable could not be started: check that it is runnable",
     "BRIDGE_TIMEOUT": "the bridge did not answer in time: run the command again, and check the machine's load",
@@ -61,6 +74,22 @@ def _node_version(node: str) -> str | None:
     return text if done.returncode == 0 and text.startswith("v") and len(text) <= 32 else None
 
 
+_VERSION_TEXT = re.compile(r"[0-9A-Za-z][0-9A-Za-z._+-]{0,63}")
+
+
+def _installed_version(location: str | None) -> str | None:
+    """The ``version`` the installed core's package.json states (data only: nothing is run), for the message of an
+    integrity failure; ``None`` when it cannot be read."""
+    if location is None:
+        return None
+    try:
+        manifest = json.loads(Path(location, "@redact-secret", "core", "package.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    version = manifest.get("version") if isinstance(manifest, dict) else None
+    return version if isinstance(version, str) and _VERSION_TEXT.fullmatch(version) else None
+
+
 def _node_major(version: str) -> int | None:
     head = version[1:].split(".", 1)[0]
     return int(head) if head.isdigit() else None
@@ -72,6 +101,7 @@ def run_doctor(
     node_executable: str | None = None,
     script: Path = DEFAULT_BRIDGE_SCRIPT,
     out: Callable[[str], None] = print,
+    integrity: Mapping[str, str] | None = PINNED_CORE_INTEGRITY,
 ) -> int:
     """Run every check and report each on one line. Returns 0 when all pass,
     1 otherwise. A check that cannot run because an earlier one failed is
@@ -108,6 +138,7 @@ def run_doctor(
             script=script,
             node_modules=node_modules,
             expected_core_version=None,
+            expected_core_integrity=integrity,
         )
     except VaultServerError:
         fail("core location", "the node_modules path is not usable", "pass an existing directory path")
@@ -127,6 +158,10 @@ def run_doctor(
     except VaultServerError as error:
         code = error.core_code or error.code.value
         fix = _CORE_FIXES.get(code, _INSTALL_FIX)
+        if code == "CORE_INTEGRITY_MISMATCH":
+            stated = _installed_version(location)
+            if stated is not None and stated != PINNED_CORE_VERSION:
+                code = f"{code} (the installed package.json says {stated}; need exactly {PINNED_CORE_VERSION})"
         if code == "BRIDGE_CORE_NOT_FOUND" and location is None:
             fix = _INSTALL_FIX
         fail("core", code, fix)

@@ -4,8 +4,9 @@ These run the real ``boundary/core_bridge.mjs`` over the real ``@redact-secret/c
 installed core and are skipped, with the reason, without them. The full runs (thousands of fuzz cases, the heavy
 inputs, the memory scan on Linux) are the command-line tool; the qualification record says which were made.
 
-Two criteria are known to be unmet. Each has a strict ``xfail`` below, so a fix flips the test and the record has to
-be updated with it (CONVENTIONS.md: a status word follows the evidence).
+Two criteria were once unmet and pinned by strict ``xfail`` tests (an unvalidated error code from the child, a core
+replaced on disk that reports the pinned version). They pass now, and the record changed with them (CONVENTIONS.md: a
+status word follows the evidence).
 """
 
 from __future__ import annotations
@@ -92,22 +93,21 @@ def test_a_waiting_caller_is_bounded_only_by_the_request_in_flight() -> None:
     assert waited and waited[0] >= 1.4, "the queued caller waited past timeout_s without an error"
 
 
-def test_an_error_code_from_a_hostile_core_never_reaches_an_exception(tmp_path: Path) -> None:
-    results = _run(bq.run_failclosed, tmp_path)
-    result = results["G5.sanitization.core-error-code"]
+@pytest.fixture(scope="module")
+def failclosed(tmp_path_factory: pytest.TempPathFactory) -> dict[str, bq.Result]:
+    return _run(bq.run_failclosed, tmp_path_factory.mktemp("failclosed"))
+
+
+def test_an_error_code_from_a_hostile_core_never_reaches_an_exception(failclosed: dict[str, bq.Result]) -> None:
+    result = failclosed["G5.sanitization.core-error-code"]
     assert result.verdict == "MET", result.numbers
 
 
-def test_a_finding_outside_the_input_is_refused_by_the_capture_plan(tmp_path: Path) -> None:
-    results = _run(bq.run_failclosed, tmp_path)
-    assert results["G5.failclosed.range-outside-input"].verdict == "MET"
+def test_a_finding_outside_the_input_is_refused_by_the_capture_plan(failclosed: dict[str, bq.Result]) -> None:
+    assert failclosed["G5.failclosed.range-outside-input"].verdict == "MET"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="NOT MET: a core replaced on disk that reports the pinned version string is accepted; the bridge pins "
-    "a version string and nothing else (same as the JavaScript vault); see the qualification record, G5",
-)
-def test_a_replaced_core_that_reports_the_pinned_version_is_detected(tmp_path: Path) -> None:
-    results = _run(bq.run_failclosed, tmp_path)
-    assert results["G5.failclosed.replaced-core"].verdict == "MET"
+def test_a_replaced_core_that_reports_the_pinned_version_is_detected(failclosed: dict[str, bq.Result]) -> None:
+    result = failclosed["G5.failclosed.replaced-core"]
+    assert result.verdict == "MET", result.numbers
+    assert "0 unexpected" in result.numbers

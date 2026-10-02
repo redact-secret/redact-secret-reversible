@@ -30,8 +30,10 @@ import weakref
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import IO, Any, Protocol, runtime_checkable
 
+from ._core_pin import CORE_PACKAGES
 from .errors import VaultServerError, VaultServerErrorCode
 from .pii import MAX_PII_ACTIVATION_LENGTH, resolve_expected_pii_activation, resolve_pii_selection
 
@@ -41,6 +43,15 @@ DEFAULT_BRIDGE_SCRIPT = Path(__file__).parent / "boundary" / "core_bridge.mjs"
 # pin in this repository's root package.json. A response reporting a
 # different version is treated as CORE_FAILURE rather than silently trusted.
 PINNED_CORE_VERSION = "0.1.0-beta.12"
+
+#: The integrity pin of that release: the "rsv-tree-v1" digest of each package directory the core needs (the core,
+#: its WebAssembly package, and the addon package of each platform it publishes). The bridge process hashes the
+#: directories it is about to load before it imports the core and refuses on any difference
+#: (``CORE_INTEGRITY_MISMATCH``). Generated into ``_core_pin.py`` by ``scripts/core-integrity.py``, which CI re-runs
+#: against ``package.json``, ``package-lock.json``, and the published tarballs.
+PINNED_CORE_INTEGRITY: Mapping[str, str] = MappingProxyType({name: pin["tree"] for name, pin in CORE_PACKAGES.items()})
+_INTEGRITY_CORE = "@redact-secret/core"
+_INTEGRITY_WASM = "@redact-secret/wasm"
 
 #: Environment variable ``NodeCoreBridge`` reads when ``node_modules`` is not
 #: passed: the ``node_modules`` directory that holds ``@redact-secret/core``.
@@ -90,6 +101,32 @@ def _resolve_node_modules(value: str | os.PathLike[str] | None) -> str | None:
     if type(raw) is not str or not raw or "\x00" in raw:
         raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
     return os.path.abspath(raw)
+
+
+_PACKAGE_NAME = re.compile(r"@redact-secret/[a-z0-9][a-z0-9-]{0,63}")
+_TREE_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def _resolve_integrity(value: Mapping[str, str] | None) -> dict[str, str] | None:
+    """The package digests to pin, or ``None`` for no integrity check (a caller that loads a core other than the
+    pinned release, as the test fixtures do, and says so)."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping) or not 0 < len(value) <= 32:
+        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+    pins: dict[str, str] = {}
+    for name, digest in value.items():
+        if (
+            type(name) is not str
+            or type(digest) is not str
+            or _PACKAGE_NAME.fullmatch(name) is None
+            or _TREE_DIGEST.fullmatch(digest) is None
+        ):
+            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+        pins[name] = digest
+    if _INTEGRITY_CORE not in pins or _INTEGRITY_WASM not in pins:
+        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+    return pins
 
 
 def _resolve_seconds(value: Any) -> float:
@@ -146,7 +183,7 @@ class CoreClient(Protocol):
 
 _FINDING_STR_FIELDS = ("id", "type", "detector", "confidence", "obfuscation", "action")
 _FINDING_KEYS = frozenset((*_FINDING_STR_FIELDS, "start", "end"))
-_SUCCESS_KEYS = frozenset(("findings", "coreVersion", "artifact", "piiActivation"))
+_SUCCESS_KEYS = frozenset(("findings", "coreVersion", "artifact", "piiActivation", "integrity"))
 _ERROR_KEYS = frozenset(("error",))
 _UNPINNED: Any = object()
 
@@ -411,6 +448,18 @@ class NodeCoreBridge:
     ``fork()``, the child never uses the parent's process and starts its
     own. The process's stderr is discarded.
 
+    Core integrity: ``expected_core_integrity`` (default ``PINNED_CORE_INTEGRITY``) pins the "rsv-tree-v1" digest of
+    the package directories the bridge is about to load: ``@redact-secret/core``, ``@redact-secret/wasm``, and the
+    platform addon package that Node.js finds beside them. The first request of each process carries the pins; the
+    process hashes those directories before it imports the core, so a core that was replaced or modified never runs and
+    never sees an input, and any difference (a changed, added, removed or symlinked file) is ``CORE_FAILURE`` with
+    ``core_code`` ``CORE_INTEGRITY_MISMATCH``. The response reports the digests it verified and this class checks them
+    against the pin again. What it covers: every file of those directories, and that a native addon the core chose was
+    one of them (an addon found through ``NODE_PATH`` or a global folder is refused). What it does not cover: the
+    ``node`` executable, the bridge script, other directories on Node.js's module path, and a change made between the
+    hash and the import by someone who can write those files. ``None`` switches the check off, as
+    ``expected_core_version=None`` does the version check; a core other than the pinned release needs both.
+
     PII activation (docs/decisions/decide-pii-retention-and-activation-ownership.md
     §3 "Python bridge"): each bridge process is a realm with no other
     initializer, so ``pii`` is the only selection and omission means PII
@@ -435,7 +484,8 @@ class NodeCoreBridge:
     (``BRIDGE_SPAWN_FAILED``) or exits mid-request
     (``BRIDGE_PROCESS_FAILED``), a malformed, oversized, or out-of-sequence
     response (``BRIDGE_BAD_OUTPUT``), and a core-version mismatch
-    (``CORE_VERSION_MISMATCH``) each raise ``VaultServerError(CORE_FAILURE)``
+    (``CORE_VERSION_MISMATCH``), and a core that is not the pinned release byte for byte
+    (``CORE_INTEGRITY_MISMATCH``) each raise ``VaultServerError(CORE_FAILURE)``
     — fail-closed, never a partial or best-effort finding list. A ``scan``
     after ``close()`` raises ``CORE_FAILURE`` with ``BRIDGE_CLOSED``. No
     error carries the input, a selector, a path, or process output.
@@ -455,6 +505,7 @@ class NodeCoreBridge:
         script: Path = DEFAULT_BRIDGE_SCRIPT,
         timeout_s: float = 10.0,
         expected_core_version: str | None = PINNED_CORE_VERSION,
+        expected_core_integrity: Mapping[str, str] | None = PINNED_CORE_INTEGRITY,
         pii: Sequence[str] = (),
         expected_pii_activation: str | None = None,
         node_modules: str | os.PathLike[str] | None = None,
@@ -476,6 +527,12 @@ class NodeCoreBridge:
         self._script = script
         self._node_modules = resolved_node_modules
         self._expected_version = expected_core_version
+        self._expected_integrity = _resolve_integrity(expected_core_integrity)
+        # Sent with the first request of each process: `"integrity":{...},`
+        self._integrity_field = b""
+        if self._expected_integrity is not None:
+            pins = json.dumps(self._expected_integrity, separators=(",", ":"), sort_keys=True).encode("ascii")
+            self._integrity_field = b'"integrity":' + pins + b","
         self._pii = selection
         self._expected_pii_activation = expected_activation
         self._pinned_pii_activation: Any = _UNPINNED
@@ -515,7 +572,7 @@ class NodeCoreBridge:
         except (TypeError, ValueError):
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT) from None
         # `{"id":N,` is prepended once the process assigns N.
-        if len(body) + 32 > MAX_REQUEST_FRAME_BYTES:
+        if len(body) + len(self._integrity_field) + 32 > MAX_REQUEST_FRAME_BYTES:
             raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
 
         state = self._state
@@ -525,9 +582,12 @@ class NodeCoreBridge:
             proc = self._ready_process(state)
             request_id = proc.next_id
             proc.next_id += 1
+            # The integrity pins go with the first request of a process, which verifies them before it loads the core.
+            first = request_id == 1
+            pins = self._integrity_field if first else b""
             try:
-                line = self._exchange(state, proc, b'{"id":%d,' % request_id + body[1:] + b"\n")
-                outcome = self._parse(line, request_id)
+                line = self._exchange(state, proc, b'{"id":%d,' % request_id + pins + body[1:] + b"\n")
+                outcome = self._parse(line, request_id, first=first)
             except BaseException:
                 # Whatever went wrong, this process is never asked again.
                 state.discard()
@@ -593,7 +653,7 @@ class NodeCoreBridge:
             raise _core_failure("BRIDGE_PROCESS_FAILED")
         return line
 
-    def _parse(self, line: bytes, request_id: int) -> CoreScanOutcome:
+    def _parse(self, line: bytes, request_id: int, *, first: bool = False) -> CoreScanOutcome:
         try:
             data = json.loads(line)
         except (ValueError, RecursionError) as exc:
@@ -628,6 +688,7 @@ class NodeCoreBridge:
             raise _bad_output()
         if activation is not None and (type(activation) is not str or _ACTIVATION_TEXT.fullmatch(activation) is None):
             raise _bad_output()
+        self._check_integrity(data["integrity"], artifact, first)
         if self._expected_version is not None and core_version != self._expected_version:
             raise _core_failure("CORE_VERSION_MISMATCH")
 
@@ -639,6 +700,28 @@ class NodeCoreBridge:
             artifact=artifact,
             pii_activation=activation,
         )
+
+    def _check_integrity(self, reported: Any, artifact: str, first: bool) -> None:
+        """The child reports, with the response to the first request of a process, the digest of every pinned package
+        it found and verified before it loaded the core. The child already refuses a difference; this is the check
+        that it did verify (a bridge script that ignores the field, or a different one, is not accepted)."""
+        expected = self._expected_integrity
+        if expected is None or not first:
+            if reported is not None:
+                raise _bad_output()
+            return
+        if type(reported) is not dict or not reported or len(reported) > len(expected):
+            raise _bad_output()
+        for name, digest in reported.items():
+            if type(name) is not str or type(digest) is not str or name not in expected:
+                raise _bad_output()
+            if digest != expected[name]:
+                raise _core_failure("CORE_INTEGRITY_MISMATCH")
+        if _INTEGRITY_CORE not in reported or _INTEGRITY_WASM not in reported:
+            raise _core_failure("CORE_INTEGRITY_MISMATCH")
+        # A native addon that was not among the verified packages was found somewhere this check did not look.
+        if artifact == "addon" and len(reported) <= 2:
+            raise _core_failure("CORE_INTEGRITY_MISMATCH")
 
     def _check_pii_activation(self, activation: str | None) -> None:
         # Called with the bridge lock held, so pinning is not racy.

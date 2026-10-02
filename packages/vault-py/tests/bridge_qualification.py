@@ -197,7 +197,7 @@ def inspect_output(out: bytes, err: bytes, needles: tuple[bytes, ...]) -> list[s
             problems.append("a stdout frame has no id")
             continue
         keys = set(data) - {"id"}
-        if keys not in ({"findings", "coreVersion", "artifact", "piiActivation"}, {"error"}):
+        if keys not in ({"findings", "coreVersion", "artifact", "piiActivation", "integrity"}, {"error"}):
             problems.append("a stdout frame has unexpected keys")
         if "error" in data and (type(data["error"]) is not dict or set(data["error"]) - {"message", "code"}):
             problems.append("an error frame has unexpected keys")
@@ -555,6 +555,7 @@ def run_fuzz(report: Report, *, cases: int, seed: int, parser_cases: int) -> Non
                 "coreVersion": PINNED_CORE_VERSION,
                 "artifact": "wasm",
                 "piiActivation": None,
+                "integrity": None,
             },
             separators=(",", ":"),
         ).encode()
@@ -639,6 +640,7 @@ def run_fuzz_strings(report: Report, *, seed: int, cases: int) -> None:
         "coreVersion": PINNED_CORE_VERSION,
         "artifact": "wasm",
         "piiActivation": None,
+        "integrity": None,
     }
     failure = {"id": 1, "error": {"message": "core scan failed", "code": "CORE_ERROR"}}
     refused = accepted = carried = 0
@@ -987,7 +989,7 @@ def run_timeouts(report: Report, workdir: Path, *, runs: int = 20) -> None:
     overshoot: list[float] = []
     timeouts = restarted = 0
     for _ in range(runs):
-        with NodeCoreBridge(node_modules=nm, timeout_s=20.0) as bridge:
+        with NodeCoreBridge(node_modules=nm, timeout_s=20.0, expected_core_integrity=None) as bridge:
             bridge.scan(
                 "warm", policy=None, limits=LIMITS
             )  # a running child: what is measured is the deadline and the kill
@@ -1016,7 +1018,7 @@ def run_timeouts(report: Report, workdir: Path, *, runs: int = 20) -> None:
         f"time past the deadline p50 {overshoot[runs // 2] * 1000:.0f} ms, max {overshoot[-1] * 1000:.0f} ms",
     )
     # An external kill in the middle of a request.
-    with NodeCoreBridge(node_modules=nm, timeout_s=60.0) as bridge:
+    with NodeCoreBridge(node_modules=nm, timeout_s=60.0, expected_core_integrity=None) as bridge:
         bridge.scan("warm", policy=None, limits=LIMITS)
         pid = _pid(bridge)
         assert pid is not None
@@ -1295,7 +1297,7 @@ export function artifact() {{ return {{ kind: "synthetic" }}; }}
     detail = "no error"
     for text in hostile_inputs:
         try:
-            NodeCoreBridge(node_modules=nm).scan(text, policy=None, limits=LIMITS)
+            NodeCoreBridge(node_modules=nm, expected_core_integrity=None).scan(text, policy=None, limits=LIMITS)
         except VaultServerError as error:
             shown = f"{error!s}{error!r}{error.args}{error.core_code or ''}"
             leaked = leaked or marker.lower() in shown.lower()
@@ -1308,20 +1310,7 @@ export function artifact() {{ return {{ kind: "synthetic" }}; }}
         "an error code reported by a (compromised or buggy) core is not copied into the exception unvalidated: only [A-Z][A-Z0-9_]{0,63} passes, anything else is BRIDGE_BAD_OUTPUT with a fixed message",
         f"{len(hostile_inputs)} hostile codes through the real child; the input marker reached an exception: {leaked}; refused with a code other than BRIDGE_BAD_OUTPUT: {wrong_code} ({detail})",
     )
-    # Version string only: a replaced core that reports the pinned version is accepted.
-    nm = hostile("replaced", base + "export function scan() { return []; }")
-    accepted = False
-    try:
-        outcome = NodeCoreBridge(node_modules=nm).scan(f"input {secret(1)}", policy=None, limits=LIMITS)
-        accepted = len(outcome.findings) == 0
-    except VaultServerError:
-        accepted = False
-    report.add(
-        "G5.failclosed.replaced-core",
-        not accepted,
-        "a core replaced on disk that reports the pinned version string is detected",
-        f"a replacement core that finds nothing was accepted: {accepted} (the bridge pins the reported version only; same as the JavaScript vault)",
-    )
+    run_integrity(report, workdir)
     # A core that returns a finding outside the input.
     nm = hostile(
         "range",
@@ -1332,11 +1321,11 @@ export function artifact() {{ return {{ kind: "synthetic" }}; }}
 
     client_result = "accepted"
     try:
-        NodeCoreBridge(node_modules=nm).scan("short", policy=None, limits=LIMITS)
+        NodeCoreBridge(node_modules=nm, expected_core_integrity=None).scan("short", policy=None, limits=LIMITS)
     except VaultServerError as error:
         client_result = error.code.value
     server_result = "accepted"
-    with NodeCoreBridge(node_modules=nm) as bridge:
+    with NodeCoreBridge(node_modules=nm, expected_core_integrity=None) as bridge:
         try:
             InMemoryVaultServer(core_client=bridge).capture(
                 "short",
@@ -1349,6 +1338,178 @@ export function artifact() {{ return {{ kind: "synthetic" }}; }}
         server_result != "accepted",
         "a core that reports a finding outside the input: the client parser passes it on, the capture plan must refuse it",
         f"NodeCoreBridge.scan: {client_result}; InMemoryVaultServer.capture: {server_result}",
+    )
+
+
+# ------------------------------------------------------------------------------------------------ core integrity
+
+
+def _core_integrity_module() -> Any:
+    """``scripts/core-integrity.py``, the reference implementation of the digest and the writer of the pin."""
+    import importlib.util
+
+    path = _HERE.parents[2] / "scripts" / "core-integrity.py"
+    spec = importlib.util.spec_from_file_location("core_integrity_reference", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _real_node_modules() -> Path | None:
+    from redact_secret_vault.core_client import _resolve_node_modules  # noqa: PLC0415
+
+    candidates = [_resolve_node_modules(None), str(_HERE.parents[2] / "node_modules")]
+    for candidate in candidates:
+        if candidate and (Path(candidate) / "@redact-secret" / "core" / "package.json").is_file():
+            return Path(candidate)
+    return None
+
+
+def _copy_core(real: Path, target: Path, *, addon: bool = True) -> Path:
+    """A node_modules holding a copy of the installed core, its wasm package, and (optionally) this host's addon."""
+    scope = target / "node_modules" / "@redact-secret"
+    scope.mkdir(parents=True)
+    for source in sorted((real / "@redact-secret").iterdir()):
+        name = source.name
+        if name in ("core", "wasm") or (addon and name.startswith("node-")):
+            shutil.copytree(source, scope / name, symlinks=True)
+    return target / "node_modules"
+
+
+def _flip(path: Path) -> None:
+    data = bytearray(path.read_bytes())
+    data[len(data) // 2] ^= 0x01
+    path.write_bytes(bytes(data))
+
+
+def run_integrity(report: Report, workdir: Path) -> None:
+    from redact_secret_vault.core_client import PINNED_CORE_INTEGRITY  # noqa: PLC0415
+
+    real = _real_node_modules()
+    if real is None:
+        report.add("G5.failclosed.replaced-core", None, "NOT RUN: no installed @redact-secret/core to copy", "")
+        return
+    reference = _core_integrity_module()
+    marker = PLAINTEXT_MARKER
+    root = workdir / "integrity"
+    addon_names = sorted(p.name for p in (real / "@redact-secret").iterdir() if p.name.startswith("node-"))
+
+    def attempt(nm: Path, *, env: dict[str, str] | None = None, pins: Any = PINNED_CORE_INTEGRITY) -> tuple[str, str]:
+        """``(outcome, artifact)``: ``accepted`` with the artifact the child used, or the refusal's ``core_code``."""
+        saved = {key: os.environ.get(key) for key in (env or {})}
+        os.environ.update(env or {})
+        try:
+            with NodeCoreBridge(node_modules=str(nm), expected_core_integrity=pins, timeout_s=60.0) as bridge:
+                outcome = bridge.scan(f"input {secret(1)} {marker}", policy=None, limits=LIMITS)
+                return ("accepted" if outcome.findings else "accepted-nothing-found", outcome.artifact)
+        except VaultServerError as error:
+            shown = f"{error!s}{error!r}{error.args}"
+            assert marker not in shown and str(nm) not in shown, "an integrity failure echoed the input or a path"
+            return (str(error.core_code), "")
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    refused = "CORE_INTEGRITY_MISMATCH"
+    results: list[tuple[str, bool, str]] = []
+
+    def case(name: str, expected: str, nm: Path, **kwargs: Any) -> None:
+        got, artifact = attempt(nm, **kwargs)
+        results.append((name, got == expected, f"{got}{'/' + artifact if artifact else ''}"))
+
+    # Positive controls: the installed core is accepted, with its addon and with the WebAssembly fallback.
+    nm = _copy_core(real, root / "pristine")
+    case("pristine copy, addon", "accepted", nm)
+    nm = _copy_core(real, root / "no-addon", addon=False)
+    case("pristine copy, no addon (WebAssembly fallback)", "accepted", nm)
+    # Every kind of change to a pinned package is refused before the core runs.
+    core_dir = lambda nm: nm / "@redact-secret" / "core"  # noqa: E731
+    nm = _copy_core(real, root / "core-byte")
+    _flip(core_dir(nm) / "dist" / "index.js")
+    case("one bit of the core's dist/index.js flipped", refused, nm)
+    nm = _copy_core(real, root / "core-extra")
+    (core_dir(nm) / "dist" / "extra.js").write_text("export {};\n")
+    case("a file added to the core", refused, nm)
+    nm = _copy_core(real, root / "core-removed")
+    (core_dir(nm) / "dist" / "formatters.d.ts").unlink()
+    case("a file removed from the core", refused, nm)
+    nm = _copy_core(real, root / "core-symlink")
+    (core_dir(nm) / "dist" / "version.d.ts").unlink()
+    (core_dir(nm) / "dist" / "version.d.ts").symlink_to(core_dir(nm) / "dist" / "version.js")
+    case("a file of the core replaced by a symbolic link", refused, nm)
+    nm = _copy_core(real, root / "core-manifest")
+    manifest = core_dir(nm) / "package.json"
+    manifest.write_text(manifest.read_text().replace('"MIT"', '"MIT "', 1))
+    case("the core's package.json changed", refused, nm)
+    nm = _copy_core(real, root / "wasm-byte")
+    _flip(next((nm / "@redact-secret" / "wasm").glob("*.wasm")))
+    case("one bit of the WebAssembly package flipped", refused, nm)
+    nm = _copy_core(real, root / "wasm-missing")
+    shutil.rmtree(nm / "@redact-secret" / "wasm")
+    case("the WebAssembly package missing", refused, nm)
+    for name in addon_names:
+        nm = _copy_core(real, root / f"addon-byte-{name}")
+        _flip(next((nm / "@redact-secret" / name).glob("*.node")))
+        case(f"one bit of the native addon ({name}) flipped", refused, nm)
+    # An addon that Node.js would find outside the verified places (NODE_PATH) is refused, not loaded and trusted.
+    if addon_names:
+        planted = root / "node-path"
+        shutil.copytree(real / "@redact-secret" / addon_names[0], planted / "@redact-secret" / addon_names[0])
+        nm = _copy_core(real, root / "addon-elsewhere", addon=False)
+        control = attempt(nm, env={"NODE_PATH": str(planted)}, pins=None)
+        results.append(("control: that addon is the one Node.js loads when nothing is pinned", control[1] == "addon", control[0] + "/" + control[1]))
+        case("a native addon found through NODE_PATH, not beside the core", refused, nm, env={"NODE_PATH": str(planted)})
+    # A replaced core that reports the pinned version, and runs code when it is imported.
+    base = f"""import {{ writeFileSync }} from "node:fs";
+writeFileSync({json.dumps(str(root / "ran"))}, "imported");
+export const VERSION = {json.dumps(PINNED_CORE_VERSION)};
+export async function initialize() {{}}
+export function artifact() {{ return "addon"; }}
+export function scan() {{ return []; }}
+"""
+    fake = _fake_core(root / "replaced", source=base)
+    case("a replacement core that reports the pinned version and finds nothing", refused, Path(fake))
+    results.append(("the replacement core's code never ran (hashed before it was imported)", not (root / "ran").exists(), "marker absent" if not (root / "ran").exists() else "MARKER PRESENT"))
+    # The child's digest is the reference function's: pins computed by the reference for a tampered copy are accepted.
+    nm = _copy_core(real, root / "agree")
+    _flip(core_dir(nm) / "dist" / "index.js")
+    pins = {"@redact-secret/core": reference.tree_digest_of_dir(core_dir(nm)), "@redact-secret/wasm": reference.tree_digest_of_dir(nm / "@redact-secret" / "wasm")}
+    for name in addon_names:
+        pins[f"@redact-secret/{name}"] = reference.tree_digest_of_dir(nm / "@redact-secret" / name)
+    case("the reference digest of a modified copy is accepted by the child (the two functions agree)", "accepted", nm, pins=pins)
+    wrong = sum(1 for _name, ok, _got in results if not ok)
+    report.add(
+        "G5.failclosed.replaced-core",
+        wrong == 0,
+        "a core replaced on disk that reports the pinned version string is detected: the packages the child is about to load are hashed against the pin before the core runs, and a difference is CORE_INTEGRITY_MISMATCH with a fixed message",
+        f"{len(results)} cases, {wrong} unexpected"
+        + "".join(f"; UNEXPECTED {name}: {got}" for name, ok, got in results if not ok),
+    )
+    report.add(
+        "G5.failclosed.integrity-cases",
+        None,
+        "each case of the integrity check and its outcome",
+        "; ".join(f"{name} -> {got}" for name, _ok, got in results),
+    )
+    # What the check costs: the first scan of a new child with and without the pin.
+    nm = _copy_core(real, root / "cost")
+    timings: dict[str, list[float]] = {"pinned": [], "unpinned": []}
+    for _ in range(10):
+        for label, pins in (("pinned", PINNED_CORE_INTEGRITY), ("unpinned", None)):
+            with NodeCoreBridge(node_modules=str(nm), expected_core_integrity=pins, timeout_s=60.0) as bridge:
+                started = time.monotonic()
+                bridge.scan("x", policy=None, limits=LIMITS)
+                timings[label].append(time.monotonic() - started)
+    pinned, unpinned = sorted(timings["pinned"]), sorted(timings["unpinned"])
+    report.add(
+        "G5.integrity.cost",
+        None,
+        "the first scan of a new child with and without the integrity pin (the pin is verified once per child)",
+        f"10 runs each: with the pin p50 {pinned[5] * 1000:.0f} ms max {pinned[-1] * 1000:.0f} ms; without p50 {unpinned[5] * 1000:.0f} ms max {unpinned[-1] * 1000:.0f} ms",
     )
 
 

@@ -282,6 +282,14 @@ jobs:
         working-directory: packages/vault-py
       - run: ruff check .
         working-directory: packages/vault-py
+      # The bridge refuses a core that is not the pinned release byte for byte
+      # (packages/vault-py/src/redact_secret_vault/_core_pin.py). This step
+      # recomputes the pin from the published tarballs (the sha512 of each is
+      # checked against package-lock.json first), and compares it with package.json,
+      # package-lock.json, and the core that `npm ci` just installed, so the pin
+      # cannot drift from the version without this job failing.
+      - name: Core integrity pin
+        run: python scripts/core-integrity.py check --fetch --installed node_modules
       - run: pytest -q
         working-directory: packages/vault-py
       - name: Python example

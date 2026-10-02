@@ -112,7 +112,7 @@ def _core_code(excinfo) -> str | None:
 
 @needs_node
 def test_sequential_scans_reuse_one_process(fake_core):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         pids = set()
         for n in range(50):
             outcome = bridge.scan("x" * n)
@@ -126,7 +126,7 @@ def test_sequential_scans_reuse_one_process(fake_core):
 @needs_node
 @posix_only
 def test_timeout_kills_the_process_and_the_next_scan_restarts(fake_core):
-    with NodeCoreBridge(script=fake_core, timeout_s=1.0) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core, timeout_s=1.0) as bridge:
         first = _pid(bridge.scan("warm"))
         started = time.monotonic()
         with pytest.raises(VaultServerError) as excinfo:
@@ -141,7 +141,7 @@ def test_timeout_kills_the_process_and_the_next_scan_restarts(fake_core):
 @needs_node
 @posix_only
 def test_a_process_that_dies_mid_request_fails_closed_then_recovers(fake_core):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         first = _pid(bridge.scan("warm"))
         with pytest.raises(VaultServerError) as excinfo:
             bridge.scan("die-synthetic")
@@ -155,7 +155,7 @@ def test_a_process_that_dies_mid_request_fails_closed_then_recovers(fake_core):
 @needs_node
 @posix_only
 def test_a_process_killed_while_idle_is_replaced_before_the_next_request(fake_core):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         first = _pid(bridge.scan("warm"))
         popen = _live_popen(bridge)
         os.kill(first, signal.SIGKILL)
@@ -167,7 +167,7 @@ def test_a_process_killed_while_idle_is_replaced_before_the_next_request(fake_co
 
 @needs_node
 def test_malformed_output_fails_closed_without_echoing_it_then_recovers(fake_core):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         first = _pid(bridge.scan("warm"))
         with pytest.raises(VaultServerError) as excinfo:
             bridge.scan("garbage-synthetic")
@@ -180,7 +180,7 @@ def test_malformed_output_fails_closed_without_echoing_it_then_recovers(fake_cor
 @needs_node
 def test_oversized_output_fails_closed(fake_core, monkeypatch):
     monkeypatch.setattr(core_client_module, "MAX_RESPONSE_FRAME_BYTES", 4096)
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         first = _pid(bridge.scan("warm"))
         with pytest.raises(VaultServerError) as excinfo:
             bridge.scan("big-synthetic")
@@ -190,7 +190,7 @@ def test_oversized_output_fails_closed(fake_core, monkeypatch):
 
 @needs_node
 def test_an_oversized_request_is_refused_before_it_is_sent(fake_core, monkeypatch):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         first = _pid(bridge.scan("warm"))
         monkeypatch.setattr(core_client_module, "MAX_REQUEST_FRAME_BYTES", 1024)
         with pytest.raises(VaultServerError) as excinfo:
@@ -202,7 +202,7 @@ def test_an_oversized_request_is_refused_before_it_is_sent(fake_core, monkeypatc
 
 @needs_node
 def test_bridge_stderr_is_discarded(fake_core, capfd):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         bridge.scan("stderr-synthetic leak-synthetic")
     out, err = capfd.readouterr()
     assert "leak-synthetic" not in out
@@ -211,7 +211,7 @@ def test_bridge_stderr_is_discarded(fake_core, capfd):
 
 @needs_node
 def test_process_is_retired_at_max_scans(fake_core):
-    with NodeCoreBridge(script=fake_core, max_scans_per_process=3) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core, max_scans_per_process=3) as bridge:
         pids = [_pid(bridge.scan("x")) for _ in range(3)]
         # Killed right after its last scan, not left holding that input.
         assert bridge._state.proc is None
@@ -226,7 +226,7 @@ def test_process_is_retired_at_max_scans(fake_core):
 
 @needs_node
 def test_process_is_replaced_after_max_age(fake_core):
-    with NodeCoreBridge(script=fake_core, max_process_age_s=0.3) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core, max_process_age_s=0.3) as bridge:
         first = _pid(bridge.scan("x"))
         assert _pid(bridge.scan("x")) == first
         time.sleep(0.4)
@@ -235,7 +235,7 @@ def test_process_is_replaced_after_max_age(fake_core):
 
 @needs_node
 def test_an_idle_process_exits_on_its_own_and_is_replaced(fake_core):
-    with NodeCoreBridge(script=fake_core, idle_timeout_s=0.5) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core, idle_timeout_s=0.5) as bridge:
         first = _pid(bridge.scan("x"))
         popen = _live_popen(bridge)
         assert _wait_until(lambda: popen.poll() is not None)
@@ -249,7 +249,7 @@ def test_threads_sharing_one_bridge_are_serialized_on_one_process(fake_core):
     pids: set[int] = set()
     lock = threading.Lock()
 
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
 
         def worker(length: int) -> None:
             try:
@@ -275,7 +275,10 @@ def test_threads_sharing_one_bridge_are_serialized_on_one_process(fake_core):
 def test_separate_bridges_use_separate_processes_concurrently(fake_core):
     results: dict[int, set[int]] = {0: set(), 1: set()}
     errors: list[BaseException] = []
-    bridges = [NodeCoreBridge(script=fake_core), NodeCoreBridge(script=fake_core)]
+    bridges = [
+        NodeCoreBridge(expected_core_integrity=None, script=fake_core),
+        NodeCoreBridge(expected_core_integrity=None, script=fake_core),
+    ]
 
     def worker(index: int) -> None:
         try:
@@ -300,7 +303,7 @@ def test_separate_bridges_use_separate_processes_concurrently(fake_core):
 
 @needs_node
 def test_close_kills_and_reaps_the_process_and_refuses_later_scans(fake_core):
-    bridge = NodeCoreBridge(script=fake_core)
+    bridge = NodeCoreBridge(expected_core_integrity=None, script=fake_core)
     pid = _pid(bridge.scan("x"))
     bridge.close()
     assert _gone(pid)
@@ -312,14 +315,14 @@ def test_close_kills_and_reaps_the_process_and_refuses_later_scans(fake_core):
 
 @needs_node
 def test_context_manager_closes(fake_core):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         pid = _pid(bridge.scan("x"))
     assert _gone(pid)
 
 
 @needs_node
 def test_garbage_collecting_the_bridge_reaps_the_process(fake_core):
-    bridge = NodeCoreBridge(script=fake_core)
+    bridge = NodeCoreBridge(expected_core_integrity=None, script=fake_core)
     pid = _pid(bridge.scan("x"))
     del bridge
     gc.collect()
@@ -338,7 +341,7 @@ def test_close_before_any_scan_starts_nothing():
 @posix_only
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_a_forked_child_never_uses_the_parents_process(fake_core):
-    with NodeCoreBridge(script=fake_core) as bridge:
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core) as bridge:
         parent_pid = _pid(bridge.scan("x"))
         read_fd, write_fd = os.pipe()
         child = os.fork()
@@ -490,6 +493,8 @@ def _ok(request: dict, activation: str | None = ACTIVATION) -> dict:
         "coreVersion": PINNED_CORE_VERSION,
         "artifact": "fake",
         "piiActivation": activation,
+        # The scripted child verified whatever the first request pinned, so it reports that back.
+        "integrity": request.get("integrity"),
     }
 
 

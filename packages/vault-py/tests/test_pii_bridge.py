@@ -67,6 +67,7 @@ def _ok(activation, findings=None, version=PINNED_CORE_VERSION) -> dict:
         "coreVersion": version,
         "artifact": "addon",
         "piiActivation": activation,
+        "integrity": None,
     }
 
 
@@ -157,6 +158,7 @@ def fake_run(monkeypatch):
 
 
 def _bridge(**kwargs) -> NodeCoreBridge:
+    kwargs.setdefault("expected_core_integrity", None)  # the scripted responses carry no integrity digests
     return NodeCoreBridge(node_executable="node-fake-synthetic", **kwargs)
 
 
@@ -295,6 +297,7 @@ def _without(key: str) -> dict:
         {"error": "PII_UNAVAILABLE"},
         {"error": {"code": 5}},
         _without("piiActivation"),  # an older bridge script
+        _without("integrity"),  # a bridge script from before the integrity pin
         _without("findings"),
         _without("artifact"),
         {**_ok(None), "extra": 1},
@@ -374,7 +377,7 @@ def _fake_core_bridge(tmp_path: Path, source: str, **kwargs) -> NodeCoreBridge:
     (package / "index.js").write_text(source.replace("__PINNED_CORE_VERSION__", PINNED_CORE_VERSION))
     script = tmp_path / "core_bridge.mjs"
     shutil.copyfile(DEFAULT_BRIDGE_SCRIPT, script)
-    return NodeCoreBridge(script=script, **kwargs)
+    return NodeCoreBridge(expected_core_integrity=None, script=script, **kwargs)
 
 
 def _raw_bridge(bridge: NodeCoreBridge, payload: str) -> dict:
@@ -562,7 +565,7 @@ RELEASE = (CaptureGrant(sink="sink-synthetic", paths=("body",)),)
 
 
 def _pii_bridge(script: Path, **kwargs) -> NodeCoreBridge:
-    return NodeCoreBridge(script=script, expected_core_version=None, **kwargs)
+    return NodeCoreBridge(expected_core_integrity=None, script=script, expected_core_version=None, **kwargs)
 
 
 def test_real_core_selection_propagates_and_is_pinned(pii_core_script):
