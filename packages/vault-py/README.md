@@ -21,7 +21,7 @@ Swap secrets for random tokens before text leaves your server (for example, to a
 ## Install
 
 ```bash
-pip install redact-secret-vault==0.1.0b3
+pip install redact-secret-vault==0.1.0b4
 # In a directory of your choice, for example /srv/myapp/core:
 npm install @redact-secret/core@0.1.0-beta.12
 ```
@@ -36,7 +36,7 @@ bridge = NodeCoreBridge(node_modules="/srv/myapp/core/node_modules")
 export REDACT_SECRET_VAULT_NODE_MODULES=/srv/myapp/core/node_modules
 ```
 
-Then check the setup. `doctor` is on `main` and not in `0.1.0b3`:
+Then check the setup. `doctor` is new in `0.1.0b4`; `0.1.0b3` does not have it:
 
 ```bash
 python -m redact_secret_vault doctor --node-modules /srv/myapp/core/node_modules
