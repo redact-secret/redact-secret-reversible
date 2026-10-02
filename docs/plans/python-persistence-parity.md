@@ -690,7 +690,7 @@ Sentinels: every fixture value, every issued token, the data key, entry keys, wr
 | `__cause__` and `__context__` | Must both be `None` on errors from the persistent modules (§3.4) |
 | `__notes__` (Python 3.11+) | Must be absent |
 | Traceback | `traceback.format_exception`, and every frame's `f_locals` reachable from `__traceback__` |
-| `logging` | A handler on the root logger at `DEBUG`, including the `psycopg`, `boto3`, `botocore`, and `urllib3` loggers. The package itself must emit no record. Whether those libraries log request or response bodies at `DEBUG` is established by this test, and the adapter documentation then states what an application must not enable |
+| `logging` | A handler on the root logger at `DEBUG`, including the `psycopg`, `boto3`, `botocore`, and `urllib3` loggers. The package itself must emit no record. Whether those libraries log request or response bodies at `DEBUG` is established by this test, and the adapter documentation then states what an application must not enable. For the KMS provider the finding is enforced, not only documented: it fails closed while `DEBUG` is enabled for a guarded SDK logger unless `allow_sdk_debug_logging=True` ([#145](https://github.com/redact-secret/redact-secret-vault/issues/145)), with a leak test on the real `boto3` and a stubbed HTTP layer |
 | `warnings` | Run with `-W error`; any warning raised with a sentinel fails; the package raises none of its own |
 | `stdout`, `stderr` | Captured for each driver process |
 | Audit events | `repr` and field walk |

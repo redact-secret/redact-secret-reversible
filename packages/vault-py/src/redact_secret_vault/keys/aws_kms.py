@@ -24,10 +24,18 @@ provider never retries; the retry mode of the client the application built decid
 Logging: this module logs nothing. ``botocore`` does: with its loggers at ``DEBUG``, a real ``GenerateDataKey`` or
 ``Decrypt`` was observed (``botocore`` 1.43.107, record in
 ``docs/research/qualification-python-persistence-0.1.0b3.md``) to write the response body, which holds the
-plaintext data key in base64, and the key ARN, from ``botocore.parsers``.
-The encryption context carries no identifier, so no namespace, tenant, or capture identifier is in those records. An
-application must not enable ``DEBUG`` for ``botocore``, ``boto3``, or ``urllib3`` (or the root logger) in a process that
-uses this provider.
+plaintext data key in base64, and the key ARN, from ``botocore.parsers``; ``botocore.endpoint`` writes the request
+parameters, including the wrapped key of a ``Decrypt``. The encryption context carries no identifier, so no namespace,
+tenant, or capture identifier is in those records.
+
+The provider fails closed on that, without changing any logging configuration: at construction and before every KMS
+call it asks whether ``DEBUG`` is enabled (``Logger.isEnabledFor``, which includes inheritance from the root logger and
+``logging.disable``) for ``botocore``, ``botocore.parsers``, ``botocore.hooks``, ``botocore.endpoint``, ``boto3``, and
+``urllib3.connectionpool``. If it is, construction fails ``KEY_INVALID_ARGUMENT`` and a call fails ``KEY_UNAVAILABLE``
+before any request is made, unless the application passes ``allow_sdk_debug_logging=True``, which accepts that the SDK
+writes key material to the application's logs. A cache hit makes no SDK call and is not refused. Not covered: a level
+raised while a call is in flight, a call given up by its timeout that is still running, a logger the SDK adds later,
+a record sent by a handler that bypasses ``logging``, and a client the application configured to log in another way.
 """
 
 from __future__ import annotations
@@ -35,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import logging
 import re
 import time
 from collections.abc import Callable, Mapping
@@ -60,6 +69,7 @@ __all__ = [
     "CONTEXT_VERSION_KEY",
     "DEFAULT_CALL_TIMEOUT_MS",
     "KEY_REF_PREFIX",
+    "SDK_LOGGERS_THAT_CAN_CARRY_KEY_MATERIAL",
     "AwsKmsExpected",
     "AwsKmsKey",
     "AwsKmsKeyProvider",
@@ -96,6 +106,25 @@ _LABEL_VALUE: Final = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 #: Hard ceilings of the opt-in cache (spec section 6.2): five minutes, ten thousand entries.
 CACHE_MAX_AGE_CEILING_MS: Final = 5 * 60 * 1000
 CACHE_MAX_ENTRIES_CEILING: Final = 10_000
+
+#: Loggers that can carry a response body or request parameters of a KMS call (``botocore.parsers`` the response body,
+#: ``botocore.endpoint`` the request parameters; ``botocore.hooks`` and ``urllib3.connectionpool`` carried neither in
+#: the recorded run and are guarded because they carry request and event detail in other SDK versions and settings).
+SDK_LOGGERS_THAT_CAN_CARRY_KEY_MATERIAL: Final = (
+    "botocore",
+    "botocore.parsers",
+    "botocore.hooks",
+    "botocore.endpoint",
+    "boto3",
+    "urllib3.connectionpool",
+)
+
+
+def _sdk_debug_enabled() -> bool:
+    """Whether a ``DEBUG`` record of a guarded SDK logger would be created. Reads levels; changes nothing."""
+
+    return any(logging.getLogger(name).isEnabledFor(logging.DEBUG) for name in SDK_LOGGERS_THAT_CAN_CARRY_KEY_MATERIAL)
+
 
 AwsKmsKeyState = Literal["active", "decrypt-only", "retired"]
 
@@ -398,6 +427,7 @@ class AwsKmsKeyProvider:
 
     __slots__ = (
         "_active",
+        "_allow_sdk_debug",
         "_cache",
         "_calls",
         "_client",
@@ -419,7 +449,9 @@ class AwsKmsKeyProvider:
         timeout_s: float,
         labels: tuple[tuple[str, str], ...],
         cache: _DataKeyCache | None,
+        allow_sdk_debug: bool,
     ) -> None:
+        self._allow_sdk_debug = allow_sdk_debug
         self._client = client
         self._usable = usable
         self._active = active
@@ -518,6 +550,8 @@ class AwsKmsKeyProvider:
         Nothing the client raised is rethrown or attached. A call given up (timeout, or the caller's cancellation,
         which propagates) is still running in its thread; its outcome is dropped."""
 
+        if not self._allow_sdk_debug and _sdk_debug_enabled():
+            _reject("KEY_UNAVAILABLE")
         call = getattr(self._client, method)
         task: asyncio.Future[Any] = asyncio.ensure_future(asyncio.to_thread(call, **request))
         try:
@@ -724,6 +758,7 @@ def _build(
     cache: object,
     call_timeout_ms: object,
     context_labels: object,
+    allow_sdk_debug_logging: object,
 ) -> AwsKmsKeyProvider:
     if client is None or not all(
         callable(getattr(client, name, None)) for name in ("generate_data_key", "decrypt", "re_encrypt")
@@ -774,6 +809,8 @@ def _build(
     if active is None:
         _reject("KEY_INVALID_ARGUMENT")
 
+    if type(allow_sdk_debug_logging) is not bool or (not allow_sdk_debug_logging and _sdk_debug_enabled()):
+        _reject("KEY_INVALID_ARGUMENT")
     timeout_ms = DEFAULT_CALL_TIMEOUT_MS if call_timeout_ms is None else call_timeout_ms
     if type(timeout_ms) is not int or not 1 <= timeout_ms <= _MAX_CALL_TIMEOUT_MS:
         _reject("KEY_INVALID_ARGUMENT")
@@ -788,6 +825,7 @@ def _build(
         timeout_ms / 1000,  # type: ignore[operator]
         labels,
         held,
+        allow_sdk_debug_logging,
     )
 
 
@@ -800,6 +838,7 @@ def create_aws_kms_key_provider(
     cache: DataKeyCacheOptions | None = None,
     call_timeout_ms: int | None = None,
     context_labels: Mapping[str, str] | None = None,
+    allow_sdk_debug_logging: bool = False,
 ) -> AwsKmsKeyProvider:
     """Builds the provider. Makes no KMS call.
 
@@ -808,12 +847,19 @@ def create_aws_kms_key_provider(
     ``active``, and the scope is explicit. ``context_labels`` are opt-in static, non-sensitive pairs added to the
     encryption context, for IAM conditions: they appear in CloudTrail and become part of the binding, so a key wrapped
     with one set does not unwrap with another.
+
+    ``allow_sdk_debug_logging`` (default ``False``): while ``DEBUG`` is enabled for a logger of
+    ``SDK_LOGGERS_THAT_CAN_CARRY_KEY_MATERIAL``, construction fails ``KEY_INVALID_ARGUMENT`` and every KMS call fails
+    ``KEY_UNAVAILABLE`` before the request is made. ``True`` turns the check off and accepts that ``botocore`` writes
+    the plaintext data key, the wrapped key, and the key ARN to the application's logs. Nothing here changes logging.
     """
 
     code: KeyProviderErrorCode | None = None
     provider: AwsKmsKeyProvider | None = None
     try:
-        provider = _build(client, keys, expected, scope, cache, call_timeout_ms, context_labels)
+        provider = _build(
+            client, keys, expected, scope, cache, call_timeout_ms, context_labels, allow_sdk_debug_logging
+        )
     except _Reject as rejected:
         code = rejected.code
     except Exception:

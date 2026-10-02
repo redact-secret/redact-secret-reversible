@@ -25,3 +25,7 @@ Plan section 6.2 gives two ways out: close the gaps with their own record, or wo
 ## What would change this
 
 A record that closes the three gaps above for named Node.js versions and operating systems would let the persistence documents name the bridge as qualified for those cells. Until it exists, decision 1 applies to every Python persistence statement.
+
+## Update 2026-10-02: the three gaps were run for named cells; the decision stands
+
+The [qualification record](../research/qualification-python-persistence-0.1.0b3.md) (section 4.10) now holds the adversarial protocol run, the fuzzing of the frame parser, and a statement of the operating systems and Node.js versions the bridge was run on, as the section above asks. It also measured what the three gaps did not name: plaintext left in the child's memory, a queue not bounded by `timeout_s`, one bridge's throughput, and what a hostile or replaced core can do. Two of those criteria are **not met** (an error code reported by the child is copied into the exception unvalidated, and a core replaced on disk that reports the pinned version is accepted), so the record does not name the bridge as qualified for any cell. Decision 1 applies unchanged. Whether to fix the two defects, and whether a later record may name the bridge for stated cells, is the maintainer's decision; nothing here changes the decision above.

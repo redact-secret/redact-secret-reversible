@@ -371,7 +371,8 @@ def test_what_the_sdk_logs_at_debug_is_established_and_the_provider_leaks_nothin
     value = context()
 
     async def scenario() -> None:
-        provider = active_a(client)
+        # The guard refuses while DEBUG is on; this run measures the SDK, so it opts in.
+        provider = active_a(client, allow_sdk_debug_logging=True)
         key = await provider.generate_data_key(value)
         raw = bytes(key.plaintext_key)
         sentinels.update({raw.hex(), base64.b64encode(raw).decode()})

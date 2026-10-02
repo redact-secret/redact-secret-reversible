@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-01. **Scope:** a comparison of each acceptance item in epic [#3](https://github.com/redact-secret/redact-secret-vault/issues/3) and its children [#15](https://github.com/redact-secret/redact-secret-vault/issues/15), [#16](https://github.com/redact-secret/redact-secret-vault/issues/16), [#17](https://github.com/redact-secret/redact-secret-vault/issues/17), and [#18](https://github.com/redact-secret/redact-secret-vault/issues/18) with the code, tests, corpora, and documents on `main` (commit `007c50f`). Nothing here changes code, and no issue is closed by it.
 
+**Update 2026-10-02.** The open parts of #18 that this record lists (the exact matrix, the equivalent-outcome evidence, the candid differences, and the Python preflight-order test) are carried over and re-checked in [js-python-conformance-and-runtime-matrix.md](js-python-conformance-and-runtime-matrix.md). The verdicts below are unchanged and are not re-issued.
+
 **Method and limits.** Evidence was found by reading the issue text, the decision records, and the sources, and by listing test names with their line numbers. The test suites were **not executed** for this record (the worktree has no installed dependencies). A cited test shows that a check exists, not that it passed today. The latest `ci` run on `main` (run 36928007063, 2026-10-01) concluded `success`; that is the only pass evidence relied on. File and line numbers are as of `007c50f` and move as files change. Every value in the cited tests is synthetic.
 
 ## Verdicts
