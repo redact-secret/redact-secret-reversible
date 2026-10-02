@@ -1,8 +1,14 @@
 # @redact-secret/store-postgres
 
+[![npm (alpha)](https://img.shields.io/npm/v/@redact-secret/store-postgres/alpha?label=npm%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/store-postgres)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/store-postgres)](https://www.npmjs.com/package/@redact-secret/store-postgres)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/store-postgres/alpha?label=node%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/store-postgres)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 A PostgreSQL store for the [persistent vault server](../../docs/guides/persistent-server.md). It holds ciphertext, wrapped keys, counters, and receipts. It never decrypts, holds no key, and evaluates no policy.
 
-**Alpha, unpublished.** Qualified only on PostgreSQL 17.11, Node.js 22, and `pg` 8.23.1, in two profiles:
+**Alpha.** Qualified only on PostgreSQL 17.11, Node.js 22, and `pg` 8.23.1, in two profiles:
 
 | Profile | You must set |
 | --- | --- |

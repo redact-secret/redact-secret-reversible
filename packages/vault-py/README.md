@@ -1,5 +1,11 @@
 # redact-secret-vault (Python)
 
+[![PyPI](https://img.shields.io/pypi/v/redact-secret-vault)](https://pypi.org/project/redact-secret-vault/)
+[![Python versions](https://img.shields.io/pypi/pyversions/redact-secret-vault)](https://pypi.org/project/redact-secret-vault/)
+[![License: MIT](https://img.shields.io/pypi/l/redact-secret-vault)](https://pypi.org/project/redact-secret-vault/)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 Swap secrets for random tokens before text leaves your server (for example, to an LLM), then put the original values back, but only for the user, tenant, purpose, and field your policy allows. It is the Python counterpart of [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md).
 
 **Research-grade.** The published `0.1.0b3` is in-memory only; nothing in it is persistent. Detection runs in [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core), which has no Python build, so this package talks to it through a small Node.js child process.

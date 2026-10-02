@@ -4,18 +4,18 @@ Evaluation order, concurrency, audit, and the full API of the default, in-memory
 
 ## Versions
 
-`0.1.0-alpha.2` was this package's first published version. The npm `latest` and `beta` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-beta.3`. Exact versions are still recommended while the packages are beta, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
+`0.1.0-alpha.2` was this package's first published version. The npm `latest` and `beta` tags of both `@redact-secret/vault-server` and `@redact-secret/vault` point at `0.1.0-beta.4`. Exact versions are still recommended while the packages are beta, because each release pins exact `@redact-secret/vault` and `@redact-secret/core` versions.
 
-On `main` this package is `0.1.0-beta.4`, **unpublished**. It adds the opt-in [persistent profile](../guides/persistent-server.md) at `@redact-secret/vault-server/persistent` (alpha) and a dependency on `@redact-secret/vault-contracts`; the default entry described below is unchanged. The sections up to "Persistent profile" describe the default, in-memory entry.
+Since `0.1.0-beta.4` (published 2026-10-02) this package adds the opt-in [persistent profile](../guides/persistent-server.md) at `@redact-secret/vault-server/persistent` (alpha) and a dependency on `@redact-secret/vault-contracts`; the default entry described below is unchanged. The sections up to "Persistent profile" describe the default, in-memory entry.
 
 ## Supported, and not
 
-| | Status in 0.1.0-beta.3 |
+| | Status in 0.1.0-beta.4 |
 | --- | --- |
 | Server runtimes | Node.js 20, 22, 24 (same as `@redact-secret/vault`), by this package's own adversarial suite and the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md) |
 | Storage backend, default entry (`createServerVault`) | In-memory only, single process |
-| Persistent profile (`./persistent`, on `main`, unpublished, **alpha**) | Implemented. This package contains no store, driver, cipher, or key provider: the application injects them. Qualified with [`@redact-secret/store-postgres`](../../packages/store-postgres/README.md) on PostgreSQL 17.11 (single primary, or primary with one synchronous standby), Node.js 22, and the local key provider; tested over the non-durable `@redact-secret/store-memory` on Node.js 20, 22, 24. Nothing else: see the [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) |
-| Python | **Not in this package.** Python persistent modules exist only in the source tree of `redact-secret-vault`, unpublished and not supported ([record](../research/qualification-python-persistence-0.1.0b3.md)). A research-grade native Python implementation of the same contract is [`redact-secret-vault`](../../packages/vault-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
+| Persistent profile (`./persistent`, from `0.1.0-beta.4`, **alpha**) | Implemented. This package contains no store, driver, cipher, or key provider: the application injects them. Qualified with [`@redact-secret/store-postgres`](../../packages/store-postgres/README.md) on PostgreSQL 17.11 (single primary, or primary with one synchronous standby), Node.js 22, and the local key provider; tested over the non-durable `@redact-secret/store-memory` on Node.js 20, 22, 24. Nothing else: see the [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) |
+| Python | **Not in this package.** Python persistent modules exist only in the source tree of `redact-secret-vault`, not on PyPI and not supported ([record](../research/qualification-python-persistence-0.1.0b3.md)). A research-grade native Python implementation of the same contract is [`redact-secret-vault`](../../packages/vault-py/README.md) ([#17](https://github.com/redact-secret/redact-secret-vault/issues/17)) |
 | Streaming, arbitrary-text `restore(text)` | **Not supported**, matching `@redact-secret/vault` |
 | Browser | **Not a target**, for either entry. This package assumes a server trust boundary (`PrincipalResolver` reads request-scoped, already-authenticated context); it is Node.js-only and is never bundled for a browser |
 
@@ -70,11 +70,11 @@ Exceptions thrown by either hook never change an operation's outcome.
 
 Error codes: `INVALID_ARGUMENT`, `RESTORE_DENIED`, `INVARIANT_VIOLATION` (the shadow registry and the wrapped vault disagreed — a bug in this package, always fails closed), `VAULT_FAILURE` (wraps a `@redact-secret/vault` `VaultError`, exposed as `.vaultCode`; when that is `CORE_FAILURE`, the core's fixed code, for example `PII_ACTIVATION_CONFLICT`, is exposed as `.coreCode`), `DISPOSED`.
 
-From `0.1.0-beta.4` (on `main`, unpublished), the `ServerVaultErrorCode`, `ServerDenialReason`, and `ServerAuditOperation` types also contain the members the [persistent profile](../guides/persistent-server.md) uses: codes `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `KEY_UNAVAILABLE`, `CLOSED`; denial reasons `integrity-failure`, `key-unavailable`, `attempt-mismatch`, `attempt-already-committed`; audit operations `capture`, `delete-ciphertext`, `resolve-attempt`. `createServerVault` never produces them, but an exhaustive `switch` over these types needs the new cases.
+From `0.1.0-beta.4` (published), the `ServerVaultErrorCode`, `ServerDenialReason`, and `ServerAuditOperation` types also contain the members the [persistent profile](../guides/persistent-server.md) uses: codes `UNSUPPORTED_STORE`, `STORE_UNAVAILABLE`, `STORE_QUARANTINED`, `COMMIT_AMBIGUOUS`, `RESTORE_CONFLICT`, `CLOCK_SKEW`, `LIMIT_EXCEEDED`, `LIFECYCLE_DENIED`, `KEY_UNAVAILABLE`, `CLOSED`; denial reasons `integrity-failure`, `key-unavailable`, `attempt-mismatch`, `attempt-already-committed`; audit operations `capture`, `delete-ciphertext`, `resolve-attempt`. `createServerVault` never produces them, but an exhaustive `switch` over these types needs the new cases.
 
 ## Reference policies
 
-`@redact-secret/vault-server/policies` (from `0.1.0-beta.4`, on `main`, unpublished; [#134](https://github.com/redact-secret/redact-secret-vault/issues/134)) exports four `ServerReleasePolicy` values. The server evaluates them exactly as it evaluates your own function, at step 9 of the evaluation order, so they cannot allow what an earlier step denied.
+`@redact-secret/vault-server/policies` (from `0.1.0-beta.4`; [#134](https://github.com/redact-secret/redact-secret-vault/issues/134)) exports four `ServerReleasePolicy` values. The server evaluates them exactly as it evaluates your own function, at step 9 of the evaluation order, so they cannot allow what an earlier step denied.
 
 | Export | Allows | Denies with |
 | --- | --- | --- |

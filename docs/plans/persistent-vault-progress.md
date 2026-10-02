@@ -1,6 +1,24 @@
-# Persistent vault workstream — progress record
+# Persistent vault workstream — progress record (archived)
 
-Durable working record for epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4). It exists so the work can resume after an interruption. It states what was verified, not what is planned to be true. Remove it (or archive it) when #112 closes.
+**Status: archived 2026-10-02.** Durable working record for epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4), kept as history after the release recorded for [#112](https://github.com/redact-secret/redact-secret-vault/issues/112). Nothing below the "Final state" section is maintained: its tables describe the repository on 2026-10-01 and are wrong about the registry today. Current state: [docs/status.md](../status.md), [RELEASING.md](../../RELEASING.md), and the [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md). Like the other archived records (see [docs/README.md](../README.md)), it should leave the tree once its last commit is on `main`, with links to it pinned to that commit.
+
+## Final state (2026-10-02)
+
+Released. Tag `v0.1.0-beta.4` at `b77d8cb`; `release.yml` run [36996502364](https://github.com/redact-secret/redact-secret-vault/actions/runs/36996502364) published `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.4` with provenance. The seven `0.1.0-alpha.1` packages (`vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`) were published by hand by the maintainer, without provenance. `redact-secret-vault` stays at `0.1.0b3` on PyPI. Registry-tarball qualification of `@redact-secret/vault@0.1.0-beta.4` (Node.js addon and WASM, Chromium, Firefox, WebKit) had 0 failures; see [section 9 of the qualification record](../research/qualification-persistence-0.1.0-alpha.1.md#9-registry-verification). The "External blockers" below were cleared by that release. The `key-provider-local` name in the baseline table was never a package; the local key provider is part of `vault-crypto`.
+
+Open items at archive time. The issues were all open when this was written:
+
+| Item | State |
+| --- | --- |
+| [#128](https://github.com/redact-secret/redact-secret-vault/issues/128), [#129](https://github.com/redact-secret/redact-secret-vault/issues/129) (Python persistence qualification and documentation) | Gates G5 (bridge qualification not done), G6 (server leak tests over the PostgreSQL adapter not run), and G9 (matrix incomplete) are not passed in full. Python persistence stays **not supported** ([record](../research/qualification-python-persistence-0.1.0b3.md)) |
+| [#130](https://github.com/redact-secret/redact-secret-vault/issues/130) (`store-sqlite`) | Published as alpha, not a supported profile. The power-loss simulation was **NOT RUN** ([record](../research/qualification-store-sqlite-0.1.0-alpha.1.md)) |
+| [#131](https://github.com/redact-secret/redact-secret-vault/issues/131) (stores without a clock of their own) | On hold. The DynamoDB inputs were settled from primary sources in [research](../research/dynamodb-profile-inputs.md); no adapter exists |
+| [#18](https://github.com/redact-secret/redact-secret-vault/issues/18) (JS/Python conformance and core ranges) and epic [#3](https://github.com/redact-secret/redact-secret-vault/issues/3) | Open |
+| Epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4) | Open until the items above are decided |
+| Python `botocore` DEBUG log leak | With the SDK's loggers at `DEBUG`, `botocore` wrote the plaintext data key and the key ARN to the log (section 4.2 of the [Python qualification record](../research/qualification-python-persistence-0.1.0b3.md)). The changelog says not to enable it. It applies to the Python modules, which are not published |
+| Trusted publishers on the seven new packages | Configured by the maintainer, not verified by the agent that recorded this |
+| `store-memory` and `store-sqlite` extra `0.0.0-stage` version on npm | Seen on the registry on 2026-10-02, not explained |
+| Performance archive (RELEASING.md step 7) | `docs/research/perf/0.1.0-beta.4.json` and the `bench/baseline.json` bump are not part of this record's commits |
 
 ## Baseline verified 2026-10-01
 
@@ -61,3 +79,4 @@ Documentation drift found: `ARCHITECTURE.md` still says alpha and "persistence i
 - 2026-10-01: #112 documentation: README, ARCHITECTURE, CHANGELOG, RELEASING, threat model, assurance case, and `docs/research/qualification-persistence-0.1.0-alpha.1.md` reconciled with the tree and the registries. Verified locally on Node.js 22.16.0: `test:persistence`, `test:vault-server` (256 tests, 252 passed, 4 skipped), `check:persistence-boundaries`, and the server mutation table (39 of 39 caught). Nothing is published; the implementation review is still in progress.
 - 2026-10-01: #118 merged (`5e088d3`). Issues #104 to #111, #20, #113, #114, #115 closed with evidence comments. Follow-ups filed: Python handoffs #119 to #129, SQLite adapter #130, clockless-store contract revision #131. Epic #4, release issue #112, and redact-secret/redact-secret#1002 updated.
 - 2026-10-01: remaining work is the release under #112: maintainer confirmation, the manual first publish of the six new packages, then tag `v0.1.0-beta.4`.
+- 2026-10-02: `v0.1.0-beta.4` tagged and published; the seven alpha packages had been published by hand; registry verification recorded; this record archived.

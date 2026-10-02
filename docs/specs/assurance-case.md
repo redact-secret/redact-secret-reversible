@@ -1,6 +1,6 @@
 # Assurance case
 
-**Status:** current for `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.3` (published), and for the persistent server profile on `main` (unpublished: `0.1.0-beta.4` and the `0.1.0-alpha.1` persistence packages) within the profiles its [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) names. The persistent argument is in [its own section](#persistent-profile); the independent implementation review it will rest on is still pending.
+**Status:** current for `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.3` (published), and for the persistent server profile (published 2026-10-02: `0.1.0-beta.4` and the `0.1.0-alpha.1` persistence packages) within the profiles its [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) names. The persistent argument is in [its own section](#persistent-profile); the independent implementation review it rests on is recorded in [section 5 of the qualification record](../research/qualification-persistence-0.1.0-alpha.1.md#5-independent-reviews).
 
 This document argues why the packages' security requirements are met. It does not restate the evidence; it links to it.
 
@@ -72,7 +72,7 @@ Run results, versions, and what was skipped are in the [qualification record](..
 - **Safety of an injected adapter.** A `Store`, `KeyProvider`, or `RecordCrypto` runs in the trusted process; passing the harness does not contain a hostile one.
 - **Protection once a wrapping key and a store copy are both held** by the same party.
 - **A production key-management profile for the local key provider**, and anything about AWS KMS beyond one real-service run with single-Region symmetric keys.
-- **Browser, Worker, or edge persistence; streaming; DynamoDB, Redis, or SQLite.** None is implemented. Python persistent modules exist in the source tree, unpublished and not supported; see the [qualification record](../research/qualification-python-persistence-0.1.0b3.md).
+- **Browser, Worker, or edge persistence; streaming; DynamoDB, Redis, or SQLite.** None is implemented. Python persistent modules exist in the source tree, not on PyPI and not supported; see the [qualification record](../research/qualification-python-persistence-0.1.0b3.md).
 - **Performance.** Nothing was measured for these packages.
 - **Hidden metadata.** Tenant and capture identifiers, times, counters, and sizes are visible to a reader of the store.
 
@@ -80,5 +80,5 @@ Run results, versions, and what was skipped are in the [qualification record](..
 
 - Static analysis (OpenGrep with project rules) and Biome lint gate every pull request; see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 - Releases are built in CI and published with npm provenance and PyPI attestations; see [SECURITY.md](../../SECURITY.md#verifying-releases).
-- Residual risks accepted for each mode are listed in the [threat model](threat-model.md#residual-risks-accepted-for-alpha1), and for the persistent profile [separately](threat-model.md#residual-risks-for-the-persistent-profile-current-on-main-unpublished).
+- Residual risks accepted for each mode are listed in the [threat model](threat-model.md#residual-risks-accepted-for-alpha1), and for the persistent profile [separately](threat-model.md#residual-risks-for-the-persistent-profile-current-published-alpha).
 - The release workflow gates publishing on the persistence tests, the packed-artifact boundary checks, and `store-postgres` against a real PostgreSQL server; see [RELEASING.md](../../RELEASING.md#persistence-packages). None of the persistence packages has been published, so their provenance is not yet evidence.

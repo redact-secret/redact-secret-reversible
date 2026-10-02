@@ -4,7 +4,7 @@ Runtime support, guarantees, limits, and the full API of [`@redact-secret/vault`
 
 ## Supported, and not
 
-| Runtime | Status in 0.1.0-beta.3 |
+| Runtime | Status in 0.1.0-beta.4 |
 | --- | --- |
 | Node.js 20, 22, 24 (core native addon or its WebAssembly fallback) | Qualified: Linux x64, macOS arm64 |
 | Browser main thread, bundled, with a CSP allowing `'wasm-unsafe-eval'` | Qualified: Chromium, Firefox, WebKit (versions in the [alpha.1 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-0.1.0-alpha.1.md); PII off and on in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-core-0.1.0-beta.10.md)) |

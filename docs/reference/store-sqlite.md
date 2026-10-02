@@ -2,7 +2,7 @@
 
 The profile, startup checks, schema, transactions, recovery, and limits of [`@redact-secret/store-sqlite`](../../packages/store-sqlite/README.md). Setup and options are in the package README. The research it implements is [section 8.1 of the backend research](../research/persistent-backend-capabilities.md); the evidence is in the [qualification record](../research/qualification-store-sqlite-0.1.0-alpha.1.md).
 
-**Status: alpha, unpublished, and not a supported profile.** Four of the five run gates of [#130](https://github.com/redact-secret/redact-secret-vault/issues/130) were run on one machine; the power-loss simulation was **not run**. The store declares `durability: "durable"` for the verified configuration because the persistent server requires the declaration; that declaration rests on SQLite's documentation of `synchronous=FULL` and on process-kill tests, and on no power-loss evidence.
+**Status: alpha, and not a supported profile.** Four of the five run gates of [#130](https://github.com/redact-secret/redact-secret-vault/issues/130) were run on one machine; the power-loss simulation was **not run**. The store declares `durability: "durable"` for the verified configuration because the persistent server requires the declaration; that declaration rests on SQLite's documentation of `synchronous=FULL` and on process-kill tests, and on no power-loss evidence.
 
 ## Profile
 

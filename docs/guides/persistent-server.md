@@ -1,6 +1,6 @@
 # Persistent server
 
-**On `main`, unpublished, alpha.** An opt-in entry point for captures that one server process makes and another restores, or that survive a restart. It is specified in the [persistent vault specification](../specs/persistent-vault.md) (§7, §8) and qualified only as the [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) states. Importing `@redact-secret/vault-server` loads none of it.
+**Alpha, on npm.** An opt-in entry point for captures that one server process makes and another restores, or that survive a restart. It is specified in the [persistent vault specification](../specs/persistent-vault.md) (§7, §8) and qualified only as the [qualification record](../research/qualification-persistence-0.1.0-alpha.1.md) states. Importing `@redact-secret/vault-server` loads none of it.
 
 ## Try it locally
 
@@ -8,7 +8,7 @@
 
 ## Quick start
 
-These packages cannot be installed from npm yet. The example is the shape of a server that captures in one process and restores in another, over PostgreSQL. Read the [qualified profiles](../research/qualification-persistence-0.1.0-alpha.1.md#2-tested-matrix) and the [operations specification](../specs/persistent-operations.md) before using it.
+The packages are on npm under the `alpha` dist-tag (`@redact-secret/vault-server/persistent` ships in `0.1.0-beta.4`); install exact versions, because each pins its siblings exactly. The example is the shape of a server that captures in one process and restores in another, over PostgreSQL. Read the [qualified profiles](../research/qualification-persistence-0.1.0-alpha.1.md#2-tested-matrix) and the [operations specification](../specs/persistent-operations.md) before using it.
 
 Once, from a maintenance process: `migrate(ownerPool, "rsv")`, the grants from `grantStatements("rsv", role)`, and `store.initializeNamespace({ namespace: "support-prod", epoch: 1 })`. A server never initializes a namespace. Then, in every server process:
 

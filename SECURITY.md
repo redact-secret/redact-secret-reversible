@@ -17,15 +17,16 @@ Detection problems (a secret the core misses or misclassifies) belong to the cor
 
 | Package | Version | Security fixes |
 | --- | --- | --- |
-| `@redact-secret/vault` | `0.1.0-beta.3` (npm dist-tag `beta`) | Latest beta only |
-| `@redact-secret/vault-server` | `0.1.0-beta.3` (npm dist-tag `beta`) | Latest beta only |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.2` (core `0.1.0-beta.11`) | None; upgrade to `0.1.0-beta.3` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.1` (core `0.1.0-beta.10`) | None; upgrade to `0.1.0-beta.3` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.3` | None; upgrade to `0.1.0-beta.3` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.2` | None; upgrade to `0.1.0-beta.3` |
-| `@redact-secret/vault` | `0.1.0-alpha.1` (core `0.1.0-beta.9`) | None; upgrade to `0.1.0-beta.3` |
+| `@redact-secret/vault` | `0.1.0-beta.4` (npm dist-tag `beta`) | Latest beta only |
+| `@redact-secret/vault-server` | `0.1.0-beta.4` (npm dist-tag `beta`) | Latest beta only |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.3` (core `0.1.0-beta.12`) | None; upgrade to `0.1.0-beta.4` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.2` (core `0.1.0-beta.11`) | None; upgrade to `0.1.0-beta.4` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.1` (core `0.1.0-beta.10`) | None; upgrade to `0.1.0-beta.4` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.3` | None; upgrade to `0.1.0-beta.4` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.2` | None; upgrade to `0.1.0-beta.4` |
+| `@redact-secret/vault` | `0.1.0-alpha.1` (core `0.1.0-beta.9`) | None; upgrade to `0.1.0-beta.4` |
 
-Alpha and beta releases may change their API between versions. Only the runtimes and core version listed in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md) and the [Worker-mode record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-worker-mode.md) are supported: Node.js and browser main-thread use, the optional dedicated-Worker mode, and `@redact-secret/vault-server`'s single-process, in-memory server authority. The persistent server profile and its packages (implemented on `main`, unpublished alpha; see the [persistence qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md)) and the research-grade Python package (`redact-secret-vault`, on PyPI as `0.1.0b3`) are unsupported, and reports about them are treated as design input.
+Alpha and beta releases may change their API between versions. Only the runtimes and core version listed in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md) and the [Worker-mode record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-worker-mode.md) are supported: Node.js and browser main-thread use, the optional dedicated-Worker mode, and `@redact-secret/vault-server`'s single-process, in-memory server authority. The persistent server profile and its packages (alpha, on npm since 2026-10-02; see the [persistence qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md)) and the research-grade Python package (`redact-secret-vault`, on PyPI as `0.1.0b3`) are unsupported, and reports about them are treated as design input.
 
 ## Verifying releases
 

@@ -1,6 +1,6 @@
 # Qualification record: persistent vault packages, 0.1.0-alpha.1
 
-**Status:** record of what was run for the persistence packages on `main`, unpublished. It is the document the [persistent vault specification](../specs/persistent-vault.md) means by "a profile is supported only when its qualification record says so". Tracking issue: [#112](https://github.com/redact-secret/redact-secret-vault/issues/112), under epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4).
+**Status:** record of what was run for the persistence packages on `main`, now published as `0.1.0-alpha.1` (alpha; see [section 9](#9-registry-verification) for what was checked on the registry). It is the document the [persistent vault specification](../specs/persistent-vault.md) means by "a profile is supported only when its qualification record says so". Tracking issue: [#112](https://github.com/redact-secret/redact-secret-vault/issues/112), under epic [#4](https://github.com/redact-secret/redact-secret-vault/issues/4).
 
 A row below is evidence for exactly the versions, backend, topology, and key provider it names. Anything not named is not qualified. A skipped test is not a pass.
 
@@ -12,7 +12,7 @@ In scope: the persistent profile of `@redact-secret/vault-server` (`@redact-secr
 
 Not in scope: performance (nothing was measured for these packages), and every profile listed in [section 6](#6-unsupported-and-unqualified-profiles).
 
-**Registry state (2026-10-01).** Nothing in this record has been published. `npm view` returns 404 for `@redact-secret/vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, and `key-provider-aws-kms`. `@redact-secret/vault` and `@redact-secret/vault-server` are at `0.1.0-beta.3` on npm (`latest` and `beta`); `0.1.0-beta.4` exists only in the manifests on `main`. Every run below used the working tree or tarballs packed from it, never a registry install of these versions. This paragraph is updated by the release-record commit.
+**Registry state.** Sections 2 to 8 were recorded on 2026-10-01, before publication, and every run in them used the working tree or tarballs packed from it, never a registry install of these versions. The packages were published on 2026-10-02; [section 9](#9-registry-verification) records the registry state and what was verified against it.
 
 ## 2. Tested matrix
 
@@ -195,7 +195,7 @@ Each row names the test file, scenario, or report section that is the evidence, 
 | Threat model and capability matrix name the qualified topology and versions | [Threat model](../specs/threat-model.md#persistent-mappings--implemented-on-main-qualified-for-two-postgresql-profiles); this record |
 | Deny-by-default example | [Root README](../guides/persistent-server.md#quick-start) |
 | Documentation reconciled with the registries | Section 1; verified with `npm view <package> dist-tags` and the PyPI JSON API on 2026-10-01 |
-| Release workflow covers the new packages | `.github/workflows/release.yml`, `scripts/publish-workspace.mjs`, [RELEASING.md](../../RELEASING.md#persistence-packages). The publish path itself has **not been exercised**: no release has run |
+| Release workflow covers the new packages | `.github/workflows/release.yml`, `scripts/publish-workspace.mjs`, [RELEASING.md](../../RELEASING.md#persistence-packages). The publish path ran on 2026-10-02: see [section 9](#9-registry-verification) |
 
 ## 4. Mutation controls
 
@@ -301,3 +301,30 @@ uv run --with cryptography python conformance/persistent/v1/verify_vectors.py
 ```
 
 The real-KMS suite needs two test keys and is described in the [package README](../reference/key-provider-aws-kms.md#tests).
+
+## 9. Registry verification
+
+Recorded 2026-10-02, after tag `v0.1.0-beta.4` (`b77d8cb`).
+
+**What was published.** The release workflow run [36996502364](https://github.com/redact-secret/redact-secret-vault/actions/runs/36996502364) succeeded and published `@redact-secret/vault@0.1.0-beta.4` and `@redact-secret/vault-server@0.1.0-beta.4` (dist-tag `beta`) through npm trusted publishing, with provenance attestations. The seven `0.1.0-alpha.1` packages (`vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`) had been published by hand by the maintainer (dist-tag `alpha`) shortly before, so the workflow skipped them. They carry a registry signature and **no provenance attestation**. `key-provider-local` is not a package: the local key provider is the `@redact-secret/vault-crypto/local-key-provider` entry.
+
+**Dist-tags** (read with `npm view <package> dist-tags --prefer-online` on 2026-10-02):
+
+| Package | `latest` | `beta` | `alpha` |
+| --- | --- | --- | --- |
+| `@redact-secret/vault` | `0.1.0-beta.4` | `0.1.0-beta.4` | `0.1.0-alpha.3` |
+| `@redact-secret/vault-server` | `0.1.0-beta.4` | `0.1.0-beta.4` | `0.1.0-alpha.3` |
+| the seven persistence packages | `0.1.0-alpha.1` | none | `0.1.0-alpha.1` |
+
+The registry set `latest` on each persistence package at its first publish. The maintainer moved `vault`'s `latest` to `beta.4`, and `vault-server`'s moved afterwards; the table is what the registry returned when this section was written. Two of the persistence packages, `store-memory` and `store-sqlite`, also list a version `0.0.0-stage` (no dist-tag, not deprecated). Its content was not inspected and it is not part of this release.
+
+**Registry-tarball qualification.** With `VAULT_SPEC=@redact-secret/vault@0.1.0-beta.4` (the registry package, not a local pack), on Node.js 22.16.0:
+
+| Command | Result |
+| --- | --- |
+| `npm run qualify:node`, addon, PII off, PII on, and scenarios | 0 failed |
+| `npm run qualify:node`, WASM fallback, PII off, PII on, and scenarios | 0 failed |
+| `npm run qualify:browser`, Chromium, Firefox, WebKit | 0 failed |
+| `npm audit signatures` in the clean install | 42 packages verified |
+
+**Not verified against the registry.** `VAULT_SPEC` covers `@redact-secret/vault` only. `npm run qualify:persistence` always packs the working tree, so none of the persistence packages' registry tarballs was run through it, and sections 2 to 8 remain evidence about the tagged commit. The trusted publisher on each of the seven new packages was configured by the maintainer; it is **not verified by the agent that wrote this record**, and the repository has no way to check it. Python is unchanged: `redact-secret-vault` stays at `0.1.0b3` on PyPI, and Python persistence remains not supported. The SQLite power-loss simulation remains **NOT RUN** ([record](qualification-store-sqlite-0.1.0-alpha.1.md)).

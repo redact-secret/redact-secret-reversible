@@ -1,6 +1,12 @@
 # @redact-secret/vault-crypto
 
-**Status: alpha, unpublished.** The record format of the [persistent vault specification](../../docs/specs/persistent-vault.md) §3, implemented over the platform's WebCrypto: canonical encoding, AES-256-GCM envelope encryption, the request digest and session tag of §7.3 and §3.2, and the local key provider of §6.3.
+[![npm (alpha)](https://img.shields.io/npm/v/@redact-secret/vault-crypto/alpha?label=npm%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/vault-crypto)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/vault-crypto)](https://www.npmjs.com/package/@redact-secret/vault-crypto)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/vault-crypto/alpha?label=node%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/vault-crypto)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
+**Status: alpha.** The record format of the [persistent vault specification](../../docs/specs/persistent-vault.md) §3, implemented over the platform's WebCrypto: canonical encoding, AES-256-GCM envelope encryption, the request digest and session tag of §7.3 and §3.2, and the local key provider of §6.3.
 
 The persistent server profile of `@redact-secret/vault-server` uses it through the `RecordCrypto` contract. What was tested, and with which stores and providers, is in the [qualification record](../../docs/research/qualification-persistence-0.1.0-alpha.1.md); nothing beyond that record is a support claim. It depends on [`@redact-secret/vault-contracts`](../vault-contracts/README.md) and on nothing else.
 

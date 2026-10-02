@@ -15,7 +15,7 @@ Each package is versioned independently of the core. Every release pins an exact
 
 ## Persistence packages
 
-**Registry state (2026-10-01).** None of `@redact-secret/vault-contracts`, `@redact-secret/vault-crypto`, `@redact-secret/vault-conformance`, `@redact-secret/store-memory`, `@redact-secret/store-postgres`, `@redact-secret/store-sqlite`, and `@redact-secret/key-provider-aws-kms` exists on npm. On `main` each is `0.1.0-alpha.1`, and `@redact-secret/vault` and `@redact-secret/vault-server` are `0.1.0-beta.4`; none of these versions is published, and no tag has been pushed for them. The release-record commit updates this paragraph, the [release history](#release-history), and the [current tags](#the-latest-dist-tag).
+**Registry state (2026-10-02, after `v0.1.0-beta.4`).** All nine npm packages of this repository are published. `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.4` came from `release.yml` run [36996502364](https://github.com/redact-secret/redact-secret-vault/actions/runs/36996502364) (tag `v0.1.0-beta.4` at `b77d8cb`) with provenance attestations. `@redact-secret/vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, and `key-provider-aws-kms` are each at `0.1.0-alpha.1`, published by hand by the maintainer under the `alpha` dist-tag on 2026-10-02 (10:28 to 10:31 UTC, per the registry's `time` field) before the workflow published the two `beta.4` packages, without provenance (see [First publish of each new package](#first-publish-of-each-new-package)). `@redact-secret/store-memory` and `@redact-secret/store-sqlite` each also list a version `0.0.0-stage` on the registry (published 10:29 UTC, no dist-tag, not deprecated); the agent did not publish it and does not know its content. There is no `key-provider-local` package: the local key provider is the `@redact-secret/vault-crypto/local-key-provider` entry. The dist-tags are in [the `latest` dist-tag](#the-latest-dist-tag), the verification results in the [persistence qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md#9-registry-verification).
 
 ### Publish order
 
@@ -55,7 +55,7 @@ On `main`, the `ci` workflow runs the `persistence` and `sqlite` matrices and `p
 
 ### First publish of each new package
 
-npm trusted publishing can be configured only for a package that already exists (see [Provenance](#provenance)). So the first version of each new package is published by hand by a maintainer, exactly as `@redact-secret/vault@0.1.0-alpha.1` and `@redact-secret/vault-server@0.1.0-alpha.2` were, and carries no provenance attestation. For each package, in this order — `vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`:
+npm trusted publishing can be configured only for a package that already exists (see [Provenance](#provenance)). So the first version of each new package is published by hand by a maintainer, exactly as `@redact-secret/vault@0.1.0-alpha.1` and `@redact-secret/vault-server@0.1.0-alpha.2` were, and carries no provenance attestation. The seven packages of the persistence line went through this procedure before `v0.1.0-beta.4`; it applies again to any package added later. For each package, in this order — `vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`:
 
 1. From a clean checkout of the commit to be tagged, with `ci` green on it: `npm ci && npm run build`. Then `npm run readme:pin`, so the README you publish links to the release tag ([README links](#readme-links)); run `npm run readme:restore` when you are done.
 2. `npm publish -w @redact-secret/<package> --tag alpha`, authenticated as a maintainer of the `@redact-secret` scope (web 2FA, or a granular token limited to that package). No `--provenance`: it is not available outside the workflow.
@@ -63,15 +63,15 @@ npm trusted publishing can be configured only for a package that already exists 
 4. On npmjs.com: the package → Settings → Trusted Publisher → add a GitHub Actions publisher for repository `redact-secret/redact-secret-vault`, workflow `release.yml`, environment none.
 5. Revoke the token or login session used for step 2.
 
-Then push the tag (step 3 of the procedure above). The workflow finds the six `0.1.0-alpha.1` versions on the registry, skips them, and publishes `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.4` with provenance. The first version of a new package that carries provenance is therefore its second version.
+Then push the tag (step 3 of the procedure above). For `v0.1.0-beta.4` the workflow found the seven `0.1.0-alpha.1` versions on the registry, skipped them, and published `@redact-secret/vault` and `@redact-secret/vault-server` `0.1.0-beta.4` with provenance. The first version of a new package that carries provenance is therefore its second version.
 
-**Until that is done, the workflow fails closed.** What happens depends on how far the manual steps got. There is no token fallback in either case.
+**Until that is done for a package, the workflow fails closed.** (For the seven existing packages it was done before `v0.1.0-beta.4`.) What happens depends on how far the manual steps got. There is no token fallback in either case.
 
 | Registry state when the tag is pushed | Result of the `publish` job |
 | --- | --- |
 | `@redact-secret/vault-contracts` not on npm | Step 1 above fails at `npm publish` (no trusted publisher; when this happened for `v0.1.0-alpha.2` the error was `PUT 404`). The job stops. **Nothing is published**, `@redact-secret/vault` and `@redact-secret/vault-server` included, because their steps come after it |
 | `vault-contracts` published by hand, another persistence package not | Step 1 skips. Step 2 publishes `@redact-secret/vault`. Step 3 fails at the first package that is not on npm. The job stops, and **`@redact-secret/vault-server` is not published**: its steps come after step 3. The registry then has the new vault without its vault-server until the missing packages are published by hand and the workflow is re-run, which skips what exists and publishes the rest |
-| All six published by hand, trusted publishers not yet configured | Steps 1 and 3 skip everything. `@redact-secret/vault` and `@redact-secret/vault-server` publish. The missing trusted publishers surface at the next version of a new package |
+| Every package published by hand, trusted publishers not yet configured | Steps 1 and 3 skip everything. `@redact-secret/vault` and `@redact-secret/vault-server` publish. The missing trusted publishers surface at the next version of a new package |
 
 The Python job chain (`python`, `python-dist`, `pypi-publish`) does not depend on the npm `publish` job and is not affected.
 
@@ -79,7 +79,7 @@ Never move a tag once any package has been published from it.
 
 ### Dist-tags
 
-- `alpha` for the six persistence packages (`publishConfig.tag` in each manifest).
+- `alpha` for the seven persistence packages (`publishConfig.tag` in each manifest).
 - `beta` for `@redact-secret/vault` and `@redact-secret/vault-server`.
 - `latest` is never set by the workflow: both the vault steps and `publish-workspace.mjs` refuse a `publishConfig.tag` of `latest`. On `@redact-secret/vault-server`'s first publish the registry set `latest` as well as the named tag, so expect a new package's first version to become its `latest`. Moving it afterwards is the manual step 6.
 
@@ -142,19 +142,21 @@ The `bench` workflow (`.github/workflows/bench.yml`, [#83](https://github.com/re
 | `v0.1.0-beta.1` (2026-09-29, `9212e4d`) | `@redact-secret/vault@0.1.0-beta.1`, `@redact-secret/vault-server@0.1.0-beta.1`, `redact-secret-vault@0.1.0b1` (PyPI) | `release.yml` run [36589858908](https://github.com/redact-secret/redact-secret-vault/actions/runs/36589858908), npm trusted publishing (dist-tag `beta`) and PyPI trusted publishing; the vault-server version took about 6 minutes to appear on the registry after `npm publish` | SLSA provenance on both npm packages (`npm audit signatures` verified); PEP 740 attestations on the wheel and sdist (`pypi-attestations verify pypi` OK) |
 | `v0.1.0-beta.2` (2026-09-29, `3462d8e`) | `@redact-secret/vault@0.1.0-beta.2`, `@redact-secret/vault-server@0.1.0-beta.2`, `redact-secret-vault@0.1.0b2` (PyPI) | `release.yml` run [36619621473](https://github.com/redact-secret/redact-secret-vault/actions/runs/36619621473), npm trusted publishing (dist-tag `beta`) and PyPI trusted publishing | SLSA provenance on both npm packages (`npm audit signatures` verified); PEP 740 attestations on the wheel (`pypi-attestations verify pypi` OK) |
 | `v0.1.0-beta.3` (2026-10-01, `b526492`) | `@redact-secret/vault@0.1.0-beta.3`, `@redact-secret/vault-server@0.1.0-beta.3`, `redact-secret-vault@0.1.0b3` (PyPI) | `release.yml` run [36879552785](https://github.com/redact-secret/redact-secret-vault/actions/runs/36879552785), npm trusted publishing (dist-tag `beta`) and PyPI trusted publishing; the vault-server version took several minutes to appear on the registry | SLSA provenance on both npm packages (`npm audit signatures` verified); PEP 740 attestations on the wheel and sdist (provenance endpoint HTTP 200 for both) |
+| `v0.1.0-beta.4` (2026-10-02, `b77d8cb`) | `@redact-secret/vault@0.1.0-beta.4`, `@redact-secret/vault-server@0.1.0-beta.4`; `redact-secret-vault` stays at `0.1.0b3` on PyPI (no Python bump) | `release.yml` run [36996502364](https://github.com/redact-secret/redact-secret-vault/actions/runs/36996502364), npm trusted publishing (dist-tag `beta`); the seven persistence packages were already on the registry and were skipped | SLSA provenance on both packages (`npm audit signatures`: 42 packages verified in the clean install of the registry packages) |
+| No tag (2026-10-02, 10:28 to 10:31 UTC, before `v0.1.0-beta.4` was published) | `@redact-secret/vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`, each `0.1.0-alpha.1` | Manually, by the maintainer (dist-tag `alpha`; the registry also set `latest`) | None |
 
 For `v0.1.0-alpha.2`, the tag was first pushed at `9f3524d`. That run's publish failed with `PUT 404` because no trusted publisher was configured yet. After the maintainer configured it and [#54](https://github.com/redact-secret/redact-secret-vault/pull/54) pointed the packages' `repository` URLs at the renamed repository, the still-unpublished tag was moved to `8b30ae5` and the release workflow published. Never move a tag once any package has been published from it.
 
 ## Provenance
 
-`0.1.0-alpha.1` was published manually because npm trusted publishing can be configured only for a package that already exists. The same constraint made the first `@redact-secret/vault-server` publish (`0.1.0-alpha.2`) manual. Neither carries an npm provenance attestation. The same constraint applies to each of the six persistence packages, none of which exists on npm yet: see [First publish of each new package](#first-publish-of-each-new-package).
+`0.1.0-alpha.1` was published manually because npm trusted publishing can be configured only for a package that already exists. The same constraint made the first `@redact-secret/vault-server` publish (`0.1.0-alpha.2`) manual. Neither carries an npm provenance attestation. The same constraint applied to each of the seven persistence packages: their `0.1.0-alpha.1` versions were published by hand, with a registry signature and no provenance attestation. See [First publish of each new package](#first-publish-of-each-new-package).
 
 `.github/workflows/release.yml` (added for [#24](https://github.com/redact-secret/redact-secret-vault/issues/24), extended to the vault-server for [#55](https://github.com/redact-secret/redact-secret-vault/issues/55)) publishes releases from GitHub Actions through npm trusted publishing (OIDC): the `publish` job requests an `id-token` (granted only to that job) and runs `npm publish --provenance` for each package, with no npm token in the workflow. These steps are manual, on npmjs.com, and are **not** done by this workflow:
 
 - **Configure a trusted publisher for each package.** On npmjs.com, open the package → Settings → Trusted Publisher, and add a GitHub Actions publisher for repository `redact-secret/redact-secret-vault` (renamed from `redact-secret-reversible`; the publisher must name the current repository), workflow `release.yml`, environment none.
-  - `@redact-secret/vault`: configured; it published `0.1.0-alpha.2` and `0.1.0-alpha.3`.
-  - `@redact-secret/vault-server`: configured; it published `0.1.0-alpha.3`.
-  - `@redact-secret/vault-contracts`, `@redact-secret/vault-crypto`, `@redact-secret/vault-conformance`, `@redact-secret/store-memory`, `@redact-secret/store-postgres`, `@redact-secret/store-sqlite`, `@redact-secret/key-provider-aws-kms`: **not configured**; the packages do not exist on npm yet (2026-10-01).
+  - `@redact-secret/vault`: configured; it published `0.1.0-alpha.2` through `0.1.0-beta.4`.
+  - `@redact-secret/vault-server`: configured; it published `0.1.0-alpha.3` through `0.1.0-beta.4`.
+  - `@redact-secret/vault-contracts`, `@redact-secret/vault-crypto`, `@redact-secret/vault-conformance`, `@redact-secret/store-memory`, `@redact-secret/store-postgres`, `@redact-secret/store-sqlite`, `@redact-secret/key-provider-aws-kms`: configured by the maintainer on npmjs.com, **not verified by the agent that wrote this record**: the repository has no way to check it, and the npm CLI used here (11.4.1) has no command that lists a package's trusted publishers. The first version of each of these packages that the workflow publishes (`0.1.0-alpha.2` or later) is the first test of it.
 - **Revoke the manual publish credentials.** A tagged release has now published through OIDC, so revoke the granular access token used for `0.1.0-alpha.1` (npmjs.com → Access Tokens → revoke it, or, if it is still needed for something else, remove its publish permission on `@redact-secret/vault`). Also revoke any token or login session created on the maintainer machine for the manual `@redact-secret/vault-server@0.1.0-alpha.2` publish.
 - **Optionally, require trusted publishing.** Once both packages publish through OIDC, set each package's publishing access on npmjs.com to disallow tokens, so a leaked token cannot publish.
 
@@ -169,11 +171,11 @@ npm dist-tag add @redact-secret/vault-server@<version> latest
 
 npm allows moving `latest` to any published version, prerelease included; what it refuses is deleting a package's `latest` tag. So a bare `npm install @redact-secret/vault` installs whatever `latest` names, and leaving `latest` on an older alpha is a real hazard: until 2026-09-28 it pointed at `@redact-secret/vault@0.1.0-alpha.1`, which peers core beta.9 and conflicts with core beta.10.
 
-Current tags (2026-10-01, after `0.1.0-beta.3`):
+Current tags (2026-10-02, after `0.1.0-beta.4`, read with `npm view <package> dist-tags --prefer-online`):
 
-- `@redact-secret/vault`: `latest` and `beta` → `0.1.0-beta.3`; `alpha` → `0.1.0-alpha.3`.
-- `@redact-secret/vault-server`: `latest` and `beta` → `0.1.0-beta.3`; `alpha` → `0.1.0-alpha.3`.
-- The six persistence packages: no tags; not on npm. `0.1.0-beta.4` of the two packages above is on `main` only.
+- `@redact-secret/vault`: `latest` and `beta` → `0.1.0-beta.4`; `alpha` → `0.1.0-alpha.3`.
+- `@redact-secret/vault-server`: `latest` and `beta` → `0.1.0-beta.4`; `alpha` → `0.1.0-alpha.3`.
+- The seven persistence packages (`vault-contracts`, `vault-crypto`, `vault-conformance`, `store-memory`, `store-postgres`, `store-sqlite`, `key-provider-aws-kms`): `alpha` and `latest` → `0.1.0-alpha.1`. The registry set `latest` on each first publish, as expected for a new package; the workflow never sets it and the maintainer left it. `vault` moved to `0.1.0-beta.4` first, and `vault-server` followed later the same day, so the moves are separate observations.
 
 For the first stable release, either keep this manual step or change each package's `publishConfig.tag` to `latest` and deliberately relax the workflow guard in the same reviewed change.
 

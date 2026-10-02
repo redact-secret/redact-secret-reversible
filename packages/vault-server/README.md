@@ -1,13 +1,19 @@
 # @redact-secret/vault-server
 
+[![npm (beta)](https://img.shields.io/npm/v/@redact-secret/vault-server/beta?label=npm%20%28beta%29)](https://www.npmjs.com/package/@redact-secret/vault-server)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/vault-server)](https://www.npmjs.com/package/@redact-secret/vault-server)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/vault-server/beta?label=node%20%28beta%29)](https://www.npmjs.com/package/@redact-secret/vault-server)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 [`@redact-secret/vault`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault/README.md) for servers with many users: every restore is checked against the caller's identity, tenant, and purpose by a policy you supply.
 
-**Beta.** Node.js 20, 22, 24. In-memory and single-process by default; a [persistent profile](#persistent-profile) is alpha and not on npm yet.
+**Beta.** Node.js 20, 22, 24. In-memory and single-process by default; a [persistent profile](#persistent-profile) is alpha.
 
 ## Install
 
 ```bash
-npm install @redact-secret/vault-server@0.1.0-beta.3
+npm install @redact-secret/vault-server@0.1.0-beta.4
 ```
 
 npm also installs the matching `@redact-secret/vault` and `@redact-secret/core` (an exact dependency and an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
@@ -65,7 +71,7 @@ try {
 
 ## Ready-made policies
 
-From `0.1.0-beta.4` (on `main`, unpublished), `@redact-secret/vault-server/policies` has the common rules, so you do not write them by hand:
+From `0.1.0-beta.4`, `@redact-secret/vault-server/policies` has the common rules, so you do not write them by hand:
 
 ```ts
 import { allOf, allowSameTenantOnly, allowSinkPurposes } from "@redact-secret/vault-server/policies";
@@ -112,7 +118,7 @@ Every option, the exact evaluation order, concurrency, audit events, and residua
 
 ## Persistent profile
 
-**On `main`, unpublished, alpha.** `@redact-secret/vault-server/persistent` lets one process capture and another restore, with ciphertext in a store you inject and keys from a key provider you inject. Importing `@redact-secret/vault-server` loads none of it.
+**Alpha.** `@redact-secret/vault-server/persistent` lets one process capture and another restore, with ciphertext in a store you inject and keys from a key provider you inject. Importing `@redact-secret/vault-server` loads none of it.
 
 ```ts
 import { createPersistentServerVault } from "@redact-secret/vault-server/persistent";

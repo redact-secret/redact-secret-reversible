@@ -1,6 +1,6 @@
 # Persistent vault operations
 
-**Status:** proposed. This is the operational specification for [#111](https://github.com/redact-secret/redact-secret-vault/issues/111): expiry and cleanup, the four deletion-related operations, backup recovery, failover, and what an operator can and cannot promise. It complements the [persistent vault specification](persistent-vault.md), which defines the contracts, and does not restate them. Nothing here is a support claim. The packages it describes are unpublished.
+**Status:** proposed. This is the operational specification for [#111](https://github.com/redact-secret/redact-secret-vault/issues/111): expiry and cleanup, the four deletion-related operations, backup recovery, failover, and what an operator can and cannot promise. It complements the [persistent vault specification](persistent-vault.md), which defines the contracts, and does not restate them. Nothing here is a support claim. The packages it describes are published as alpha.
 
 It is written for the first backend, [`@redact-secret/store-postgres`](../../packages/store-postgres/README.md), with the persistent profile of [`@redact-secret/vault-server`](../../packages/vault-server/README.md). Statements about the contract apply to any store; statements about PostgreSQL say so.
 

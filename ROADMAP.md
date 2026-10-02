@@ -4,7 +4,7 @@ This is the intended direction for the next twelve months (October 2026 – Sept
 
 ## Near term
 
-- Complete the independent implementation review of the persistent profile and publish the first persistence prerelease: `0.1.0-beta.4` of both npm packages and `0.1.0-alpha.1` of the six persistence packages, all on `main` and unpublished today ([#112](https://github.com/redact-secret/redact-secret-vault/issues/112), [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md)).
+- The persistent profile's first prerelease is out (2026-10-02): `0.1.0-beta.4` of both npm packages and `0.1.0-alpha.1` of the seven persistence packages. Still open: the independent implementation review's remaining findings and the qualification gaps its record lists ([#112](https://github.com/redact-secret/redact-secret-vault/issues/112), [qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md)).
 - Document and test JavaScript/Python conformance and the supported core version ranges ([#18](https://github.com/redact-secret/redact-secret-vault/issues/18)).
 - Continue qualifying `@redact-secret/vault` on the in-memory runtimes it supports ([#2](https://github.com/redact-secret/redact-secret-vault/issues/2)).
 

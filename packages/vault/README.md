@@ -1,5 +1,11 @@
 # @redact-secret/vault
 
+[![npm (beta)](https://img.shields.io/npm/v/@redact-secret/vault/beta?label=npm%20%28beta%29)](https://www.npmjs.com/package/@redact-secret/vault)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/vault)](https://www.npmjs.com/package/@redact-secret/vault)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/vault/beta?label=node%20%28beta%29)](https://www.npmjs.com/package/@redact-secret/vault)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 Swap secrets for random tokens before text leaves your code (for example, to an LLM), then put the original values back, but only into fields you named in advance. In-memory, opt-in, built on [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core).
 
 **Beta.** Runs on Node.js 20, 22, 24 and in browsers (main thread, or an optional dedicated Worker).
@@ -7,7 +13,7 @@ Swap secrets for random tokens before text leaves your code (for example, to an 
 ## Install
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.3
+npm install @redact-secret/vault@0.1.0-beta.4
 ```
 
 npm also installs `@redact-secret/core` at the one version this release works with (an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
