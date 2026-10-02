@@ -29,10 +29,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
-from .core_client import CoreClient, CoreFinding
+from .capture_plan import CAPTURE_DEFAULT_LIMITS, CAPTURE_LIMIT_CEILINGS, plan_capture
+from .core_client import CoreClient
 from .errors import ServerDenialReason, VaultServerError, VaultServerErrorCode
-from .pii import is_pii_active, is_pii_finding_type, resolve_pii_retention
-from .token import TOKEN_PATTERN, count_markers, find_tokens, has_marker, new_capture_id, new_token
+from .token import TOKEN_PATTERN, count_markers, find_tokens, new_capture_id
 from .types import (
     CaptureOptions,
     CaptureResult,
@@ -50,19 +50,9 @@ from .types import (
     ServerReleasePolicy,
     VaultServerStats,
 )
-from .utf16 import build_unit_offsets, char_index, utf16_slice
 
 DEFAULT_LIMITS: Mapping[str, int] = {
-    "max_entries": 256,
-    "max_retained_bytes": 64 * 1024,
-    "max_value_bytes": 8 * 1024,
-    "entry_ttl_ms": 10 * 60 * 1000,
-    "vault_ttl_ms": 60 * 60 * 1000,
-    "max_input_bytes": 1024 * 1024,
-    "max_findings": 1024,
-    "max_restore_fields": 64,
-    "max_restore_field_bytes": 1024 * 1024,
-    "max_uses_per_entry": 16,
+    **CAPTURE_DEFAULT_LIMITS,
     # Server-only addition (ADR section 4): how long a revoked token's
     # capture/tenant is remembered so a later restore attempt can report
     # "revoked" rather than "unknown-token". Not part of the in-memory vault.
@@ -70,22 +60,12 @@ DEFAULT_LIMITS: Mapping[str, int] = {
 }
 
 _LIMIT_CEILINGS: Mapping[str, int] = {
-    "max_entries": 100_000,
-    "max_retained_bytes": 64 * 1024 * 1024,
-    "max_value_bytes": 1024 * 1024,
-    "entry_ttl_ms": 24 * 60 * 60 * 1000,
-    "vault_ttl_ms": 24 * 60 * 60 * 1000,
-    "max_input_bytes": 64 * 1024 * 1024,
-    "max_findings": 50_000,
-    "max_restore_fields": 10_000,
-    "max_restore_field_bytes": 64 * 1024 * 1024,
-    "max_uses_per_entry": 1_000,
+    **CAPTURE_LIMIT_CEILINGS,
     "revocation_tombstone_ttl_ms": 24 * 60 * 60 * 1000,
 }
 
 _MAX_IDENTIFIER_LENGTH = 256
 _MAX_GRANTS = 64
-_MAX_PATHS_PER_GRANT = 256
 _TOKEN_ATTEMPTS = 4
 
 
@@ -255,13 +235,6 @@ class InMemoryVaultServer:
 
     # -- entry/capture bookkeeping -----------------------------------------
 
-    def _issue_token(self, staged: set[str]) -> str:
-        for _ in range(_TOKEN_ATTEMPTS):
-            token = new_token()
-            if token not in self._entries and token not in staged:
-                return token
-        raise VaultServerError(VaultServerErrorCode.TOKEN_GENERATION_FAILED)
-
     def _issue_capture_id(self) -> str:
         for _ in range(_TOKEN_ATTEMPTS):
             capture_id = new_capture_id()
@@ -335,175 +308,53 @@ class InMemoryVaultServer:
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
         if not _is_identifier(options.issued_tenant):
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-        if not options.release or len(options.release) > _MAX_GRANTS:
-            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-        grants: dict[str, set[str]] = {}
-        for grant in options.release:
-            if not _is_identifier(grant.sink) or not grant.paths or len(grant.paths) > _MAX_PATHS_PER_GRANT:
-                raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-            bucket = grants.setdefault(grant.sink, set())
-            for path in grant.paths:
-                if not _is_identifier(path):
-                    raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-                bucket.add(path)
-        if not isinstance(options.max_uses, int) or not (1 <= options.max_uses <= self._limits["max_uses_per_entry"]):
-            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-        if options.unredacted not in ("reject", "pass-through"):
-            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-        if options.eligible is not None and not callable(options.eligible):
-            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
-        # PII retention allowlist (PII ADR §1), validated before the core
-        # runs. Whether PII detection is active is checked right after the
-        # scan, against the identity that scan's own core realm reported.
-        pii_retain = resolve_pii_retention(options.pii)
 
-        if _utf8_length(input_text) > self._limits["max_input_bytes"]:
-            raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
-        if has_marker(input_text):
-            raise VaultServerError(VaultServerErrorCode.TOKEN_LITERAL_IN_INPUT)
+        def budget() -> tuple[int, int]:
+            # Read once by the plan, after its input checks and before the core scan.
+            self._sweep(at)
+            return len(self._entries), self._retained_bytes
 
-        self._sweep(at)
-
-        outcome = self._core.scan(
+        # Everything a capture decides before it retains anything is the shared capture plan
+        # (redact_secret_vault.capture_plan), which the persistent server profile also runs.
+        plan = plan_capture(
+            self._core,
             input_text,
-            policy=options.policy,
-            limits={
-                "maxInputBytes": self._limits["max_input_bytes"],
-                "maxFindings": self._limits["max_findings"],
-            },
+            options,
+            self._limits,
+            budget=budget,
+            is_taken=lambda token: token in self._entries,
         )
-        # A capture that configures PII retention on a core that cannot
-        # produce PII findings (no PII surface, or `selectors=off`) would let
-        # the application believe PII is handled while it passes through as
-        # undetected plaintext (PII ADR §1). Refused before any finding is
-        # gated or staged.
-        if pii_retain is not None and not is_pii_active(outcome.pii_activation):
-            raise VaultServerError(VaultServerErrorCode.PII_UNAVAILABLE)
-        findings = outcome.findings
-
-        offsets = build_unit_offsets(input_text)
-        total_units = offsets[-1]
-
-        passed_through = 0
-        passed_types: set[str] = set()
-        retain: list[CoreFinding] = []
-        unrestorable = 0
-        previous_end = 0
-        for finding in findings:
-            if finding.start < previous_end or finding.end <= finding.start or finding.end > total_units:
-                raise VaultServerError(VaultServerErrorCode.INVARIANT_VIOLATION)
-            previous_end = finding.end
-            if finding.action == "block":
-                raise VaultServerError(VaultServerErrorCode.BLOCKED_FINDING)
-            if finding.action in ("warn", "allow"):
-                passed_through += 1
-                passed_types.add(finding.type)
-            elif finding.action == "redact":
-                keep = True
-                if is_pii_finding_type(finding.type) and (pii_retain is None or finding.type not in pii_retain):
-                    # A PII finding outside the exact-type allowlist is never
-                    # retained, and `eligible` is not consulted: it may
-                    # narrow the allowlist, never widen it.
-                    keep = False
-                elif options.eligible is not None:
-                    try:
-                        keep = (
-                            options.eligible(
-                                {
-                                    "id": finding.id,
-                                    "type": finding.type,
-                                    "detector": finding.detector,
-                                    "confidence": finding.confidence,
-                                    "obfuscation": finding.obfuscation,
-                                }
-                            )
-                            is True
-                        )
-                    except Exception as exc:
-                        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT) from exc
-                if keep:
-                    retain.append(finding)
-                else:
-                    unrestorable += 1
-            else:
-                raise VaultServerError(VaultServerErrorCode.INVARIANT_VIOLATION)
-
-        if passed_through > 0 and options.unredacted == "reject":
-            raise VaultServerError(VaultServerErrorCode.UNREDACTED_FINDINGS)
-        if len(self._entries) + len(retain) > self._limits["max_entries"]:
-            raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
-
-        staged: dict[str, tuple[str, str, str]] = {}
-        staged_tokens: set[str] = set()
-        staged_bytes = 0
-        for finding in retain:
-            value = utf16_slice(input_text, finding.start, finding.end, offsets)
-            value_bytes = _utf8_length(value)
-            staged_bytes += value_bytes
-            if value_bytes > self._limits["max_value_bytes"] or (
-                self._retained_bytes + staged_bytes > self._limits["max_retained_bytes"]
-            ):
-                raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
-            token = self._issue_token(staged_tokens)
-            staged_tokens.add(token)
-            staged[finding.id] = (token, value, finding.type)
-
-        # Assemble the redacted text: retained findings become issued
-        # tokens, ineligible `redact` findings become a non-restorable
-        # display placeholder, `warn`/`allow` are left as plaintext.
-        # `placeholder_index` counts every `redact` finding in order (both
-        # kinds), one-based — mirroring the core's own
-        # `PlaceholderContext.placeholderIndex`, "one-based position among
-        # findings that are actually replaced" (dist/types.d.ts), which
-        # numbers eligible and ineligible `redact` findings in one sequence.
-        pieces: list[str] = []
-        cursor = 0
-        placeholder_index = 0
-        for finding in findings:
-            start_index = char_index(offsets, finding.start)
-            end_index = char_index(offsets, finding.end)
-            pieces.append(input_text[cursor:start_index])
-            if finding.action == "redact":
-                placeholder_index += 1
-                if finding.id in staged:
-                    pieces.append(staged[finding.id][0])
-                else:
-                    pieces.append(f"<SECRET_{placeholder_index}>")
-            else:
-                pieces.append(input_text[start_index:end_index])
-            cursor = end_index
-        pieces.append(input_text[cursor:])
-        text = "".join(pieces)
 
         capture_id = self._issue_capture_id()
         expires_at = at + self._limits["entry_ttl_ms"]
         tokens: list[IssuedToken] = []
         capture_tokens: set[str] = set()
-        for token, value, finding_type in staged.values():
-            self._entries[token] = _Entry(
+        for planned in plan.retained:
+            value = plan.value_of(input_text, planned)
+            self._entries[planned.token] = _Entry(
                 value=value,
-                type=finding_type,
+                type=planned.type,
                 capture_id=capture_id,
                 issued_tenant=options.issued_tenant,
-                grants={sink: set(paths) for sink, paths in grants.items()},
-                max_uses=options.max_uses,
+                grants={grant.sink: set(grant.paths) for grant in plan.grants},
+                max_uses=plan.max_uses,
                 used=0,
                 expires_at=expires_at,
                 bytes=_utf8_length(value),
             )
             self._retained_bytes += _utf8_length(value)
-            capture_tokens.add(token)
-            tokens.append(IssuedToken(token=token, type=finding_type))
+            capture_tokens.add(planned.token)
+            tokens.append(IssuedToken(token=planned.token, type=planned.type))
         if capture_tokens:
             self._captures[capture_id] = capture_tokens
 
         return CaptureResult(
             capture_id=capture_id,
-            text=text,
+            text=plan.text,
             tokens=tuple(tokens),
-            passed_through=passed_through,
-            passed_through_types=tuple(sorted(passed_types)),
-            unrestorable=unrestorable,
+            passed_through=plan.passed_through,
+            passed_through_types=plan.passed_through_types,
+            unrestorable=plan.unrestorable,
             expires_at=expires_at,
         )
 

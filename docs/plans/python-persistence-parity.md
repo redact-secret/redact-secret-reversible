@@ -830,6 +830,8 @@ Order: 1, then 2 and 3 in parallel, then 4; 5 can start as soon as #108's harnes
 
 ## 9. Open questions
 
+Questions 1, 2, 3, 6, 7, and 8 are answered for the groundwork issues 1 to 4 by [the decision record](../decisions/python-persistence-api-and-packaging.md). The others stay open.
+
 1. **Sync API.** Is an async-only persistent API acceptable for the Python users this package targets, or is a synchronous facade required for WSGI? (§3.7)
 2. **One distribution or several.** Is per-module support status inside one version number acceptable? (§4.1)
 3. **Python floor.** Does the persistent profile support 3.10, given its upstream end of life this month, or start at 3.11, which also provides `asyncio.timeout` and exception notes?

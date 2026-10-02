@@ -2,11 +2,13 @@
 
 Swap secrets for random tokens before text leaves your server (for example, to an LLM), then put the original values back, but only for the user, tenant, purpose, and field your policy allows. It is the Python counterpart of [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md).
 
-**Research-grade.** In-memory only; nothing is persistent. Detection runs in [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core), which has no Python build, so this package talks to it through a small Node.js child process.
+**Research-grade.** The published `0.1.0b3` is in-memory only; nothing in it is persistent. Detection runs in [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core), which has no Python build, so this package talks to it through a small Node.js child process.
+
+**Python persistence is not supported.** The source tree also holds persistent modules (below). They are unpublished, and the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-python-persistence-0.1.0b3.md) states that its gates are not all passed. Nothing on this page claims support for them.
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.10+ for the in-memory server. The persistent modules need Python 3.11+ and refuse to import on 3.10
 - Node.js 20, 22, or 24 on `PATH`
 - `@redact-secret/core` at exactly `0.1.0-beta.12`, installed with npm in a directory your application owns
 
@@ -113,6 +115,25 @@ A complete version that also shows a denied restore: [examples/05-python-server.
 - **Close the bridge.** Use `NodeCoreBridge` as a context manager, or call `close()`. Threads sharing one bridge are served one at a time; use one bridge per worker for parallel scans.
 - **PII is off by default** and never retained unless a capture names the exact type.
 
+## Persistent modules (in the source tree, unpublished, not supported)
+
+`pip install redact-secret-vault==0.1.0b3` does **not** install these modules; they are in the repository only. Each is behind an extra, and the base install keeps no runtime dependency. They need Python 3.11 or later. The API is `async` only (`Store`, `KeyProvider`, and `RecordCrypto` are protocols with `async def` methods); there is no synchronous twin. Status words follow [CONVENTIONS.md](https://github.com/redact-secret/redact-secret-vault/blob/main/CONVENTIONS.md#status-language): **implemented** here means the code exists and passed the runs named in the record, **not supported** means no support claim is made.
+
+| Import path | Extra | What it is | Status |
+| --- | --- | --- | --- |
+| `redact_secret_vault.persistent` | none | Contracts, errors, validators, canonical encoding, digests, the volatile reference `store_memory`, and `create_persistent_server_vault` (the persistent server profile) | Implemented; not supported. The persistent profile, the vectors, and the schedule corpus passed on the cells of the record |
+| `redact_secret_vault.crypto` | `crypto` | Record crypto and a local key provider over `cryptography`. Key material is bytes in process memory, so the profile is `local-bytes-hkdf-aes-256-gcm-v1`, not the JavaScript profile | Implemented; not supported. Vectors and interoperation with the JavaScript crypto passed on the cells of the record |
+| `redact_secret_vault.stores.postgres` | `postgres` | A PostgreSQL store over `psycopg` 3, against the schema `@redact-secret/store-postgres` owns (Python creates no table) | Implemented; not supported. Run against PostgreSQL 17.11, a single primary, with `psycopg` 3.3.6 (`binary` build) only |
+| `redact_secret_vault.keys.aws_kms` | `aws-kms` | An AWS KMS key provider over an injected `boto3` client | Implemented; not supported. One real-service run in `us-east-1` with two symmetric keys; throttling not provoked |
+
+- **Install variant.** The `postgres` extra names plain `psycopg`, which cannot be imported at all without a system `libpq`. Install `libpq` or add `psycopg[binary]` (the variant tested). The adapter takes a pool the application owns (`psycopg_pool.AsyncConnectionPool` works; it is not a dependency) and never opens a connection from a URL.
+- **WSGI and other synchronous hosts.** Call the async API through one long-lived event-loop thread per process. Do not use `asyncio.run` per request: a connection pool is bound to its loop.
+- **Fork.** A store created before `os.fork()` raises `STORE_CLOSED` in the child. Construct it after the fork.
+- **No default key.** The key material, the digest key, the pool, and the KMS client are all supplied by the application. A bytes key in Python memory cannot be cleared; the package overwrites the buffers it owns and says so, and does not claim more.
+- **At rest is not everywhere.** Encryption at rest covers what the store holds. The whole capture input, every secret in it and not only the retained values, still goes to the Node.js bridge and stays in its heap until it is collected or the process exits. **The bridge is research-grade and not qualified**, and the Python qualification does not include it: any deployment claim is for an application-supplied, separately qualified `CoreClient` ([decision](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/decisions/limit-python-persistence-claim-to-a-supplied-core-client.md)). Use `max_scans_per_process=1`, one bridge per tenant or trust domain, or your own `CoreClient` if that residual risk is not acceptable.
+- **Logging.** Do not enable `DEBUG` for `botocore`, `boto3`, or `urllib3` in a process that uses the KMS provider: with a real key, `botocore` was observed writing the plaintext data key and the key ARN. `psycopg` at `DEBUG` writes the host, port, user, and database of each connection, never a statement or a value.
+- **Not tested, so not stated:** Windows, macOS CI, Linux x86-64, free-threaded or PyPy builds, a synchronous standby or failover, a connection pooler, managed PostgreSQL, two hosts, and power loss. The details are in the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-python-persistence-0.1.0b3.md), which is the only document that may state support for a cell.
+
 ## Common problems
 
 Run `python -m redact_secret_vault doctor` first: it names the failing part and the fix.
@@ -140,3 +161,5 @@ cd packages/vault-py
 pip install -e ".[test]"
 pytest
 ```
+
+The persistent tests need the extras (`pip install -e ".[test,lint,crypto,postgres,aws-kms]"` and `psycopg[binary]`) and Python 3.11+; those that need a database or AWS skip with their reason when it is not configured (`RSV_PG_APP_URL` and `RSV_PG_ADMIN_URL` for PostgreSQL, applied with `node packages/vault-py/tests/pg_prepare.mjs`; `RSV_KMS_TEST_KEY_ARN` and `RSV_KMS_TEST_OLD_KEY_ARN` for KMS). `RSV_REQUIRE_POSTGRES=1` makes a missing database a failure.

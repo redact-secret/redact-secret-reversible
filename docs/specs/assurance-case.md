@@ -72,7 +72,7 @@ Run results, versions, and what was skipped are in the [qualification record](..
 - **Safety of an injected adapter.** A `Store`, `KeyProvider`, or `RecordCrypto` runs in the trusted process; passing the harness does not contain a hostile one.
 - **Protection once a wrapping key and a store copy are both held** by the same party.
 - **A production key-management profile for the local key provider**, and anything about AWS KMS beyond one real-service run with single-Region symmetric keys.
-- **Python, browser, Worker, or edge persistence; streaming; DynamoDB, Redis, or SQLite.** None is implemented.
+- **Browser, Worker, or edge persistence; streaming; DynamoDB, Redis, or SQLite.** None is implemented. Python persistent modules exist in the source tree, unpublished and not supported; see the [qualification record](../research/qualification-python-persistence-0.1.0b3.md).
 - **Performance.** Nothing was measured for these packages.
 - **Hidden metadata.** Tenant and capture identifiers, times, counters, and sizes are visible to a reader of the store.
 
