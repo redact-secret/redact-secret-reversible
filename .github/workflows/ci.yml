@@ -393,3 +393,9 @@ jobs:
       - name: Cross-language interoperation and capture parity
         run: pytest -q -s tests/test_interop_postgres.py tests/test_capture_parity_javascript.py
         working-directory: packages/vault-py
+      # The server over this database with the real core bridge and DEBUG logging for
+      # psycopg and asyncio (G6, #128): no secret, token, data key, or driver text in a log,
+      # an error, a repr, an audit event, or a row. The local key provider; not the KMS one.
+      - name: Server-level leak test over PostgreSQL
+        run: pytest -q -s tests/test_persistent_server_postgres_leaks.py
+        working-directory: packages/vault-py
