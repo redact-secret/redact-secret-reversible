@@ -251,6 +251,9 @@ class Lab:
         # Generous: the first request after a start pays for Node.js and the core, which a loaded or emulated host
         # makes slow. A test that needs a short deadline sets it after the bridge has started.
         options.setdefault("timeout_s", 60.0)
+        if "node_modules" in options:
+            # A core of this test's own making is not the pinned release's files (the integrity pin has its own tests).
+            options.setdefault("expected_core_integrity", None)
         bridge = NodeCoreBridge(node_executable=options.pop("node_executable", self.node), **options)
         self.bridges.append(bridge)
         return bridge
