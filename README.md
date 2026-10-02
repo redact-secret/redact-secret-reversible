@@ -13,7 +13,7 @@ Hide secrets from a model, then put them back where you allow it.
 
 [Redact Secret](https://github.com/redact-secret/redact-secret) finds secrets in text and redacts them for good. This repository adds the opt-in way back: `capture` swaps each secret for a random token before the text leaves your code, and `restore` swaps the tokens back, but only into the fields you named in advance.
 
-**Status: beta.** In-memory use is published for JavaScript and Python. Persistence is alpha and published on npm. Python persistence is in the source tree only and is not supported ([qualification record](docs/research/qualification-python-persistence-0.1.0b3.md)). Details: [release status](docs/status.md).
+**Status: beta.** In-memory use is published for JavaScript and Python. Persistence is alpha and published on npm. Python persistence is in the source tree only and is not supported ([qualification record](docs/research/qualification-python-persistence-0.1.0b3.md)). The runtimes and versions each language was run on, and how the two servers differ: [JavaScript and Python matrix](docs/research/js-python-conformance-and-runtime-matrix.md). Details: [release status](docs/status.md).
 
 ## Quick start
 

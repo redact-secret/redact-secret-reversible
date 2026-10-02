@@ -372,7 +372,7 @@ Differences found while running the persistent profiles against each other, whic
 | 11 | Capture limits and the clock | `max_entries`, `max_retained_bytes`, and `vault_ttl_ms` bound one capture, a negative clock reading is refused | The same | The capture parity run (92 passed, no difference in outcome on any capture step of the corpus) |
 | 12 | Redacted text of a finding that is not retained | The core's formatter | `<SECRET_n>` | Plan 2.1. **Not observed** on the corpus: the comparison replaces tokens by position and found no difference. Not separately exercised |
 
-What would still make #18 complete is the list in the reconciliation, items (a) to (e). This record supplies evidence for (c) and (d) for the persistent profile only.
+What would still make #18 complete is the list in the reconciliation, items (a) to (e). This record supplies evidence for (c) and (d) for the persistent profile only. The consolidated, re-checked table for both Python profiles, the runtime and version matrix of both languages, and the equivalent-outcome evidence are in the [JavaScript and Python matrix](js-python-conformance-and-runtime-matrix.md); the Python order test of item (c) now exists for the in-memory server too (`tests/test_server_order.py`).
 
 ## 7. What this record supports
 
