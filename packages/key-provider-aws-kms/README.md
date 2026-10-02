@@ -1,5 +1,11 @@
 # @redact-secret/key-provider-aws-kms
 
+[![npm (alpha)](https://img.shields.io/npm/v/@redact-secret/key-provider-aws-kms/alpha?label=npm%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/key-provider-aws-kms)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/key-provider-aws-kms)](https://www.npmjs.com/package/@redact-secret/key-provider-aws-kms)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/key-provider-aws-kms/alpha?label=node%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/key-provider-aws-kms)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 An optional AWS KMS key provider for the [persistent vault server](../../docs/guides/persistent-server.md). It generates, unwraps, and re-wraps the data keys that encrypt captures. It never sees a captured value.
 
 **Alpha.** Tested against a fake on every run, and once against real KMS (`us-east-1`, Node.js 22, single-Region symmetric keys). Nothing else is qualified: see [what was qualified](../../docs/reference/key-provider-aws-kms.md#what-was-qualified).

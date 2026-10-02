@@ -1,5 +1,11 @@
 # @redact-secret/store-memory
 
+[![npm (alpha)](https://img.shields.io/npm/v/@redact-secret/store-memory/alpha?label=npm%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/store-memory)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/store-memory)](https://www.npmjs.com/package/@redact-secret/store-memory)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/store-memory/alpha?label=node%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/store-memory)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 **Status: alpha.** A ciphertext-only reference `Store` that keeps everything in process memory. It exists for tests and development of a persistent Redact Secret vault. It is not persistence.
 
 It implements the store contract of the [persistent vault specification](../../docs/specs/persistent-vault.md) (§5) with the types and validators of [`@redact-secret/vault-contracts`](../vault-contracts/README.md). It stores envelopes, wrapped keys, counters, and receipts exactly as it is given them. It never decrypts, never holds a data key, never resolves a principal, and never evaluates a policy.

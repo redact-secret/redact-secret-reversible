@@ -1,5 +1,11 @@
 # @redact-secret/vault-conformance
 
+[![npm (alpha)](https://img.shields.io/npm/v/@redact-secret/vault-conformance/alpha?label=npm%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/vault-conformance)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/vault-conformance)](https://www.npmjs.com/package/@redact-secret/vault-conformance)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/vault-conformance/alpha?label=node%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/vault-conformance)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 Test harnesses for authors of a `Store` or a `KeyProvider` for the [persistent vault server](../../docs/guides/persistent-server.md), plus a fault-injecting store wrapper and an insecure key provider for tests. Applications that only use a vault do not need it.
 
 **Alpha.** Its only dependency is [`@redact-secret/vault-contracts`](../vault-contracts/README.md). It imports no test runner, no `node:` module, and no driver.

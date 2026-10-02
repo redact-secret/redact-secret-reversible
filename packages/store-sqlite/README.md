@@ -1,5 +1,11 @@
 # @redact-secret/store-sqlite
 
+[![npm (alpha)](https://img.shields.io/npm/v/@redact-secret/store-sqlite/alpha?label=npm%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/store-sqlite)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/store-sqlite)](https://www.npmjs.com/package/@redact-secret/store-sqlite)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/store-sqlite/alpha?label=node%20%28alpha%29)](https://www.npmjs.com/package/@redact-secret/store-sqlite)
+[![CI](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redact-secret/redact-secret-vault/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-vault/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-vault)
+
 A SQLite store for the [persistent vault server](../../docs/guides/persistent-server.md): one database file on a local file system, opened by one or more server processes **on the same host**. It holds ciphertext, wrapped keys, counters, and receipts. It never decrypts, holds no key, and evaluates no policy.
 
 **Alpha, and not yet a supported profile.** The shared conformance suite, two server processes on one file, process kills around commit, and backup and restore were run (see the [qualification record](../../docs/research/qualification-store-sqlite-0.1.0-alpha.1.md)). **A power-loss simulation was not run**, so nothing here claims the store survives power loss. The record states what was run, on what, and what was not.
