@@ -8,13 +8,13 @@
 
 Swap secrets for random tokens before text leaves your server (for example, to an LLM), then put the original values back, but only for the user, tenant, purpose, and field your policy allows. It is the Python counterpart of [`@redact-secret/vault-server`](https://github.com/redact-secret/redact-secret-vault/blob/main/packages/vault-server/README.md).
 
-**Research-grade.** The published `0.1.0b3` is in-memory only; nothing in it is persistent. Detection runs in [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core), which has no Python build, so this package talks to it through a small Node.js child process.
+**Research-grade.** The base install is the in-memory server; nothing in it is persistent. Persistent modules ship in the same wheel behind extras (below) and are not supported. Detection runs in [`@redact-secret/core`](https://www.npmjs.com/package/@redact-secret/core), which has no Python build, so this package talks to it through a small Node.js child process.
 
-**Python persistence is not supported.** The source tree also holds persistent modules (below). They are unpublished, and the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-python-persistence-0.1.0b3.md) states that its gates are not all passed: the Node.js bridge (G5: the bridge is not named qualified for any cell) and the support matrix (G9) are not passed in full. Nothing on this page claims support for them.
+**Python persistence is not supported.** The wheel also ships persistent modules (below), behind the `crypto`, `postgres`, and `aws-kms` extras, since `0.1.0b4`. They are verified only for the cells of the [qualification record](https://github.com/redact-secret/redact-secret-vault/blob/main/docs/research/qualification-python-persistence-0.1.0b3.md) states that its gates are not all passed: the Node.js bridge (G5: the bridge is not named qualified for any cell) and the support matrix (G9) are not passed in full. Nothing on this page claims support for them.
 
 ## Requirements
 
-- Python 3.10+ for the in-memory server. The persistent modules need Python 3.11+ and refuse to import on 3.10
+- Python 3.10 to 3.13 for the in-memory server (the classifiers list these; CI runs 3.10, 3.12, and 3.13). The persistent modules need Python 3.11+ and refuse to import on 3.10 (CI runs them on 3.11 and 3.12)
 - Node.js 20, 22, or 24 on `PATH`
 - `@redact-secret/core` at exactly `0.1.0-beta.12`, installed with npm in a directory your application owns
 
@@ -121,9 +121,9 @@ A complete version that also shows a denied restore: [examples/05-python-server.
 - **Close the bridge.** Use `NodeCoreBridge` as a context manager, or call `close()`. Threads sharing one bridge are served one at a time; use one bridge per worker for parallel scans.
 - **PII is off by default** and never retained unless a capture names the exact type.
 
-## Persistent modules (in the source tree, unpublished, not supported)
+## Persistent modules (shipped in 0.1.0b4 behind extras, not supported)
 
-`pip install redact-secret-vault==0.1.0b3` does **not** install these modules; they are in the repository only. Each is behind an extra, and the base install keeps no runtime dependency. They need Python 3.11 or later. The API is `async` only (`Store`, `KeyProvider`, and `RecordCrypto` are protocols with `async def` methods); there is no synchronous twin. Status words follow [CONVENTIONS.md](https://github.com/redact-secret/redact-secret-vault/blob/main/CONVENTIONS.md#status-language): **implemented** here means the code exists and passed the runs named in the record, **not supported** means no support claim is made.
+`pip install redact-secret-vault==0.1.0b4` puts these modules in the environment; `0.1.0b3` does not contain them. Each is behind an extra that brings its dependency (for example `pip install "redact-secret-vault[postgres]==0.1.0b4"`), and the base install keeps no runtime dependency. They need Python 3.11 or later. The API is `async` only (`Store`, `KeyProvider`, and `RecordCrypto` are protocols with `async def` methods); there is no synchronous twin. Status words follow [CONVENTIONS.md](https://github.com/redact-secret/redact-secret-vault/blob/main/CONVENTIONS.md#status-language): **implemented** here means the code exists and passed the runs named in the record, **not supported** means no support claim is made.
 
 | Import path | Extra | What it is | Status |
 | --- | --- | --- | --- |

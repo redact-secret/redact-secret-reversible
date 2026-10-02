@@ -18,7 +18,8 @@ PyPI. It provides trusted principal/tenant resolution, a source→sink/path/purp
 tuple, fail-closed policy evaluation, an extended denial vocabulary, and
 audit events with no field capable of carrying a restored value. Storage is
 in-memory only, matching `@redact-secret/vault`'s threat boundary — nothing
-here is persistent. Version `0.1.0b4` (PEP 440; the counterpart of the npm
+here is persistent. (The wheel also ships persistent modules behind extras; they are not
+supported. See the [package README](../../packages/vault-py/README.md#persistent-modules-shipped-in-010b4-behind-extras-not-supported).) Version `0.1.0b4` (PEP 440; the counterpart of the npm
 `0.1.0-beta.4` release) is published to PyPI from `release.yml` through
 trusted publishing (see [RELEASING.md](../../RELEASING.md#python)); `0.1.0a3`
 was the first version there.
