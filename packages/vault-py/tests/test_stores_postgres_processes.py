@@ -209,7 +209,9 @@ def test_a_hundred_concurrent_restores_from_two_processes_commit_exactly_max_use
         committed = outcomes.count("committed")
         assert committed == max_uses, outcomes
         # Every other attempt is the budget (or, when it gave up on a hot row, a conflict); none is anything else.
-        assert all(outcome in ("committed", "budget", "exhausted") for outcome in outcomes), set(outcomes)
+        # `clock-skew` is a fail-closed denial under queue delay (the commit's time was read, then waited past the
+        # skew bound); it consumes nothing, which the `used` check below shows.
+        assert all(outcome in ("committed", "budget", "exhausted", "clock-skew") for outcome in outcomes), set(outcomes)
         assert [row["used"] for row in await entries(a, capture)] == [max_uses]
 
     run(with_processes(2, body))

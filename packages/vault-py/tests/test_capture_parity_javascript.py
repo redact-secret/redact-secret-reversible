@@ -95,10 +95,17 @@ class JsWorker:
             assert process.stdin is not None
             process.stdin.write(b'{"id":0,"op":"exit"}\n')
             await process.stdin.drain()
+            # Close the pipe's transport: left open, it is garbage-collected later as an "unclosed transport"
+            # ResourceWarning that a later test, which records every warning, then fails on (found on Linux, where
+            # this ran before test_crypto_leaks.py; it fails the same way on main).
+            process.stdin.close()
             await asyncio.wait_for(process.wait(), timeout=15)
         except (TimeoutError, ProcessLookupError, ConnectionResetError, BrokenPipeError):
             process.kill()
             await process.wait()
+        finally:
+            if process.stdin is not None:
+                process.stdin.close()
 
 
 def _js_options(options: dict[str, Any]) -> dict[str, Any]:
@@ -132,6 +139,9 @@ async def _compare_case(case: dict[str, Any], lane: str) -> int:
                 if "error" in step.get("expect", {}):
                     return compared
                 pii = list(step.get("pii", selection))
+                if js is not None:
+                    # A case with a second `vault` step: the first worker is done, and must not be left running.
+                    await js.stop()
                 js = await JsWorker().start()
                 configured = await js.call("configure", pii=pii, limits=step.get("limits"), namespace=NAMESPACE)
                 assert configured == {"ok": True}, f"{where}: {configured}"

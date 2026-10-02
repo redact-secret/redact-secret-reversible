@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from redact_secret_vault.core_client import DEFAULT_BRIDGE_SCRIPT, NODE_MODULES_ENV, PINNED_CORE_VERSION
+from redact_secret_vault.core_client import (
+    DEFAULT_BRIDGE_SCRIPT,
+    NODE_MODULES_ENV,
+    PINNED_CORE_INTEGRITY,
+    PINNED_CORE_VERSION,
+)
 from redact_secret_vault.doctor import run_doctor
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is required to run core_bridge.mjs")
@@ -52,6 +57,9 @@ def out_of_tree_script(tmp_path) -> Path:
 
 def _run(**kwargs) -> tuple[int, list[str]]:
     lines: list[str] = []
+    # The fake cores of this file are not the pinned release's files, so they opt out of the integrity pin; the
+    # tests of it are in test_core_integrity.py.
+    kwargs.setdefault("integrity", None)
     return run_doctor(out=lines.append, **kwargs), lines
 
 
@@ -119,6 +127,21 @@ def test_wrong_core_version_names_both_versions(out_of_tree_script, tmp_path):
     code, lines = _run(node_modules=node_modules, script=out_of_tree_script)
     assert code == 1
     assert f"FAIL  core: found @redact-secret/core 0.1.0-beta.9, need exactly {PINNED_CORE_VERSION}" in lines
+
+
+def test_a_core_that_is_not_the_pinned_release_fails_the_integrity_pin_and_says_what_it_found(
+    out_of_tree_script, tmp_path
+):
+    node_modules = _fake_core(tmp_path / "nm", version=PINNED_CORE_VERSION)
+    manifest = node_modules / "@redact-secret" / "core" / "package.json"
+    manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "version": "0.1.0-beta.9"}))
+    code, lines = _run(node_modules=node_modules, script=out_of_tree_script, integrity=PINNED_CORE_INTEGRITY)
+    assert code == 1
+    assert any(
+        line.startswith("FAIL  core: CORE_INTEGRITY_MISMATCH (the installed package.json says 0.1.0-beta.9")
+        for line in lines
+    ), lines
+    assert f"npm install @redact-secret/core@{PINNED_CORE_VERSION}" in lines[-1]
 
 
 def test_unusable_path_argument(out_of_tree_script):

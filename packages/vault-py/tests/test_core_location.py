@@ -25,8 +25,17 @@ from pathlib import Path
 
 import pytest
 
-from redact_secret_vault import NodeCoreBridge, VaultServerError, VaultServerErrorCode
+from redact_secret_vault import NodeCoreBridge as _NodeCoreBridge
+from redact_secret_vault import VaultServerError, VaultServerErrorCode
 from redact_secret_vault.core_client import DEFAULT_BRIDGE_SCRIPT, NODE_MODULES_ENV, PINNED_CORE_VERSION
+
+
+def NodeCoreBridge(**kwargs) -> _NodeCoreBridge:  # noqa: N802 - stands in for the class
+    """The fake cores of this file are not the pinned release's files, so they opt out of the integrity pin (their
+    subject is where a core is loaded from); the pin has its own tests in test_core_integrity.py."""
+    kwargs.setdefault("expected_core_integrity", None)
+    return _NodeCoreBridge(**kwargs)
+
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is required to run core_bridge.mjs")
 

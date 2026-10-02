@@ -197,7 +197,7 @@ def inspect_output(out: bytes, err: bytes, needles: tuple[bytes, ...]) -> list[s
             problems.append("a stdout frame has no id")
             continue
         keys = set(data) - {"id"}
-        if keys not in ({"findings", "coreVersion", "artifact", "piiActivation"}, {"error"}):
+        if keys not in ({"findings", "coreVersion", "artifact", "piiActivation", "integrity"}, {"error"}):
             problems.append("a stdout frame has unexpected keys")
         if "error" in data and (type(data["error"]) is not dict or set(data["error"]) - {"message", "code"}):
             problems.append("an error frame has unexpected keys")
@@ -298,6 +298,45 @@ def protocol_cases(workdir: Path) -> list[Case]:
         Case("id null", [frame(None, "x")], "error"),
         Case("id missing", [b'{"input":"x","pii":[]}\n'], "error"),
         Case("id repeated", [frame(1, "x") + frame(1, "y")], "either", frames_expected=2),
+        # The core integrity pins (the "integrity" field of the first request): a malformed one is refused as a
+        # request error before the core is touched, and a wrong one is refused as CORE_INTEGRITY_MISMATCH.
+        Case("integrity null", [frame(1, "x", integrity=None)], "error"),
+        Case("integrity an array", [frame(1, "x", integrity=[])], "error"),
+        Case("integrity a string", [frame(1, "x", integrity=needle.decode())], "error", needles=(needle,)),
+        Case("integrity an empty object", [frame(1, "x", integrity={})], "error"),
+        Case("integrity name outside the scope", [frame(1, "x", integrity={"evil/pkg": "0" * 64})], "error"),
+        Case(
+            "integrity name carrying a marker",
+            [frame(1, "x", integrity={"@redact-secret/" + PLAINTEXT_MARKER: "0" * 64})],
+            "error",
+            needles=(needle,),
+        ),
+        Case("integrity digest in upper case", [frame(1, "x", integrity={"@redact-secret/core": "A" * 64})], "error"),
+        Case("integrity digest of 63 characters", [frame(1, "x", integrity={"@redact-secret/core": "0" * 63})], "error"),
+        Case("integrity digest a number", [frame(1, "x", integrity={"@redact-secret/core": 7})], "error"),
+        Case(
+            "integrity with 33 packages",
+            [frame(1, "x", integrity={f"@redact-secret/p{i}": "0" * 64 for i in range(33)})],
+            "error",
+        ),
+        Case(
+            "integrity pins that do not match the installed core",
+            [frame(1, "x", integrity={"@redact-secret/core": "0" * 64, "@redact-secret/wasm": "1" * 64})],
+            "error",
+            needles=(needle,),
+        ),
+        Case(
+            "integrity pinning the core only (no WebAssembly package)",
+            [frame(1, "x", integrity={"@redact-secret/core": "0" * 64})],
+            "error",
+        ),
+        Case(
+            "integrity repeated on a second request",
+            [ok, frame(2, "y", integrity={"@redact-secret/core": "0" * 64, "@redact-secret/wasm": "1" * 64})],
+            "either",
+            frames_expected=2,
+            needles=(needle,),
+        ),
         Case("id fractional", [b'{"id":1.5,"input":"x","pii":[]}\n'], "error"),
         Case("id huge", [b'{"id":1e999,"input":"x","pii":[]}\n'], "error"),
         Case("input missing", [b'{"id":1,"pii":[]}\n'], "error"),
@@ -555,6 +594,7 @@ def run_fuzz(report: Report, *, cases: int, seed: int, parser_cases: int) -> Non
                 "coreVersion": PINNED_CORE_VERSION,
                 "artifact": "wasm",
                 "piiActivation": None,
+                "integrity": None,
             },
             separators=(",", ":"),
         ).encode()
@@ -581,6 +621,96 @@ def run_fuzz(report: Report, *, cases: int, seed: int, parser_cases: int) -> Non
         not bad,
         "fuzzing of the client's response parser: only a typed refusal or a well-formed outcome may leave it",
         f"{parser_cases} cases, outcomes {json.dumps(outcomes, sort_keys=True)}, {len(bad)} escaped exceptions, {time.monotonic() - started:.1f} s"
+        + "".join(f"; VIOLATION {b}" for b in bad[:5]),
+    )
+    run_fuzz_strings(report, seed=seed, cases=max(1000, parser_cases // 5))
+
+
+_HOSTILE_STRINGS = (
+    PLAINTEXT_MARKER,
+    PLAINTEXT_MARKER + "\n",
+    PLAINTEXT_MARKER.replace("-", " "),
+    f"input {PLAINTEXT_MARKER}",
+    f"SECRET={PLAINTEXT_MARKER}",
+    PLAINTEXT_MARKER.lower(),
+    "A" * 65,
+    "a" * 4096,
+    "é" * 8 + PLAINTEXT_MARKER,
+    "",
+    "\x00" + PLAINTEXT_MARKER,
+    "\ud800" + PLAINTEXT_MARKER,
+)
+
+
+def _string_slots(frame: dict[str, Any]) -> list[Callable[[Any], None]]:
+    """A setter for every string a response can carry."""
+    slots: list[Callable[[Any], None]] = []
+
+    def at(container: dict[str, Any], key: str) -> None:
+        if isinstance(container[key], str):
+            slots.append(lambda value, c=container, k=key: c.__setitem__(k, value))
+
+    for key in list(frame):
+        if key != "id":
+            at(frame, key)
+    if isinstance(frame.get("error"), dict):
+        for key in list(frame["error"]):
+            at(frame["error"], key)
+    for finding in frame.get("findings") or []:
+        for key in list(finding):
+            at(finding, key)
+    return slots
+
+
+def run_fuzz_strings(report: Report, *, seed: int, cases: int) -> None:
+    """Every string field of a response replaced by hostile text: a refusal must carry none of it. A string that
+    passes its field's shape (a short token of the allowed alphabet) is accepted and counted, not hidden: the shapes
+    bound what can come through, they do not prove that a short token is not a secret."""
+    started = time.monotonic()
+    bridge = NodeCoreBridge(node_executable=NODE)
+    rng = random.Random(seed ^ 0x5EED)
+    finding = {
+        "id": "finding-1", "type": "github_token", "detector": "d", "confidence": "high",
+        "obfuscation": "none", "start": 0, "end": 5, "action": "redact",
+    }  # fmt: skip
+    success = {
+        "id": 1,
+        "findings": [finding],
+        "coreVersion": PINNED_CORE_VERSION,
+        "artifact": "wasm",
+        "piiActivation": None,
+        "integrity": None,
+    }
+    failure = {"id": 1, "error": {"message": "core scan failed", "code": "CORE_ERROR"}}
+    refused = accepted = carried = 0
+    bad: list[str] = []
+    needle = PLAINTEXT_MARKER.lower()
+    for index in range(cases):
+        frame = json.loads(json.dumps(rng.choice((success, failure))))
+        slots = _string_slots(frame)
+        for setter in rng.sample(slots, k=1 if rng.random() < 0.7 else rng.randint(1, len(slots))):
+            setter(rng.choice(_HOSTILE_STRINGS))
+        try:
+            line = json.dumps(frame, separators=(",", ":")).encode("utf-8", "surrogatepass") + b"\n"
+        except (TypeError, ValueError):
+            continue
+        try:
+            outcome = bridge._parse(line, 1)  # noqa: SLF001
+            accepted += 1
+            if needle in repr(outcome).lower():
+                carried += 1
+        except VaultServerError as error:
+            refused += 1
+            shown = f"{error!s} {error!r} {error.args} {error.core_code} {error.__cause__!r} {error.__context__!r}"
+            if needle in shown.lower() or "\n" in shown:
+                bad.append(f"case {index}")
+        except BaseException as error:  # noqa: BLE001
+            bad.append(f"case {index}: {type(error).__name__}")
+    report.add(
+        "G5.fuzz-client-strings",
+        not bad,
+        "every string field of a response replaced by hostile text: no refusal carries any of it, and only a typed error leaves the parser",
+        f"{cases} cases from seed {seed}, {refused} refused, {accepted} accepted, {carried} accepted with the marker inside a field whose alphabet allows it (a bounded token, not free text), {len(bad)} violations, {time.monotonic() - started:.1f} s"
         + "".join(f"; VIOLATION {b}" for b in bad[:5]),
     )
 
@@ -898,7 +1028,7 @@ def run_timeouts(report: Report, workdir: Path, *, runs: int = 20) -> None:
     overshoot: list[float] = []
     timeouts = restarted = 0
     for _ in range(runs):
-        with NodeCoreBridge(node_modules=nm, timeout_s=20.0) as bridge:
+        with NodeCoreBridge(node_modules=nm, timeout_s=20.0, expected_core_integrity=None) as bridge:
             bridge.scan(
                 "warm", policy=None, limits=LIMITS
             )  # a running child: what is measured is the deadline and the kill
@@ -927,7 +1057,7 @@ def run_timeouts(report: Report, workdir: Path, *, runs: int = 20) -> None:
         f"time past the deadline p50 {overshoot[runs // 2] * 1000:.0f} ms, max {overshoot[-1] * 1000:.0f} ms",
     )
     # An external kill in the middle of a request.
-    with NodeCoreBridge(node_modules=nm, timeout_s=60.0) as bridge:
+    with NodeCoreBridge(node_modules=nm, timeout_s=60.0, expected_core_integrity=None) as bridge:
         bridge.scan("warm", policy=None, limits=LIMITS)
         pid = _pid(bridge)
         assert pid is not None
@@ -974,22 +1104,64 @@ def run_timeouts(report: Report, workdir: Path, *, runs: int = 20) -> None:
         "the first scan on a new child (spawn, core load, scan) against the next scan: timeout_s covers both",
         f"10 runs, first scan p50 {cold[5] * 1000:.0f} ms max {cold[-1] * 1000:.0f} ms; second scan p50 {warm[5] * 1000:.1f} ms max {warm[-1] * 1000:.1f} ms",
     )
-    # A failing core costs one spawn per request: no backoff.
+    # A core that cannot load: repeated start failures are backed off (two in a row, then a capped, jittered
+    # exponential delay in which a request fails at once with the same code and no process is spawned).
+    import redact_secret_vault.core_client as core_client_module
+
+    real_popen = core_client_module.subprocess.Popen
+    spawned = 0
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        nonlocal spawned
+        spawned += 1
+        return real_popen(*args, **kwargs)
+
+    results: dict[str, str] = {}
     with tempfile.TemporaryDirectory() as empty:
-        started = time.monotonic()
-        failures = 0
-        with NodeCoreBridge(node_modules=empty) as bridge:
-            for _ in range(30):
-                try:
-                    bridge.scan("x", policy=None, limits=LIMITS)
-                except VaultServerError as error:
-                    failures += error.core_code == "BRIDGE_CORE_NOT_FOUND"
-        per = (time.monotonic() - started) / 30
+        core_client_module.subprocess.Popen = counting  # type: ignore[misc]
+        try:
+            with NodeCoreBridge(node_modules=empty) as bridge:
+                started = time.monotonic()
+                codes: dict[str, int] = {}
+                for _ in range(30):
+                    try:
+                        bridge.scan("x", policy=None, limits=LIMITS)
+                    except VaultServerError as error:
+                        codes[error.core_code or "?"] = codes.get(error.core_code or "?", 0) + 1
+                results["burst"] = (
+                    f"30 back-to-back requests: {spawned} spawns, codes {json.dumps(codes, sort_keys=True)}, "
+                    f"{(time.monotonic() - started) * 1000:.0f} ms in all"
+                )
+            spawned = 0
+            with NodeCoreBridge(node_modules=empty) as bridge:
+                started = time.monotonic()
+                longest = 0.0
+                refused_fast = 0
+                requests = 0
+                while time.monotonic() - started < 6.0:
+                    t0 = time.monotonic()
+                    spawns_before = spawned
+                    try:
+                        bridge.scan("x", policy=None, limits=LIMITS)
+                    except VaultServerError:
+                        pass
+                    took = time.monotonic() - t0
+                    longest = max(longest, took)
+                    refused_fast += spawned == spawns_before
+                    requests += 1
+                    time.sleep(0.05)
+                results["paced"] = (
+                    f"one request every 50 ms for 6 s: {requests} requests, {spawned} spawns, "
+                    f"{refused_fast} refused without a spawn, slowest request {longest * 1000:.0f} ms"
+                )
+        finally:
+            core_client_module.subprocess.Popen = real_popen  # type: ignore[misc]
+    paced_spawns = int(results["paced"].split(", ")[1].split()[0])
     report.add(
         "G5.timeout.restart-storm",
-        None,
-        "a core that cannot load: every request spawns a child, fails, and discards it (no backoff, no circuit breaker)",
-        f"30 requests, {failures} BRIDGE_CORE_NOT_FOUND, {per * 1000:.0f} ms per request",
+        paced_spawns <= 12,
+        "a core that cannot load: repeated start failures back off (capped, jittered exponential), failing closed at once with no spawn and no waiting",
+        f"{results['burst']}; {results['paced']} (unbacked, that is one spawn per request)",
     )
 
 
@@ -1036,7 +1208,7 @@ def run_concurrency(report: Report) -> None:
         "throughput of 1 and 4 bridges (a 1.1 KiB input with one secret)",
         "; ".join(rows),
     )
-    # Unbounded waiting behind the lock: the timeout counts only the request in flight.
+    # Waiting behind the lock: timeout_s is end to end, so no caller waits longer than it, whatever the queue.
     big = "z " * 6_000_000  # about 12 MB: one scan takes a noticeable time
     with NodeCoreBridge(timeout_s=60.0) as bridge:
         _scan(bridge, "warm")  # the first request pays for the start-up
@@ -1044,31 +1216,37 @@ def run_concurrency(report: Report) -> None:
         t0 = time.monotonic()
         _scan(bridge, big)
         one = time.monotonic() - t0
-        waits: list[float] = []
-        errors: list[str] = []
+        elapsed: list[float] = []
+        completed = 0
+        errors: dict[str, int] = {}
         lock = threading.Lock()
-        # Enough callers that the last one waits several times timeout_s behind scans that each finish in time.
+        # Enough callers that the last one would wait several times timeout_s behind scans that each finish in time.
         callers = min(64, max(12, int(3 * 5.0 / max(one, 0.01)) + 2))
 
         def waiter(_: int) -> None:
+            nonlocal completed
             start = time.monotonic()
             try:
                 _scan(bridge, big)
-                with lock:
-                    waits.append(time.monotonic() - start)
+                ok, code = True, ""
             except VaultServerError as error:
-                with lock:
-                    errors.append(error.core_code or error.code.value)
+                ok, code = False, error.core_code or error.code.value
+            took = time.monotonic() - start
+            with lock:
+                elapsed.append(took)
+                completed += ok
+                if code:
+                    errors[code] = errors.get(code, 0) + 1
 
         with ThreadPoolExecutor(max_workers=callers) as pool:
             list(pool.map(waiter, range(callers)))
-    waits.sort()
-    longest = waits[-1] if waits else 0.0
+    elapsed.sort()
+    longest = elapsed[-1] if elapsed else 0.0
     report.add(
         "G5.concurrency.bounded-queue",
-        bool(waits) and longest <= 5.0 * 1.2,
-        "a caller waiting for the bridge lock is bounded by timeout_s (the design counts only the request in flight)",
-        f"one scan {one:.2f} s, timeout_s 5.0, {callers} callers: {len(waits)} completed, longest wait {longest:.2f} s, errors {errors}",
+        completed > 0 and longest <= 5.0 * 1.5 and set(errors) <= {"BRIDGE_TIMEOUT"},
+        "a caller waiting for the bridge lock is bounded by timeout_s end to end (lock wait included), failing closed with BRIDGE_TIMEOUT",
+        f"one scan {one:.2f} s, timeout_s 5.0, {callers} callers: {completed} completed, longest call {longest:.2f} s (limit 7.50: timeout_s and the kill of a scan past its deadline on a loaded host), errors {json.dumps(errors, sort_keys=True)}",
     )
 
 
@@ -1106,18 +1284,27 @@ def run_server_concurrency(report: Report) -> None:
         started = time.monotonic()
         await asyncio.to_thread(lambda: None)
         starved = time.monotonic() - started
-        await asyncio.gather(*captures)
+        results = await asyncio.gather(*captures, return_exceptions=True)
+        failed: dict[str, int] = {}
+        for result in results:
+            if isinstance(result, BaseException):
+                code = getattr(result, "core_code", None) or type(result).__name__
+                failed[code] = failed.get(code, 0) + 1
         out.append(
-            f"an unrelated asyncio.to_thread behind 128 queued 0.5 MB captures waited {starved:.2f} s (default executor: {workers} threads)"
+            f"an unrelated asyncio.to_thread behind 128 queued 0.5 MB captures waited {starved:.2f} s "
+            f"(default executor: {workers} threads; the scans run on the bridge's own {2} threads); "
+            f"{128 - sum(failed.values())} of the 128 completed, failures {json.dumps(failed, sort_keys=True)}"
         )
         bridge.close()
+        out.append(f"STARVED={starved:.3f}")
         return out
 
     lines = asyncio.run(scenario())
+    starved = float(lines.pop().split("=")[1])
     report.add(
         "G5.concurrency.server",
-        None,
-        "capture throughput of one persistent server over one bridge (reference store), and head-of-line blocking of the default executor",
+        starved < 2.0,
+        "capture throughput of one persistent server over one bridge (reference store), and whether queued scans starve the default executor (an unrelated asyncio.to_thread must not wait for them)",
         "; ".join(lines),
     )
 
@@ -1189,37 +1376,37 @@ def run_failclosed(report: Report, workdir: Path) -> None:
 export async function initialize() {{}}
 export function artifact() {{ return {{ kind: "synthetic" }}; }}
 """
-    # A core that puts the input into the error code it reports.
+    # A core that puts the input into the error code it reports, for several shapes of input.
     nm = hostile(
         "echo-code", base + """export function scan(text) { const e = new Error("x"); e.code = text; throw e; }"""
     )
+    hostile_inputs = (
+        f"input {marker}",
+        marker,
+        marker.lower(),
+        f"{marker}\n{marker}",
+        "A" * 65,
+        "É" * 4,
+    )
     leaked = False
+    wrong_code = 0
     detail = "no error"
-    try:
-        NodeCoreBridge(node_modules=nm).scan(f"input {marker}", policy=None, limits=LIMITS)
-    except VaultServerError as error:
-        leaked = marker in str(error) or marker in repr(error) or marker in (error.core_code or "")
-        detail = error.code.value
+    for text in hostile_inputs:
+        try:
+            NodeCoreBridge(node_modules=nm, expected_core_integrity=None).scan(text, policy=None, limits=LIMITS)
+        except VaultServerError as error:
+            shown = f"{error!s}{error!r}{error.args}{error.core_code or ''}"
+            leaked = leaked or marker.lower() in shown.lower()
+            if error.core_code != "BRIDGE_BAD_OUTPUT":
+                wrong_code += 1
+            detail = error.code.value
     report.add(
         "G5.sanitization.core-error-code",
-        not leaked,
-        "an error code reported by a (compromised or buggy) core is not copied into the exception unvalidated",
-        f"the input marker reached the exception message and core_code: {leaked} ({detail})",
+        not leaked and wrong_code == 0,
+        "an error code reported by a (compromised or buggy) core is not copied into the exception unvalidated: only [A-Z][A-Z0-9_]{0,63} passes, anything else is BRIDGE_BAD_OUTPUT with a fixed message",
+        f"{len(hostile_inputs)} hostile codes through the real child; the input marker reached an exception: {leaked}; refused with a code other than BRIDGE_BAD_OUTPUT: {wrong_code} ({detail})",
     )
-    # Version string only: a replaced core that reports the pinned version is accepted.
-    nm = hostile("replaced", base + "export function scan() { return []; }")
-    accepted = False
-    try:
-        outcome = NodeCoreBridge(node_modules=nm).scan(f"input {secret(1)}", policy=None, limits=LIMITS)
-        accepted = len(outcome.findings) == 0
-    except VaultServerError:
-        accepted = False
-    report.add(
-        "G5.failclosed.replaced-core",
-        not accepted,
-        "a core replaced on disk that reports the pinned version string is detected",
-        f"a replacement core that finds nothing was accepted: {accepted} (the bridge pins the reported version only; same as the JavaScript vault)",
-    )
+    run_integrity(report, workdir)
     # A core that returns a finding outside the input.
     nm = hostile(
         "range",
@@ -1230,11 +1417,11 @@ export function artifact() {{ return {{ kind: "synthetic" }}; }}
 
     client_result = "accepted"
     try:
-        NodeCoreBridge(node_modules=nm).scan("short", policy=None, limits=LIMITS)
+        NodeCoreBridge(node_modules=nm, expected_core_integrity=None).scan("short", policy=None, limits=LIMITS)
     except VaultServerError as error:
         client_result = error.code.value
     server_result = "accepted"
-    with NodeCoreBridge(node_modules=nm) as bridge:
+    with NodeCoreBridge(node_modules=nm, expected_core_integrity=None) as bridge:
         try:
             InMemoryVaultServer(core_client=bridge).capture(
                 "short",
@@ -1247,6 +1434,189 @@ export function artifact() {{ return {{ kind: "synthetic" }}; }}
         server_result != "accepted",
         "a core that reports a finding outside the input: the client parser passes it on, the capture plan must refuse it",
         f"NodeCoreBridge.scan: {client_result}; InMemoryVaultServer.capture: {server_result}",
+    )
+
+
+# ------------------------------------------------------------------------------------------------ core integrity
+
+
+def _core_integrity_module() -> Any:
+    """``scripts/core-integrity.py``, the reference implementation of the digest and the writer of the pin."""
+    import importlib.util
+
+    path = _HERE.parents[2] / "scripts" / "core-integrity.py"
+    spec = importlib.util.spec_from_file_location("core_integrity_reference", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _real_node_modules() -> Path | None:
+    from redact_secret_vault.core_client import _resolve_node_modules  # noqa: PLC0415
+
+    candidates = [_resolve_node_modules(None), str(_HERE.parents[2] / "node_modules")]
+    for candidate in candidates:
+        if candidate and (Path(candidate) / "@redact-secret" / "core" / "package.json").is_file():
+            return Path(candidate)
+    return None
+
+
+def _copy_core(real: Path, target: Path, *, addon: bool = True) -> Path:
+    """A node_modules holding a copy of the installed core, its wasm package, and (optionally) this host's addon."""
+    scope = target / "node_modules" / "@redact-secret"
+    scope.mkdir(parents=True)
+    for source in sorted((real / "@redact-secret").iterdir()):
+        name = source.name
+        if name in ("core", "wasm") or (addon and name.startswith("node-")):
+            shutil.copytree(source, scope / name, symlinks=True)
+    return target / "node_modules"
+
+
+def _flip(path: Path) -> None:
+    data = bytearray(path.read_bytes())
+    data[len(data) // 2] ^= 0x01
+    path.write_bytes(bytes(data))
+
+
+def run_integrity(report: Report, workdir: Path) -> None:
+    from redact_secret_vault.core_client import PINNED_CORE_INTEGRITY  # noqa: PLC0415
+
+    real = _real_node_modules()
+    if real is None:
+        report.add("G5.failclosed.replaced-core", None, "NOT RUN: no installed @redact-secret/core to copy", "")
+        return
+    reference = _core_integrity_module()
+    marker = PLAINTEXT_MARKER
+    root = workdir / "integrity"
+    addon_names = sorted(p.name for p in (real / "@redact-secret").iterdir() if p.name.startswith("node-"))
+
+    def attempt(nm: Path, *, env: dict[str, str] | None = None, pins: Any = PINNED_CORE_INTEGRITY) -> tuple[str, str]:
+        """``(outcome, artifact)``: ``accepted`` with the artifact the child used, or the refusal's ``core_code``."""
+        saved = {key: os.environ.get(key) for key in (env or {})}
+        os.environ.update(env or {})
+        try:
+            with NodeCoreBridge(node_modules=str(nm), expected_core_integrity=pins, timeout_s=60.0) as bridge:
+                outcome = bridge.scan(f"input {secret(1)} {marker}", policy=None, limits=LIMITS)
+                return ("accepted" if outcome.findings else "accepted-nothing-found", outcome.artifact)
+        except VaultServerError as error:
+            shown = f"{error!s}{error!r}{error.args}"
+            assert marker not in shown and str(nm) not in shown, "an integrity failure echoed the input or a path"
+            return (str(error.core_code), "")
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    refused = "CORE_INTEGRITY_MISMATCH"
+    results: list[tuple[str, bool, str]] = []
+
+    def case(name: str, expected: str, nm: Path, **kwargs: Any) -> None:
+        got, artifact = attempt(nm, **kwargs)
+        results.append((name, got == expected, f"{got}{'/' + artifact if artifact else ''}"))
+
+    # Positive controls: the installed core is accepted, with its addon and with the WebAssembly fallback.
+    nm = _copy_core(real, root / "pristine")
+    case("pristine copy, addon", "accepted", nm)
+    nm = _copy_core(real, root / "no-addon", addon=False)
+    case("pristine copy, no addon (WebAssembly fallback)", "accepted", nm)
+    # Every kind of change to a pinned package is refused before the core runs.
+    core_dir = lambda nm: nm / "@redact-secret" / "core"  # noqa: E731
+    nm = _copy_core(real, root / "core-byte")
+    _flip(core_dir(nm) / "dist" / "index.js")
+    case("one bit of the core's dist/index.js flipped", refused, nm)
+    nm = _copy_core(real, root / "core-extra")
+    (core_dir(nm) / "dist" / "extra.js").write_text("export {};\n")
+    case("a file added to the core", refused, nm)
+    nm = _copy_core(real, root / "core-removed")
+    (core_dir(nm) / "dist" / "formatters.d.ts").unlink()
+    case("a file removed from the core", refused, nm)
+    nm = _copy_core(real, root / "core-symlink")
+    (core_dir(nm) / "dist" / "version.d.ts").unlink()
+    (core_dir(nm) / "dist" / "version.d.ts").symlink_to(core_dir(nm) / "dist" / "version.js")
+    case("a file of the core replaced by a symbolic link", refused, nm)
+    nm = _copy_core(real, root / "core-manifest")
+    manifest = core_dir(nm) / "package.json"
+    manifest.write_text(manifest.read_text().replace('"MIT"', '"MIT "', 1))
+    case("the core's package.json changed", refused, nm)
+    nm = _copy_core(real, root / "wasm-byte")
+    _flip(next((nm / "@redact-secret" / "wasm").glob("*.wasm")))
+    case("one bit of the WebAssembly package flipped", refused, nm)
+    nm = _copy_core(real, root / "wasm-missing")
+    shutil.rmtree(nm / "@redact-secret" / "wasm")
+    case("the WebAssembly package missing", refused, nm)
+    for name in addon_names:
+        nm = _copy_core(real, root / f"addon-byte-{name}")
+        _flip(next((nm / "@redact-secret" / name).glob("*.node")))
+        case(f"one bit of the native addon ({name}) flipped", refused, nm)
+    # An addon that Node.js would find outside the verified places (NODE_PATH) is refused, not loaded and trusted.
+    if addon_names:
+        planted = root / "node-path"
+        shutil.copytree(real / "@redact-secret" / addon_names[0], planted / "@redact-secret" / addon_names[0])
+        nm = _copy_core(real, root / "addon-elsewhere", addon=False)
+        control = attempt(nm, env={"NODE_PATH": str(planted)}, pins=None)
+        results.append(("control: that addon is the one Node.js loads when nothing is pinned", control[1] == "addon", control[0] + "/" + control[1]))
+        case("a native addon found through NODE_PATH, not beside the core", refused, nm, env={"NODE_PATH": str(planted)})
+    # A replaced core that reports the pinned version, and runs code when it is imported.
+    base = f"""import {{ writeFileSync }} from "node:fs";
+writeFileSync({json.dumps(str(root / "ran"))}, "imported");
+export const VERSION = {json.dumps(PINNED_CORE_VERSION)};
+export async function initialize() {{}}
+export function artifact() {{ return "addon"; }}
+export function scan() {{ return []; }}
+"""
+    fake = _fake_core(root / "replaced", source=base)
+    case("a replacement core that reports the pinned version and finds nothing", refused, Path(fake))
+    results.append(("the replacement core's code never ran (hashed before it was imported)", not (root / "ran").exists(), "marker absent" if not (root / "ran").exists() else "MARKER PRESENT"))
+    # The child's digest is the reference function's: pins computed by the reference for a tampered copy are accepted.
+    nm = _copy_core(real, root / "agree")
+    _flip(core_dir(nm) / "dist" / "index.js")
+    pins = {"@redact-secret/core": reference.tree_digest_of_dir(core_dir(nm)), "@redact-secret/wasm": reference.tree_digest_of_dir(nm / "@redact-secret" / "wasm")}
+    for name in addon_names:
+        pins[f"@redact-secret/{name}"] = reference.tree_digest_of_dir(nm / "@redact-secret" / name)
+    case("the reference digest of a modified copy is accepted by the child (the two functions agree)", "accepted", nm, pins=pins)
+    wrong = sum(1 for _name, ok, _got in results if not ok)
+    report.add(
+        "G5.failclosed.replaced-core",
+        wrong == 0,
+        "a core replaced on disk that reports the pinned version string is detected: the packages the child is about to load are hashed against the pin before the core runs, and a difference is CORE_INTEGRITY_MISMATCH with a fixed message",
+        f"{len(results)} cases, {wrong} unexpected"
+        + "".join(f"; UNEXPECTED {name}: {got}" for name, ok, got in results if not ok),
+    )
+    report.add(
+        "G5.failclosed.integrity-cases",
+        None,
+        "each case of the integrity check and its outcome",
+        "; ".join(f"{name} -> {got}" for name, _ok, got in results),
+    )
+    # What the check costs: the first scan of a new child with and without the pin.
+    nm = _copy_core(real, root / "cost")
+    timings: dict[str, list[float]] = {"pinned": [], "unpinned": []}
+    for _ in range(10):
+        for label, pins in (("pinned", PINNED_CORE_INTEGRITY), ("unpinned", None)):
+            with NodeCoreBridge(node_modules=str(nm), expected_core_integrity=pins, timeout_s=60.0) as bridge:
+                started = time.monotonic()
+                bridge.scan("x", policy=None, limits=LIMITS)
+                timings[label].append(time.monotonic() - started)
+    pinned, unpinned = sorted(timings["pinned"]), sorted(timings["unpinned"])
+    # The cost of the one setting that leaves no live process holding an input: a new child for every scan.
+    per_scan: dict[str, float] = {}
+    for label, pins in (("pinned", PINNED_CORE_INTEGRITY), ("unpinned", None)):
+        with NodeCoreBridge(
+            node_modules=str(nm), expected_core_integrity=pins, timeout_s=60.0, max_scans_per_process=1
+        ) as bridge:
+            started = time.monotonic()
+            for _ in range(20):
+                bridge.scan("x", policy=None, limits=LIMITS)
+            per_scan[label] = 20 / (time.monotonic() - started)
+    report.add(
+        "G5.integrity.cost",
+        None,
+        "the first scan of a new child with and without the integrity pin (the pin is verified once per child), and the rate at max_scans_per_process=1 (a new child for every scan)",
+        f"10 runs each: with the pin p50 {pinned[5] * 1000:.0f} ms max {pinned[-1] * 1000:.0f} ms; without p50 {unpinned[5] * 1000:.0f} ms max {unpinned[-1] * 1000:.0f} ms; "
+        f"max_scans_per_process=1, 20 scans: {per_scan['pinned']:.1f} scans/s with the pin, {per_scan['unpinned']:.1f} without",
     )
 
 

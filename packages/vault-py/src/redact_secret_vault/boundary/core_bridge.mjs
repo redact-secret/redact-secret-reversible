@@ -29,15 +29,19 @@
  *
  * Protocol: newline-delimited JSON on stdin/stdout. Neither side writes a
  * raw newline inside a frame (JSON escapes it). Each request is one line —
- *   { "id": integer, "input": string, "pii": string[], "policy"?: {[type: string]: SecretAction, default?: SecretAction}, "limits"?: {maxInputBytes, maxFindings}, "nodeModules"?: string }
+ *   { "id": integer, "input": string, "pii": string[], "policy"?: {[type: string]: SecretAction, default?: SecretAction}, "limits"?: {maxInputBytes, maxFindings}, "nodeModules"?: string, "integrity"?: {[package: string]: sha256 hex} }
  * — and gets exactly one response line carrying the same `id` —
- *   { "id", "findings": SafeFinding[], "coreVersion": string, "artifact": string, "piiActivation": string | null }
+ *   { "id", "findings": SafeFinding[], "coreVersion": string, "artifact": string, "piiActivation": string | null, "integrity": {[package: string]: sha256 hex} | null }
  *   or { "id", "error": { "message": string, "code"?: string } } on failure
  * (`"id": null` when the request had no usable id). Ids count up from 1 by
  * one; any other id is refused. A request line longer than
  * `MAX_REQUEST_CHARS` is refused with `BRIDGE_REQUEST_TOO_LARGE`. `pii` and
  * `nodeModules` configure the core on the first request; every later request
- * must repeat them unchanged, or it is refused.
+ * must repeat them unchanged, or it is refused. `integrity` (core integrity,
+ * see "core integrity" below) is sent with the first request only; a later
+ * request that carries it is refused as a changed configuration. The response
+ * to the first request reports the digests that were verified; later ones
+ * report null.
  *
  * PII activation (docs/decisions/decide-pii-retention-and-activation-ownership.md
  * §3 "Python bridge"): this process is its own realm with no other
@@ -72,9 +76,10 @@
  * stderr itself, and its owner discards stderr.
  */
 
-import { readFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const CORE_PACKAGE = "@redact-secret/core";
 // The conditions Node.js itself applies when importing an ES module.
@@ -146,7 +151,8 @@ function rootEntry(manifest) {
   return conditionalTarget(exports);
 }
 
-async function loadCoreFrom(nodeModules) {
+// Where the core is, without importing it: `{ packageDir, file }`, the package directory and its entry file.
+async function locateCoreFrom(nodeModules) {
   if (nodeModules.length === 0 || nodeModules.length > MAX_NODE_MODULES_LENGTH || !path.isAbsolute(nodeModules)) {
     throw coreError("BRIDGE_CORE_NOT_FOUND");
   }
@@ -170,6 +176,42 @@ async function loadCoreFrom(nodeModules) {
   } catch {
     throw coreError("BRIDGE_CORE_NOT_FOUND");
   }
+  return { packageDir, file };
+}
+
+// Without `nodeModules`: the entry a bare specifier resolves to from this
+// file, and the package directory above it.
+async function locateCoreDefault() {
+  let file;
+  try {
+    file = fileURLToPath(import.meta.resolve(CORE_PACKAGE));
+  } catch {
+    throw coreError("BRIDGE_CORE_NOT_FOUND");
+  }
+  let directory = path.dirname(file);
+  for (let depth = 0; depth < 16; depth += 1) {
+    try {
+      const manifest = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+      if (manifest?.name === CORE_PACKAGE) return { packageDir: directory, file };
+    } catch {
+      // not a package directory; keep climbing
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  throw coreError("BRIDGE_CORE_NOT_FOUND");
+}
+
+function locateCore(nodeModules) {
+  return nodeModules !== undefined ? locateCoreFrom(nodeModules) : locateCoreDefault();
+}
+
+// Namespace import: a named import of `piiActivation` would fail to link on
+// a core without it (beta.9). PII support is detected at runtime, never by
+// version string (ADR §4). The file is the one that was located (and, when
+// pins were sent, hashed), not a second resolution of the same name.
+async function importCore(file) {
   try {
     return await import(pathToFileURL(file).href);
   } catch {
@@ -177,17 +219,136 @@ async function loadCoreFrom(nodeModules) {
   }
 }
 
-// Namespace import: a named import of `piiActivation` would fail to link on
-// a core without it (beta.9). PII support is detected at runtime, never by
-// version string (ADR §4).
-async function loadCore(nodeModules) {
-  if (nodeModules !== undefined) return loadCoreFrom(nodeModules);
-  try {
-    // A bare specifier in a dynamic import() resolves relative to this file.
-    return await import(CORE_PACKAGE);
-  } catch (error) {
-    throw coreError(error?.code === "ERR_MODULE_NOT_FOUND" ? "BRIDGE_CORE_NOT_FOUND" : "BRIDGE_CORE_LOAD_FAILED");
+// ---- core integrity (docs/decisions/limit-python-persistence-claim-to-a-supplied-core-client.md) ----
+//
+// The Python caller sends, with the first request of a process, the digest it
+// pins for each package of the core. Before the core's code is imported or
+// sees any input, this process hashes the package directories it is about to
+// load and refuses on any difference. The digest is "rsv-tree-v1", the same
+// function as scripts/core-integrity.py: SHA-256 over one line per regular file,
+// `<sha256 of the content> <size> <relative path>`, sorted by the UTF-8 bytes
+// of the POSIX relative path; a symbolic link or any other kind of entry has no
+// digest. It covers every file of the package directories it names (the core,
+// its WebAssembly package, and the platform addon package that Node.js finds
+// beside the core). It does not cover the node executable, the bridge script,
+// other directories on Node.js's module path, or a change made between the
+// hash and the import (a race by someone who can write those files).
+const INTEGRITY_FAILED = "CORE_INTEGRITY_MISMATCH";
+const WASM_PACKAGE = "@redact-secret/wasm";
+const MAX_INTEGRITY_PACKAGES = 32;
+const MAX_INTEGRITY_FILES = 4096;
+const MAX_INTEGRITY_BYTES = 64 * 1024 * 1024;
+const INTEGRITY_READ_BATCH = 16;
+const PACKAGE_NAME_PATTERN = /^@redact-secret\/[a-z0-9][a-z0-9-]{0,63}$/;
+const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+
+function isIntegrityPins(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length > 0 &&
+    entries.length <= MAX_INTEGRITY_PACKAGES &&
+    entries.every(([name, digest]) => PACKAGE_NAME_PATTERN.test(name) && typeof digest === "string" && DIGEST_PATTERN.test(digest))
+  );
+}
+
+function integrityError() {
+  return Object.assign(new Error("core integrity check failed"), { code: INTEGRITY_FAILED });
+}
+
+async function treeDigest(directory) {
+  const files = [];
+  async function walk(current, prefix) {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) {
+        await walk(path.join(current, entry.name), relative);
+      } else if (entry.isFile()) {
+        files.push(relative);
+        if (files.length > MAX_INTEGRITY_FILES) throw integrityError();
+      } else {
+        throw integrityError(); // a symbolic link, a device, a socket
+      }
+    }
   }
+  await walk(directory, "");
+  files.sort((a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")));
+  const outer = createHash("sha256");
+  let total = 0;
+  // Files are read a few at a time (the digest of each is independent); the lines are fed to the outer hash in order.
+  for (let at = 0; at < files.length; at += INTEGRITY_READ_BATCH) {
+    const lines = await Promise.all(
+      files.slice(at, at + INTEGRITY_READ_BATCH).map(async (relative) => {
+        const data = await readFile(path.join(directory, ...relative.split("/")));
+        return { size: data.length, line: `${createHash("sha256").update(data).digest("hex")} ${data.length} ${relative}\n` };
+      }),
+    );
+    for (const { size, line } of lines) {
+      total += size;
+      if (total > MAX_INTEGRITY_BYTES) throw integrityError();
+      outer.update(line);
+    }
+  }
+  return outer.digest("hex");
+}
+
+// The directory Node.js would resolve `name` to for a module inside the core's
+// package: `node_modules` of the package, then of each ancestor that is not
+// itself called node_modules. Undefined when it is not installed.
+async function findDependency(packageDir, name) {
+  const candidates = [path.join(packageDir, "node_modules", name)];
+  for (let directory = path.dirname(packageDir); ; ) {
+    if (path.basename(directory) !== "node_modules") candidates.push(path.join(directory, "node_modules", name));
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  for (const candidate of candidates) {
+    try {
+      const manifest = JSON.parse(await readFile(path.join(candidate, "package.json"), "utf8"));
+      if (manifest?.name === name) return candidate;
+    } catch {
+      // not there
+    }
+  }
+  return undefined;
+}
+
+// Returns `{ [name]: digest }` for every pinned package that is installed, or
+// throws CORE_INTEGRITY_MISMATCH. The core and its WebAssembly package must be
+// installed; an addon package need not be (the core then falls back to
+// WebAssembly), but one that is installed must match.
+async function verifyIntegrity(located, pins) {
+  const base = await realpath(located.packageDir).catch(() => {
+    throw integrityError();
+  });
+  const verified = {};
+  for (const [name, expected] of Object.entries(pins)) {
+    const directory = name === CORE_PACKAGE ? base : await findDependency(base, name);
+    if (directory === undefined) continue;
+    const actual = await treeDigest(directory).catch(() => {
+      throw integrityError();
+    });
+    if (actual !== expected) throw integrityError();
+    verified[name] = actual;
+  }
+  if (verified[CORE_PACKAGE] === undefined || verified[WASM_PACKAGE] === undefined) throw integrityError();
+  return verified;
+}
+
+// After the core is initialized: the artifact it chose must be one that was
+// verified. A native addon is verified only if its package was found beside the
+// core; an addon that Node.js found elsewhere (NODE_PATH, a global folder) is not.
+function checkArtifact(core, verified) {
+  let kind;
+  try {
+    const artifact = core.artifact();
+    kind = typeof artifact === "string" ? artifact : artifact?.kind;
+  } catch {
+    throw integrityError();
+  }
+  const addonVerified = Object.keys(verified).some((name) => name !== CORE_PACKAGE && name !== WASM_PACKAGE);
+  if (kind === "addon" ? !addonVerified : kind !== "wasm") throw integrityError();
 }
 
 // `--idle-exit-ms=<n>` is the only accepted argument; undefined when absent,
@@ -263,8 +424,12 @@ function main() {
   async function configure(id, request) {
     const pii = [...request.pii];
     let core;
+    let verified;
     try {
-      core = await loadCore(request.nodeModules);
+      const located = await locateCore(request.nodeModules);
+      // Hashed before the core's code is imported, and before any input is scanned.
+      if (request.integrity !== undefined) verified = await verifyIntegrity(located, request.integrity);
+      core = await importCore(located.file);
     } catch (error) {
       respond(errorFrame(id, error.message, error.code), true);
       return false;
@@ -285,7 +450,15 @@ function main() {
       respond(errorFrame(id, "core initialize failed", errorCode(error)), true);
       return false;
     }
-    config = { pii, nodeModules: request.nodeModules, core };
+    if (verified !== undefined) {
+      try {
+        checkArtifact(core, verified);
+      } catch (error) {
+        respond(errorFrame(id, error.message, error.code), true);
+        return false;
+      }
+    }
+    config = { pii, nodeModules: request.nodeModules, core, integrity: verified };
     return true;
   }
 
@@ -319,9 +492,17 @@ function main() {
       respond(errorFrame(id, "request.nodeModules must be a string"), true);
       return;
     }
+    if (request.integrity !== undefined && !isIntegrityPins(request.integrity)) {
+      respond(errorFrame(id, "request.integrity must map package names to digests"), true);
+      return;
+    }
+    // The digests this process verified, reported with the response to the
+    // request that configured it and as null with every later one.
+    let reportedIntegrity = null;
     if (config === undefined) {
       if (!(await configure(id, request))) return;
-    } else if (!sameConfig(config, request)) {
+      reportedIntegrity = config.integrity ?? null;
+    } else if (!sameConfig(config, request) || request.integrity !== undefined) {
       respond(errorFrame(id, "request configuration changed"), true);
       return;
     }
@@ -349,6 +530,7 @@ function main() {
           coreVersion: core.VERSION,
           artifact: artifact?.kind ?? String(artifact),
           piiActivation,
+          integrity: reportedIntegrity,
         }),
         false,
       );

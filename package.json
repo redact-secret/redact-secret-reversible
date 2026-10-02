@@ -15,6 +15,7 @@
     "qualify:worker": "node qualification/worker.mjs",
     "check:boundaries": "node qualification/check-boundaries.mjs",
     "check:links": "node scripts/check-links.mjs",
+    "check:core-integrity": "python3 scripts/core-integrity.py check --installed node_modules",
     "test:scripts": "node --test scripts/test/*.test.mjs",
     "readme:pin": "node scripts/pin-readme-links.mjs pin",
     "readme:restore": "node scripts/pin-readme-links.mjs restore",

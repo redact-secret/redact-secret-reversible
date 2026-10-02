@@ -18,19 +18,25 @@ for example) without changing ``InMemoryVaultServer``.
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 import os
+import random
+import re
 import shutil
 import subprocess
 import threading
 import time
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import IO, Any, Protocol, runtime_checkable
 
+from ._core_pin import CORE_PACKAGES
 from .errors import VaultServerError, VaultServerErrorCode
 from .pii import MAX_PII_ACTIVATION_LENGTH, resolve_expected_pii_activation, resolve_pii_selection
 
@@ -40,6 +46,15 @@ DEFAULT_BRIDGE_SCRIPT = Path(__file__).parent / "boundary" / "core_bridge.mjs"
 # pin in this repository's root package.json. A response reporting a
 # different version is treated as CORE_FAILURE rather than silently trusted.
 PINNED_CORE_VERSION = "0.1.0-beta.12"
+
+#: The integrity pin of that release: the "rsv-tree-v1" digest of each package directory the core needs (the core,
+#: its WebAssembly package, and the addon package of each platform it publishes). The bridge process hashes the
+#: directories it is about to load before it imports the core and refuses on any difference
+#: (``CORE_INTEGRITY_MISMATCH``). Generated into ``_core_pin.py`` by ``scripts/core-integrity.py``, which CI re-runs
+#: against ``package.json``, ``package-lock.json``, and the published tarballs.
+PINNED_CORE_INTEGRITY: Mapping[str, str] = MappingProxyType({name: pin["tree"] for name, pin in CORE_PACKAGES.items()})
+_INTEGRITY_CORE = "@redact-secret/core"
+_INTEGRITY_WASM = "@redact-secret/wasm"
 
 #: Environment variable ``NodeCoreBridge`` reads when ``node_modules`` is not
 #: passed: the ``node_modules`` directory that holds ``@redact-secret/core``.
@@ -66,6 +81,30 @@ _MAX_SECONDS = 24 * 60 * 60.0
 _MAX_SCANS_PER_PROCESS = 10_000_000
 # How long to wait for a killed bridge process to be reaped.
 _REAP_TIMEOUT_S = 5.0
+#: Failures of a process's first request that a retry cannot cure: the deployment is wrong (no ``node``, no core, a
+#: core that does not load, another version, another artifact). After the second in a row a bridge refuses to spawn
+#: again, failing with the same code, for a delay that doubles from ``_SPAWN_BACKOFF_BASE_S`` up to
+#: ``_SPAWN_BACKOFF_CAP_S`` (each jittered to 50 to 100 percent); a success resets it. A timeout, a crash, or an error
+#: the core reports for an input does not count: a caller must not be able to hold the bridge in backoff with an input
+#: that makes the core fail.
+_START_FAILURES = frozenset(
+    (
+        "BRIDGE_SPAWN_FAILED",
+        "BRIDGE_CORE_NOT_FOUND",
+        "BRIDGE_CORE_LOAD_FAILED",
+        "CORE_INTEGRITY_MISMATCH",
+        "CORE_VERSION_MISMATCH",
+    )
+)
+_SPAWN_BACKOFF_BASE_S = 0.1
+_SPAWN_BACKOFF_CAP_S = 5.0
+#: Threads of the executor a bridge owns for ``run_in_scan_executor``. The bridge serves one request at a time, so a
+#: second thread only lets the next caller build its frame while the first scan runs; more would only be threads
+#: waiting on the bridge's lock.
+_EXECUTOR_THREADS = 2
+#: ``(state, deadline)`` of the call ``run_in_scan_executor`` is running on this thread, so that the deadline of a
+#: ``scan`` made from that call starts when the call was submitted and not when a worker thread picked it up.
+_SUBMITTED = threading.local()
 
 
 def _resolve_node_modules(value: str | os.PathLike[str] | None) -> str | None:
@@ -89,6 +128,32 @@ def _resolve_node_modules(value: str | os.PathLike[str] | None) -> str | None:
     if type(raw) is not str or not raw or "\x00" in raw:
         raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
     return os.path.abspath(raw)
+
+
+_PACKAGE_NAME = re.compile(r"@redact-secret/[a-z0-9][a-z0-9-]{0,63}")
+_TREE_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def _resolve_integrity(value: Mapping[str, str] | None) -> dict[str, str] | None:
+    """The package digests to pin, or ``None`` for no integrity check (a caller that loads a core other than the
+    pinned release, as the test fixtures do, and says so)."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping) or not 0 < len(value) <= 32:
+        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+    pins: dict[str, str] = {}
+    for name, digest in value.items():
+        if (
+            type(name) is not str
+            or type(digest) is not str
+            or _PACKAGE_NAME.fullmatch(name) is None
+            or _TREE_DIGEST.fullmatch(digest) is None
+        ):
+            raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+        pins[name] = digest
+    if _INTEGRITY_CORE not in pins or _INTEGRITY_WASM not in pins:
+        raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT)
+    return pins
 
 
 def _resolve_seconds(value: Any) -> float:
@@ -145,9 +210,29 @@ class CoreClient(Protocol):
 
 _FINDING_STR_FIELDS = ("id", "type", "detector", "confidence", "obfuscation", "action")
 _FINDING_KEYS = frozenset((*_FINDING_STR_FIELDS, "start", "end"))
-_SUCCESS_KEYS = frozenset(("findings", "coreVersion", "artifact", "piiActivation"))
+_SUCCESS_KEYS = frozenset(("findings", "coreVersion", "artifact", "piiActivation", "integrity"))
 _ERROR_KEYS = frozenset(("error",))
 _UNPINNED: Any = object()
+
+# Every string the child process reports is checked against a fixed shape before it is used, and a response that
+# breaks one is ``BRIDGE_BAD_OUTPUT`` with a fixed message that carries none of the child's text. The shapes are
+# deliberately narrow: they bound what a buggy or compromised core can smuggle into an exception, a log line, an audit
+# field or a stored payload (a short token of the allowed alphabet, never free text or the input). They cannot prove
+# that a short token of that alphabet is not a secret: a core that reports one is still a core that cannot be trusted.
+#: The ``code`` of an error frame; ``core_code`` and the exception message carry it.
+_CORE_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+#: A finding's ``id``, ``type`` and ``detector`` (``finding-3``, ``aws_access_key_id``, ``github-token``,
+#: ``pii_email``); 128 is the longest PII type (``pii_`` and 124 characters).
+_FINDING_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
+#: ``coreVersion`` (``0.1.0-beta.12``) and ``artifact`` (``addon`` or ``wasm``).
+_VERSION_TEXT = re.compile(r"[0-9A-Za-z][0-9A-Za-z._+-]{0,63}")
+_ARTIFACT_TEXT = re.compile(r"[a-z][a-z0-9_-]{0,31}")
+#: ``piiActivation`` is a canonical identity such as ``credentials=full;selectors=off;families=;vocabulary=...``:
+#: printable ASCII without a space, at most ``MAX_PII_ACTIVATION_LENGTH`` characters.
+_ACTIVATION_TEXT = re.compile(rf"[\x21-\x7e]{{1,{MAX_PII_ACTIVATION_LENGTH}}}")
+_CONFIDENCE = frozenset(("high", "medium", "low"))
+_OBFUSCATION = frozenset(("none", "invisible-characters"))
+_ACTION = frozenset(("redact", "block", "warn", "allow"))
 
 
 def _core_failure(core_code: str) -> VaultServerError:
@@ -162,6 +247,10 @@ def _parse_finding(raw: Any) -> CoreFinding:
     if type(raw) is not dict or raw.keys() != _FINDING_KEYS:
         raise _bad_output()
     if not all(type(raw[key]) is str for key in _FINDING_STR_FIELDS):
+        raise _bad_output()
+    if not all(_FINDING_NAME.fullmatch(raw[key]) for key in ("id", "type", "detector")):
+        raise _bad_output()
+    if raw["confidence"] not in _CONFIDENCE or raw["obfuscation"] not in _OBFUSCATION or raw["action"] not in _ACTION:
         raise _bad_output()
     if type(raw["start"]) is not int or type(raw["end"]) is not int:
         raise _bad_output()
@@ -297,13 +386,41 @@ class _BridgeState:
     """Process-lifetime state, held apart from ``NodeCoreBridge`` so that its
     finalizer and the fork hook never keep the bridge itself alive."""
 
-    __slots__ = ("lock", "proc", "closed", "watchdog", "__weakref__")
+    __slots__ = (
+        "lock",
+        "proc",
+        "closed",
+        "watchdog",
+        "start_failures",
+        "spawn_blocked_until",
+        "spawn_blocked_code",
+        "executor",
+        "executor_lock",
+        "__weakref__",
+    )
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.proc: _BridgeProcess | None = None
         self.closed = False
         self.watchdog = _Watchdog()
+        # Backoff after repeated start failures (see ``NodeCoreBridge._note_start``).
+        self.start_failures = 0
+        self.spawn_blocked_until = 0.0
+        self.spawn_blocked_code: str | None = None
+        # The executor ``run_in_scan_executor`` uses, created on first use.
+        self.executor: ThreadPoolExecutor | None = None
+        self.executor_lock = threading.Lock()
+
+    def scan_executor(self) -> ThreadPoolExecutor:
+        with self.executor_lock:
+            if self.closed:
+                raise _core_failure("BRIDGE_CLOSED")
+            if self.executor is None:
+                self.executor = ThreadPoolExecutor(
+                    max_workers=_EXECUTOR_THREADS, thread_name_prefix="redact-secret-vault-bridge-scan"
+                )
+            return self.executor
 
     def discard(self) -> None:
         proc, self.proc = self.proc, None
@@ -314,6 +431,12 @@ class _BridgeState:
         self.closed = True
         self.discard()
         self.watchdog.stop()
+        with self.executor_lock:
+            executor, self.executor = self.executor, None
+        if executor is not None:
+            # Work already queued still runs, finds the bridge closed, and fails with BRIDGE_CLOSED at once; nothing
+            # waits for it here.
+            executor.shutdown(wait=False)
 
     def after_fork_in_child(self) -> None:
         # The child must never write to the parent's bridge process: two
@@ -325,6 +448,12 @@ class _BridgeState:
             self.proc.abandon()
         self.proc = None
         self.watchdog = _Watchdog()
+        self.start_failures = 0
+        self.spawn_blocked_until = 0.0
+        self.spawn_blocked_code = None
+        # The parent's worker threads do not exist in the child.
+        self.executor = None
+        self.executor_lock = threading.Lock()
 
 
 _LIVE_STATES: weakref.WeakSet[_BridgeState] = weakref.WeakSet()
@@ -386,6 +515,18 @@ class NodeCoreBridge:
     ``fork()``, the child never uses the parent's process and starts its
     own. The process's stderr is discarded.
 
+    Core integrity: ``expected_core_integrity`` (default ``PINNED_CORE_INTEGRITY``) pins the "rsv-tree-v1" digest of
+    the package directories the bridge is about to load: ``@redact-secret/core``, ``@redact-secret/wasm``, and the
+    platform addon package that Node.js finds beside them. The first request of each process carries the pins; the
+    process hashes those directories before it imports the core, so a core that was replaced or modified never runs and
+    never sees an input, and any difference (a changed, added, removed or symlinked file) is ``CORE_FAILURE`` with
+    ``core_code`` ``CORE_INTEGRITY_MISMATCH``. The response reports the digests it verified and this class checks them
+    against the pin again. What it covers: every file of those directories, and that a native addon the core chose was
+    one of them (an addon found through ``NODE_PATH`` or a global folder is refused). What it does not cover: the
+    ``node`` executable, the bridge script, other directories on Node.js's module path, and a change made between the
+    hash and the import by someone who can write those files. ``None`` switches the check off, as
+    ``expected_core_version=None`` does the version check; a core other than the pinned release needs both.
+
     PII activation (docs/decisions/decide-pii-retention-and-activation-ownership.md
     §3 "Python bridge"): each bridge process is a realm with no other
     initializer, so ``pii`` is the only selection and omission means PII
@@ -410,7 +551,8 @@ class NodeCoreBridge:
     (``BRIDGE_SPAWN_FAILED``) or exits mid-request
     (``BRIDGE_PROCESS_FAILED``), a malformed, oversized, or out-of-sequence
     response (``BRIDGE_BAD_OUTPUT``), and a core-version mismatch
-    (``CORE_VERSION_MISMATCH``) each raise ``VaultServerError(CORE_FAILURE)``
+    (``CORE_VERSION_MISMATCH``), and a core that is not the pinned release byte for byte
+    (``CORE_INTEGRITY_MISMATCH``) each raise ``VaultServerError(CORE_FAILURE)``
     — fail-closed, never a partial or best-effort finding list. A ``scan``
     after ``close()`` raises ``CORE_FAILURE`` with ``BRIDGE_CLOSED``. No
     error carries the input, a selector, a path, or process output.
@@ -430,6 +572,7 @@ class NodeCoreBridge:
         script: Path = DEFAULT_BRIDGE_SCRIPT,
         timeout_s: float = 10.0,
         expected_core_version: str | None = PINNED_CORE_VERSION,
+        expected_core_integrity: Mapping[str, str] | None = PINNED_CORE_INTEGRITY,
         pii: Sequence[str] = (),
         expected_pii_activation: str | None = None,
         node_modules: str | os.PathLike[str] | None = None,
@@ -451,6 +594,12 @@ class NodeCoreBridge:
         self._script = script
         self._node_modules = resolved_node_modules
         self._expected_version = expected_core_version
+        self._expected_integrity = _resolve_integrity(expected_core_integrity)
+        # Sent with the first request of each process: `"integrity":{...},`
+        self._integrity_field = b""
+        if self._expected_integrity is not None:
+            pins = json.dumps(self._expected_integrity, separators=(",", ":"), sort_keys=True).encode("ascii")
+            self._integrity_field = b'"integrity":' + pins + b","
         self._pii = selection
         self._expected_pii_activation = expected_activation
         self._pinned_pii_activation: Any = _UNPINNED
@@ -490,23 +639,48 @@ class NodeCoreBridge:
         except (TypeError, ValueError):
             raise VaultServerError(VaultServerErrorCode.INVALID_ARGUMENT) from None
         # `{"id":N,` is prepended once the process assigns N.
-        if len(body) + 32 > MAX_REQUEST_FRAME_BYTES:
+        if len(body) + len(self._integrity_field) + 32 > MAX_REQUEST_FRAME_BYTES:
             raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
 
         state = self._state
-        with state.lock:
+        # `timeout_s` is end to end from here: the wait for the lock (every caller ahead of this one), the start of a
+        # process when one is needed, the write, the scan, and the read. Building the frame above is not counted: it
+        # is the caller's own work and grows with the input. A call made through ``run_in_scan_executor`` counts from
+        # when it was submitted, so the time it waited for a worker thread is inside the same budget.
+        submitted = getattr(_SUBMITTED, "entry", None)
+        if submitted is not None and submitted[0] is state:
+            deadline = submitted[1]
+        else:
+            deadline = time.monotonic() + self._timeout_s
+        budget = deadline - time.monotonic()
+        if budget <= 0 or not state.lock.acquire(timeout=budget):
+            # Nothing was sent and the process in flight is another caller's: it is left alone.
+            raise _core_failure("BRIDGE_TIMEOUT")
+        try:
             if state.closed:
                 raise _core_failure("BRIDGE_CLOSED")
+            if deadline - time.monotonic() <= 0:
+                raise _core_failure("BRIDGE_TIMEOUT")  # the wait used the whole budget; the process is untouched
             proc = self._ready_process(state)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _core_failure("BRIDGE_TIMEOUT")  # starting a process used the whole budget
             request_id = proc.next_id
-            proc.next_id += 1
+            # The integrity pins go with the first request of a process, which verifies them before it loads the core.
+            first = request_id == 1
             try:
-                line = self._exchange(state, proc, b'{"id":%d,' % request_id + body[1:] + b"\n")
-                outcome = self._parse(line, request_id)
-            except BaseException:
+                proc.next_id += 1
+                pins = self._integrity_field if first else b""
+                line = self._exchange(state, proc, b'{"id":%d,' % request_id + pins + body[1:] + b"\n", remaining)
+                outcome = self._parse(line, request_id, first=first)
+            except BaseException as error:
                 # Whatever went wrong, this process is never asked again.
                 state.discard()
+                if first:
+                    self._note_start(state, error)
                 raise
+            if first:
+                state.start_failures = 0
             proc.served += 1
             proc.last_used = time.monotonic()
             if proc.served >= self._max_scans:
@@ -514,6 +688,56 @@ class NodeCoreBridge:
                 # process outlives its scan budget holding the last input.
                 state.discard()
             return outcome
+        finally:
+            state.lock.release()
+
+    async def run_in_scan_executor(self, function: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+        """Runs ``function(*args, **kwargs)``, a blocking call that scans through this bridge, on a thread this bridge
+        owns, and returns its result. For an asyncio caller: the persistent server uses it so that its scans do not
+        occupy the threads of the loop's default executor, which an application shares with everything else that calls
+        ``asyncio.to_thread`` (128 queued captures held all of them, and an unrelated call waited 28 to 62 s).
+
+        The bridge serves one request at a time, so queued work waits in this executor's queue, not on threads. The
+        ``timeout_s`` budget starts here: work that waits for a thread or for the bridge's lock past it fails with
+        ``BRIDGE_TIMEOUT`` and nothing is sent. A call that has not started when its task is cancelled never starts;
+        one that has started finishes, and its result is discarded (a returned value is not retained by the bridge)."""
+
+        import asyncio
+
+        state = self._state
+        executor = state.scan_executor()
+        deadline = time.monotonic() + self._timeout_s
+        call = functools.partial(self._run_submitted, state, deadline, function, args, kwargs)
+        return await asyncio.get_running_loop().run_in_executor(executor, call)
+
+    @staticmethod
+    def _run_submitted(
+        state: _BridgeState,
+        deadline: float,
+        function: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        _SUBMITTED.entry = (state, deadline)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _SUBMITTED.entry = None
+
+    def _note_start(self, state: _BridgeState, error: BaseException) -> None:
+        """Records a failure of a process's first request when it is one that repeating cannot cure (see
+        ``_START_FAILURES``). The next spawn is refused until a jittered, capped, exponentially growing delay has
+        passed; the first failure costs nothing, so one transient error is retried at once."""
+        code = error.core_code if isinstance(error, VaultServerError) else None
+        if code not in _START_FAILURES:
+            return
+        state.start_failures += 1
+        if state.start_failures < 2:
+            return
+        delay = min(_SPAWN_BACKOFF_CAP_S, _SPAWN_BACKOFF_BASE_S * 2 ** (state.start_failures - 2))
+        # Jitter in [0.5, 1.0) of the delay, so that bridges that fail together do not retry together.
+        state.spawn_blocked_until = time.monotonic() + delay * (0.5 + 0.5 * random.random())
+        state.spawn_blocked_code = code
 
     def _ready_process(self, state: _BridgeState) -> _BridgeProcess:
         """The process for the next request, replacing one that is exited,
@@ -532,6 +756,12 @@ class NodeCoreBridge:
                 state.discard()
                 proc = None
         if proc is None:
+            if state.spawn_blocked_code is not None:
+                if time.monotonic() < state.spawn_blocked_until:
+                    # In the backoff after repeated start failures: fail closed with the same code, without a spawn
+                    # and without waiting.
+                    raise _core_failure(state.spawn_blocked_code)
+                state.spawn_blocked_code = None
             idle_exit_ms = max(1, round(self._idle_timeout_s * 1000))
             try:
                 popen = subprocess.Popen(
@@ -541,16 +771,18 @@ class NodeCoreBridge:
                     stderr=subprocess.DEVNULL,
                 )
             except (OSError, ValueError) as exc:
-                raise _core_failure("BRIDGE_SPAWN_FAILED") from exc
+                error = _core_failure("BRIDGE_SPAWN_FAILED")
+                self._note_start(state, error)
+                raise error from exc
             proc = state.proc = _BridgeProcess(popen)
         return proc
 
-    def _exchange(self, state: _BridgeState, proc: _BridgeProcess, frame: bytes) -> bytes:
+    def _exchange(self, state: _BridgeState, proc: _BridgeProcess, frame: bytes, timeout_s: float) -> bytes:
         """Writes one request frame and reads one response line, under the
         watchdog's deadline."""
         limit = MAX_RESPONSE_FRAME_BYTES
         line: bytes | None = None
-        state.watchdog.arm(proc.popen, self._timeout_s)
+        state.watchdog.arm(proc.popen, timeout_s)
         try:
             try:
                 proc.stdin.write(frame)
@@ -568,12 +800,15 @@ class NodeCoreBridge:
             raise _core_failure("BRIDGE_PROCESS_FAILED")
         return line
 
-    def _parse(self, line: bytes, request_id: int) -> CoreScanOutcome:
+    def _parse(self, line: bytes, request_id: int, *, first: bool = False) -> CoreScanOutcome:
+        data: Any = _UNPINNED
         try:
             data = json.loads(line)
-        except (ValueError, RecursionError) as exc:
-            raise _bad_output() from exc
-        if type(data) is not dict:
+        except (ValueError, RecursionError):
+            pass
+        # Raised outside the `except` block: a `JSONDecodeError` keeps the whole line it failed on (`doc`), which is
+        # the child's output, and neither `__cause__` nor `__context__` may carry it.
+        if data is _UNPINNED or type(data) is not dict:
             raise _bad_output()
         response_id = data.pop("id", None)
         if type(response_id) is not int or response_id != request_id:
@@ -584,7 +819,8 @@ class NodeCoreBridge:
             if data.keys() != _ERROR_KEYS or type(error) is not dict:
                 raise _bad_output()
             code = error.get("code")
-            if code is not None and type(code) is not str:
+            # Only a code of the fixed shape is passed on; `message` is never read.
+            if code is not None and (type(code) is not str or _CORE_CODE.fullmatch(code) is None):
                 raise _bad_output()
             if code == "PII_UNAVAILABLE":
                 raise VaultServerError(VaultServerErrorCode.PII_UNAVAILABLE)
@@ -598,10 +834,11 @@ class NodeCoreBridge:
         raw_findings = data["findings"]
         if type(core_version) is not str or type(artifact) is not str or type(raw_findings) is not list:
             raise _bad_output()
-        if activation is not None and (
-            type(activation) is not str or not (1 <= len(activation) <= MAX_PII_ACTIVATION_LENGTH)
-        ):
+        if _VERSION_TEXT.fullmatch(core_version) is None or _ARTIFACT_TEXT.fullmatch(artifact) is None:
             raise _bad_output()
+        if activation is not None and (type(activation) is not str or _ACTIVATION_TEXT.fullmatch(activation) is None):
+            raise _bad_output()
+        self._check_integrity(data["integrity"], artifact, first)
         if self._expected_version is not None and core_version != self._expected_version:
             raise _core_failure("CORE_VERSION_MISMATCH")
 
@@ -613,6 +850,28 @@ class NodeCoreBridge:
             artifact=artifact,
             pii_activation=activation,
         )
+
+    def _check_integrity(self, reported: Any, artifact: str, first: bool) -> None:
+        """The child reports, with the response to the first request of a process, the digest of every pinned package
+        it found and verified before it loaded the core. The child already refuses a difference; this is the check
+        that it did verify (a bridge script that ignores the field, or a different one, is not accepted)."""
+        expected = self._expected_integrity
+        if expected is None or not first:
+            if reported is not None:
+                raise _bad_output()
+            return
+        if type(reported) is not dict or not reported or len(reported) > len(expected):
+            raise _bad_output()
+        for name, digest in reported.items():
+            if type(name) is not str or type(digest) is not str or name not in expected:
+                raise _bad_output()
+            if digest != expected[name]:
+                raise _core_failure("CORE_INTEGRITY_MISMATCH")
+        if _INTEGRITY_CORE not in reported or _INTEGRITY_WASM not in reported:
+            raise _core_failure("CORE_INTEGRITY_MISMATCH")
+        # A native addon that was not among the verified packages was found somewhere this check did not look.
+        if artifact == "addon" and len(reported) <= 2:
+            raise _core_failure("CORE_INTEGRITY_MISMATCH")
 
     def _check_pii_activation(self, activation: str | None) -> None:
         # Called with the bridge lock held, so pinning is not racy.
