@@ -254,3 +254,118 @@ async def restore_with_retry(
             continue
         return result.get("reason") or result["outcome"]
     return "exhausted"
+
+
+# ---------------------------------------------------------------------------- mixed-language workers
+
+PY_WORKER = Path(__file__).resolve().parent / "interop_py_worker.py"
+JS_WORKER = Path(__file__).resolve().parent / "interop_js_worker.mjs"
+
+
+class Worker:
+    """One persistent server process, in either language, over the shared database. The same line protocol for both."""
+
+    def __init__(self, language: str, config: dict[str, Any]) -> None:
+        assert language in ("js", "py")
+        self.language = language
+        self.config = config
+        self.pid = 0
+        self._process: asyncio.subprocess.Process | None = None
+        self._pending: dict[int, asyncio.Future[Any]] = {}
+        self._events: dict[str, asyncio.Future[None]] = {}
+        self._ready: asyncio.Future[None] | None = None
+        self._next = 0
+        self._reader: asyncio.Task[None] | None = None
+
+    async def start(self) -> Worker:
+        import shutil
+
+        loop = asyncio.get_running_loop()
+        self._ready = loop.create_future()
+        command = (
+            [sys.executable, str(PY_WORKER)]
+            if self.language == "py"
+            else [shutil.which("node") or "node", str(JS_WORKER)]
+        )
+        self._process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            env={**os.environ, "RSV_INTEROP_CONFIG": json.dumps(self.config)},
+            limit=1 << 26,
+        )
+        self.pid = self._process.pid
+        self._reader = asyncio.ensure_future(self._read())
+        await asyncio.wait_for(self._ready, timeout=120)
+        return self
+
+    async def _read(self) -> None:
+        assert self._process is not None and self._process.stdout is not None
+        while True:
+            line = await self._process.stdout.readline()
+            if not line:
+                break
+            message = json.loads(line)
+            event = message.get("event")
+            if event == "ready":
+                if self._ready is not None and not self._ready.done():
+                    self._ready.set_result(None)
+            elif event == "failed":
+                if self._ready is not None and not self._ready.done():
+                    self._ready.set_exception(RuntimeError("worker failed to start: " + str(message.get("code"))))
+            elif event == "held":
+                future = self._event(message["holdId"])
+                if not future.done():
+                    future.set_result(None)
+            else:
+                waiter = self._pending.pop(message.get("id"), None)
+                if waiter is not None and not waiter.done():
+                    waiter.set_result(message["reply"])
+        if self._ready is not None and not self._ready.done():
+            self._ready.set_exception(RuntimeError("worker exited during startup"))
+
+    def _event(self, hold_id: str) -> asyncio.Future[None]:
+        if hold_id not in self._events:
+            self._events[hold_id] = asyncio.get_running_loop().create_future()
+        return self._events[hold_id]
+
+    def send(self, op: str, **args: Any) -> asyncio.Future[Any]:
+        assert self._process is not None and self._process.stdin is not None
+        self._next += 1
+        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        self._pending[self._next] = future
+        self._process.stdin.write((json.dumps({"id": self._next, "op": op, "args": args}) + "\n").encode())
+        return future
+
+    async def call(self, op: str, **args: Any) -> Any:
+        return await asyncio.wait_for(self.send(op, **args), timeout=180)
+
+    async def hold_next(self, hold_id: str) -> None:
+        assert (await self.call("arm-hold", holdId=hold_id))["ok"] is True
+
+    async def held(self, hold_id: str, timeout: float = 30) -> None:
+        await asyncio.wait_for(self._event(hold_id), timeout=timeout)
+
+    async def release(self, hold_id: str) -> None:
+        await self.call("release", holdId=hold_id)
+
+    async def store(self, method: str, input: dict[str, Any]) -> dict[str, Any]:
+        return await self.call("store", method=method, input=input)
+
+    async def stop(self) -> None:
+        process = self._process
+        if process is None:
+            return
+        try:
+            if process.stdin is not None:
+                process.stdin.write(b'{"id":0,"op":"exit"}\n')
+                await process.stdin.drain()
+                process.stdin.close()
+            await asyncio.wait_for(process.wait(), timeout=20)
+        except (TimeoutError, ProcessLookupError, ConnectionResetError, BrokenPipeError):
+            process.kill()
+            await process.wait()
+        if self._reader is not None:
+            self._reader.cancel()
+        self._process = None

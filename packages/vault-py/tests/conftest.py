@@ -24,6 +24,9 @@ collect_ignore_glob = (
         "test_store_memory.py",
         "test_stores_postgres*.py",
         "test_aws_kms_*.py",
+        "test_interop_postgres.py",
+        "test_capture_parity_javascript.py",
+        "test_mutation_controls.py",
     ]
     if sys.version_info < (3, 11)
     else []

@@ -320,7 +320,8 @@ jobs:
   # synthetic runner-local passwords. The schedule corpus runs through the
   # Python driver (control clock, database clock, with and without holds), then
   # the two-process cases with real processes, disconnects around COMMIT, the
-  # malicious-row cases, and the DEBUG-log leak test.
+  # malicious-row cases, the DEBUG-log leak test, and the mixed-language runs
+  # against the JavaScript persistent server.
   #
   # This is the only job that installs psycopg (the `postgres` extra, with the
   # binary build and the pool used by one test); the `python` job installs
@@ -364,7 +365,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build -w @redact-secret/vault-contracts -w @redact-secret/store-postgres
+      # The whole workspace: the cross-language tests drive the JavaScript persistent server
+      # (vault-server, store-postgres) as a second process on the same database.
+      - run: npm run build
       - name: Create the serving role and apply the schema
         run: |
           node packages/store-postgres/scripts/create-app-role.mjs
@@ -383,4 +386,10 @@ jobs:
         working-directory: packages/vault-py
       - name: PostgreSQL adapter, two-process, and diagnostics tests
         run: pytest -q -s tests/test_stores_postgres.py tests/test_stores_postgres_processes.py
+        working-directory: packages/vault-py
+      # One JavaScript and one Python persistent server process over this database
+      # (mixed-language interoperation, #128), and capture parity with the
+      # JavaScript persistent server on the shared corpus.
+      - name: Cross-language interoperation and capture parity
+        run: pytest -q -s tests/test_interop_postgres.py tests/test_capture_parity_javascript.py
         working-directory: packages/vault-py

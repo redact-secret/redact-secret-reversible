@@ -17,6 +17,9 @@ cannot vouch for (a failed ``COMMIT``, a failed ``ROLLBACK``, a cancelled statem
 so a pool discards it. Construct the store after ``os.fork()``; a store used from another process than the one that
 created it raises ``STORE_CLOSED``.
 
+Installing: the ``postgres`` extra names plain ``psycopg``, which cannot be imported at all without a system ``libpq``.
+Either install ``libpq`` or ``psycopg[binary]`` (the variant the qualification record tested) beside it.
+
 Errors. Every failure is a sanitized ``StoreError``: no driver message, SQLSTATE detail, parameter, or row value leaves
 the adapter, and ``__cause__`` and ``__context__`` are both ``None``. A failure before ``COMMIT`` is sent leaves nothing
 applied (``STORE_UNAVAILABLE``, or ``stale`` for a lock wait, deadlock, or serialization failure). A failure of

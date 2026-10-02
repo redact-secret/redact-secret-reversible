@@ -44,6 +44,7 @@ from redact_secret_vault.persistent import (  # noqa: E402
     CreateCaptureInput,
     EntryUse,
     InspectAttemptInput,
+    InvalidateRecoveredInput,
     NewCapture,
     NewEntry,
     ReadCapturesInput,
@@ -55,6 +56,7 @@ from redact_secret_vault.persistent import (  # noqa: E402
     missing_capabilities,
 )
 from redact_secret_vault.persistent.contracts import Store  # noqa: E402
+from redact_secret_vault.stores import postgres as postgres_module  # noqa: E402
 
 pytestmark = [
     pg_support.needs_database,
@@ -63,7 +65,8 @@ pytestmark = [
 pg_support.require_database()
 
 REPO = Path(__file__).resolve().parents[3]
-STORE_SOURCE = Path(__file__).resolve().parents[1] / "src" / "redact_secret_vault" / "stores" / "postgres.py"
+# The module that is imported, in the checkout or in the wheel's site-packages: these tests read what is installed.
+STORE_SOURCE = Path(postgres_module.__file__)
 TENANT = "tenant-synthetic-a"
 HOUR = 3_600_000
 
@@ -645,6 +648,53 @@ def test_a_call_cancelled_while_paused_before_commit_closes_its_connection_and_a
         assert pool.closed == before + 1
         assert [e.used for e in (await store.read_entries(fixture.read())).entries] == [0]
         assert (await store.commit_restore(fixture.commit())).outcome == "committed"
+
+    run(scenario())
+
+
+# ------------------------------------------------------------------- the clock and the epoch
+
+
+def test_expiry_is_judged_on_the_store_clock_and_not_on_the_callers() -> None:
+    """The caller's ``now`` is checked against the skew bound only; expiry is the store's call."""
+
+    async def scenario() -> None:
+        clock = pg_support.DbClock()
+        store = await pg_support.open_store(pg_support.Pool(), clock=clock)
+        space = namespace()
+        await serving(store, space)
+        fixture = Fixture(space, max_uses=3, now=clock.ms)
+        assert (await store.create_capture(fixture.create())).outcome == "created"
+        expires = fixture.now + HOUR
+        # The store clock is exactly at expiry; the caller's clock still reads one millisecond earlier.
+        clock.ms = expires
+        await clock.push()
+        early = dataclasses.replace(fixture.commit(), now=expires - 1)
+        assert (await store.commit_restore(early)).reason == "expired"  # type: ignore[union-attr]
+        # The store clock is one millisecond before expiry; the caller's clock already reads past it.
+        clock.ms = expires - 1
+        await clock.push()
+        late = dataclasses.replace(fixture.commit(attempt="attempt-synthetic-2"), now=expires + 1)
+        assert (await store.commit_restore(late)).outcome == "committed"
+        await clock.dispose()
+
+    run(scenario())
+
+
+def test_a_commit_that_carries_an_epoch_other_than_the_namespaces_is_quarantined() -> None:
+    async def scenario() -> None:
+        store = await pg_support.open_store(pg_support.Pool())
+        space = namespace()
+        await serving(store, space)
+        fixture = Fixture(space)
+        assert (await store.create_capture(fixture.create())).outcome == "created"
+        assert (
+            await store.invalidate_recovered(InvalidateRecoveredInput(namespace=space, new_epoch=2))
+        ).outcome == "invalidated"
+        stale = fixture.commit()
+        assert dataclasses.replace(stale, epoch=1).epoch == 1
+        # The capture is of the old epoch, so it also reads as revoked; the epoch check comes first (spec section 5.5).
+        assert (await store.commit_restore(stale)).reason == "quarantined"  # type: ignore[union-attr]
 
     run(scenario())
 

@@ -128,6 +128,10 @@ HOLD: contextvars.ContextVar[Callable[[], Awaitable[None]] | None] = contextvars
 #: A fault applied to the calling task's next call.
 FAULT: contextvars.ContextVar[str | None] = contextvars.ContextVar("rsv_pg_fault", default=None)
 
+#: A process-wide queue of pauses (``async def pause()``): the next write transaction, in whatever task, awaits one
+#: before its ``COMMIT``. For a worker process that is driven by messages and has no task of its own to arm.
+HOLD_NEXT: list[Callable[[], Awaitable[None]]] = []
+
 FAULT_MARKER = "SENTINEL-SYNTHETIC-DRIVER-FAILURE"
 
 
@@ -152,8 +156,12 @@ class _Cursor:
 
         text = query if isinstance(query, str) else ""
         fault = FAULT.get()
+        if text.startswith(("SET TRANSACTION", "BEGIN ISOLATION")):
+            self._connection.writing = "READ WRITE" in text
         if text == "COMMIT":
             pause = HOLD.get()
+            if pause is None and self._connection.writing and HOLD_NEXT:
+                pause = HOLD_NEXT.pop(0)
             if pause is not None:
                 HOLD.set(None)
                 await pause()
@@ -173,6 +181,7 @@ class _Cursor:
 class _Connection:
     def __init__(self, inner: Any) -> None:
         self.inner = inner
+        self.writing = False
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.inner, name)

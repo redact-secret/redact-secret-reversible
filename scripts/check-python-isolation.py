@@ -13,7 +13,8 @@ and runs probes with `python -I` from that directory, never from the checkout:
              `.persistent.store_memory` import; `pip list` shows nothing but pip
              (and setuptools before 3.12) besides the wheel; `pip check` passes;
              and each optional module raises ImportError naming its extra.
-* all:       the wheel with [crypto,postgres,aws-kms]. The three dependency
+* all:       the wheel with [crypto,postgres,aws-kms], plus the `psycopg[binary]` build so the
+             PostgreSQL module imports without a system libpq. The three dependency
              families are installed and importable, and the base imports load none
              of them. Importing one optional module loads only its own family.
 """
@@ -123,6 +124,13 @@ def check_base(root: Path, wheel: Path) -> None:
 def check_all(root: Path, wheel: Path) -> None:
     python = make_venv(root, "all", wheel, "crypto,postgres,aws-kms")
     cwd = root
+    # The `postgres` extra names plain `psycopg`, which needs a system libpq to import at all. This run does not depend
+    # on the host having one: it adds the `binary` build, which bundles libpq. That is the tested install variant.
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir", "--quiet", "psycopg[binary]>=3.2,<4"],
+        cwd=root,
+        check=True,
+    )
     present = installed(python, cwd)
     for extra, marker in MARKERS.items():
         if marker not in present:
