@@ -801,11 +801,14 @@ class NodeCoreBridge:
         return line
 
     def _parse(self, line: bytes, request_id: int, *, first: bool = False) -> CoreScanOutcome:
+        data: Any = _UNPINNED
         try:
             data = json.loads(line)
-        except (ValueError, RecursionError) as exc:
-            raise _bad_output() from exc
-        if type(data) is not dict:
+        except (ValueError, RecursionError):
+            pass
+        # Raised outside the `except` block: a `JSONDecodeError` keeps the whole line it failed on (`doc`), which is
+        # the child's output, and neither `__cause__` nor `__context__` may carry it.
+        if data is _UNPINNED or type(data) is not dict:
             raise _bad_output()
         response_id = data.pop("id", None)
         if type(response_id) is not int or response_id != request_id:

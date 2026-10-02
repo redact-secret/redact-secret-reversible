@@ -43,6 +43,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PIN_FILE = ROOT / "packages/vault-py/src/redact_secret_vault/_core_pin.py"
 CORE_CLIENT = ROOT / "packages/vault-py/src/redact_secret_vault/core_client.py"
 LOCKFILE = ROOT / "package-lock.json"
+# The consumer-side install of release.yml's wheel smoke test: the same release, from its own lockfile.
+SMOKE_LOCKFILE = ROOT / "scripts/python-wheel-smoke/package-lock.json"
 ROOT_MANIFEST = ROOT / "package.json"
 
 ALGORITHM = "rsv-tree-v1"
@@ -206,6 +208,21 @@ def check_offline(pin: dict[str, dict[str, str]], entries: dict[str, dict[str, s
     return problems
 
 
+def check_smoke_lock(pin: dict[str, dict[str, str]]) -> list[str]:
+    """The wheel smoke test installs the core from its own lockfile; it must be the pinned release too."""
+    if not SMOKE_LOCKFILE.is_file():
+        return []
+    packages = json.loads(SMOKE_LOCKFILE.read_text())["packages"]
+    problems = []
+    for name in PACKAGES:
+        entry = packages.get(f"node_modules/{name}")
+        if entry is None:
+            problems.append(f"{SMOKE_LOCKFILE.relative_to(ROOT)} has no entry for {name}")
+        elif entry.get("integrity") != pin[name]["tarball"] or entry.get("version") != pin[name]["version"]:
+            problems.append(f"{SMOKE_LOCKFILE.relative_to(ROOT)}: {name} is not the pinned release")
+    return problems
+
+
 def check_installed(pin: dict[str, dict[str, str]], node_modules: Path) -> list[str]:
     problems = []
     found = 0
@@ -247,6 +264,8 @@ def main(argv: list[str]) -> int:
 
     pin = load_pin()
     problems = check_offline(pin, entries)
+    if not problems:
+        problems += check_smoke_lock(pin)
     if args.fetch and not problems:
         for name, fresh in fetch_all(entries).items():
             if fresh["tree"] != pin[name]["tree"]:

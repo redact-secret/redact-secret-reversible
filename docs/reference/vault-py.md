@@ -87,16 +87,44 @@ owns one long-lived process:
   `MAX_RESPONSE_FRAME_BYTES` (32 MiB) is `BRIDGE_BAD_OUTPUT`.
 - **Threads.** A lock admits one request at a time, so threads that share a
   bridge are serialized and never see each other's findings. Each waits for
-  the requests ahead of it. For parallel scans, use one bridge per worker;
-  separate bridges own separate processes.
-- **Failure.** A request that runs past `timeout_s` (default 10 s) is killed
+  the requests ahead of it, but only for as long as `timeout_s` allows: the
+  budget is end to end, so a caller that waited its whole budget gets
+  `BRIDGE_TIMEOUT` and nothing is sent. For parallel scans, use one bridge
+  per worker; separate bridges own separate processes. From asyncio code,
+  `await bridge.run_in_scan_executor(fn, ...)` runs a blocking call that
+  scans through the bridge on two threads the bridge owns (the persistent
+  server does this), so queued scans do not occupy the loop's default
+  executor; its budget starts when it is submitted.
+- **Failure.** A request that runs past `timeout_s` (default 10 s, counted
+  from the start of the call and including the wait for the lock) is killed
   (`CORE_FAILURE` with `BRIDGE_TIMEOUT`). A process that exits mid-request is
   `BRIDGE_PROCESS_FAILED`; malformed, oversized, or out-of-sequence output is
   `BRIDGE_BAD_OUTPUT`. After any failure, including a core error and an
   interrupted call, the process is killed and never used again, and the
   next `scan` starts a new one. A process that died while idle is replaced
   silently, because no request was lost. Errors carry fixed codes only,
-  never input or process output, and the process's stderr is discarded.
+  never input or process output, and the process's stderr is discarded. An
+  error code the child reports is passed on only if it matches
+  `[A-Z][A-Z0-9_]{0,63}`; the finding fields, version, artifact, and PII
+  activation it reports have fixed shapes too, and a response that breaks one
+  is `BRIDGE_BAD_OUTPUT`. After two start failures in a row that a retry cannot
+  cure (`BRIDGE_SPAWN_FAILED`, `BRIDGE_CORE_NOT_FOUND`,
+  `BRIDGE_CORE_LOAD_FAILED`, `CORE_INTEGRITY_MISMATCH`,
+  `CORE_VERSION_MISMATCH`) the bridge refuses to spawn for 0.1 s to 5 s
+  (doubling, jittered) and fails at once with the same code.
+- **Core integrity.** `expected_core_integrity` (default
+  `PINNED_CORE_INTEGRITY`) pins a digest for each package directory the core
+  needs. The process hashes `@redact-secret/core`, `@redact-secret/wasm`, and
+  the platform addon package before it imports the core and refuses a
+  difference with `CORE_INTEGRITY_MISMATCH`, so a modified, replaced, extended,
+  or symlinked core never runs. It does not cover the `node` executable, the
+  bridge script, other directories on Node.js's module path, or a change made
+  between the hash and the import. `scripts/core-integrity.py` regenerates
+  the pin (`_core_pin.py`) from the published tarballs; it must be run when
+  `PINNED_CORE_VERSION` changes, and CI fails if the pin, `package.json`, and
+  `package-lock.json` disagree. `expected_core_integrity=None` switches the
+  check off, and a core other than the pinned release needs
+  `expected_core_version=None` as well.
 - **Lifetime.** `max_scans_per_process` (default 10,000; the process is
   killed right after its last scan), `max_process_age_s` (default 600), and
   `idle_timeout_s` (default 60; the process exits by itself when idle that

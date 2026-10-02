@@ -178,7 +178,8 @@ def test_malformed_output_fails_closed_without_echoing_it_then_recovers(fake_cor
             bridge.scan("garbage-synthetic")
         assert _core_code(excinfo) == "BRIDGE_BAD_OUTPUT"
         assert "leak-synthetic" not in str(excinfo.value)
-        assert "leak-synthetic" not in repr(excinfo.value.__cause__)
+        # Neither link of the chain may hold the child's line (a JSONDecodeError keeps it as `doc`).
+        assert excinfo.value.__cause__ is None and excinfo.value.__context__ is None
         assert _pid(bridge.scan("after")) != first
 
 
@@ -231,10 +232,11 @@ def test_process_is_retired_at_max_scans(fake_core):
 
 @needs_node
 def test_process_is_replaced_after_max_age(fake_core):
-    with NodeCoreBridge(expected_core_integrity=None, script=fake_core, max_process_age_s=0.3) as bridge:
+    # The age bound is far above a loaded host's start-up time, so the first two scans share a process.
+    with NodeCoreBridge(expected_core_integrity=None, script=fake_core, max_process_age_s=2.0) as bridge:
         first = _pid(bridge.scan("x"))
         assert _pid(bridge.scan("x")) == first
-        time.sleep(0.4)
+        time.sleep(2.1)
         assert _pid(bridge.scan("x")) != first
 
 
