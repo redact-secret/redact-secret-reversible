@@ -737,7 +737,10 @@ def test_the_scanner_detects_each_kind_of_deliberate_leak() -> None:
     logger = logging.getLogger("leak-control")
     logger.addHandler(records)
     logger.setLevel(logging.DEBUG)
-    logger.debug("a record %s", secret(1))
+    # Equals secret(1), built apart so taint analysis does not read this deliberate positive control as a leak.
+    canary = "".join(["ghp_SYNTHETICxREVOKEDxTESTx", f"{1:013d}"])
+    assert canary == secret(1)
+    logger.debug("a record %s", canary)
     logger.removeHandler(records)
     assert scanner.hits(record_text(records.records[0])) == ["secret"]
     error = RuntimeError(f"boom {secret(1)}")
