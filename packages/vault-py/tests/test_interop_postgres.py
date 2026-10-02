@@ -389,17 +389,22 @@ def test_a_hundred_concurrent_restores_from_the_two_languages_commit_exactly_max
         assert len(committed) == max_uses, [short(reply) for reply in outcomes if not reply["ok"]][:5]
         for reply in committed:
             assert reply["value"]["fields"] == {"body": expected_body(values)}
+        # A denial is the budget, a conflict, or CLOCK_SKEW. Under queue delay a restore whose time was read and which
+        # then waited behind the others for a lock or a connection for longer than the 2 s skew bound is rejected by
+        # the commit with nothing consumed: that is the fail-closed behavior the test must allow, not a failure of
+        # the invariant below.
         for reply in outcomes:
             if not reply["ok"]:
                 assert (
                     reply["code"] == "RESTORE_DENIED"
                     and reply["reason"] == "budget"
-                    or reply["code"] == "RESTORE_CONFLICT"
+                    or reply["code"] in ("RESTORE_CONFLICT", "CLOCK_SKEW")
                 ), short(reply)
-        # The database agrees: the single entry has used exactly max_uses.
+        # The database agrees: the single entry has used exactly max_uses, and so no denial (skew included)
+        # consumed any of the budget.
         rows = await pg_support.admin_execute(
             f'SELECT used FROM "{pg_support.SCHEMA}".rsv_entry WHERE namespace = %s', (namespace,)
         )
-        assert [row[0] for row in rows] == [max_uses]
+        assert [row[0] for row in rows] == [len(committed)] == [max_uses]
 
     run(pair(first, second, body, both=CONTENDED))
