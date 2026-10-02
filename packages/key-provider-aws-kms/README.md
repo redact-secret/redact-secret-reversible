@@ -50,6 +50,7 @@ Pass `crypto` to `createPersistentServerVault`.
 - **The serving role needs four actions**: `kms:GenerateDataKey`, `kms:Decrypt`, `kms:ReEncryptFrom`, `kms:ReEncryptTo`. See the [IAM example](../../docs/reference/key-provider-aws-kms.md#iam).
 - **To rotate, add a new key.** Make the new ARN `active` and the old one `decrypt-only`, in every process, and keep the old one for at least 24 hours. See [Rotation](../../docs/reference/key-provider-aws-kms.md#rotation).
 - **The cache delays revocation.** With `cache` set, disabling a key in KMS takes up to `maxAgeMs` to take effect.
+- **A `logger` in your client config sees the ARN and the wrapped key, not the data key.** The SDK marks `Plaintext` sensitive and replaces it before logging; the key ARN, the wrapped key, and the context digest reach `logger.info` ([finding](../../docs/research/aws-sdk-v3-logger-and-key-material.md)). The package itself logs nothing.
 - **Deleting rows is not erasure.** A wrapped key in a backup stays decryptable while its KMS key is usable. See [Erasure and its limits](../../docs/reference/key-provider-aws-kms.md#erasure-and-its-limits).
 
 ## More

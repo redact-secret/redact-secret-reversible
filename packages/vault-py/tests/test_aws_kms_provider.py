@@ -638,7 +638,8 @@ def test_nothing_the_sdk_says_reaches_an_error_a_traceback_a_log_a_warning_or_a_
     capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     kms = FakeKms()
-    provider = build(kms)
+    # DEBUG is enabled for the SDK's loggers below, which the guard refuses unless the application opts in.
+    provider = build(kms, allow_sdk_debug_logging=True)
     errors: list[KeyProviderError] = []
 
     async def scenario() -> None:
