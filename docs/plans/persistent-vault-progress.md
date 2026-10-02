@@ -28,7 +28,7 @@ Read from `origin/main` at `35ffa32`, the registries, and the issue bodies; noth
 | --- | --- |
 | `@redact-secret/vault` | `0.1.0-beta.3` on `main` and npm; `latest` and `beta` both point at it; peers `@redact-secret/core@0.1.0-beta.12` exactly |
 | `@redact-secret/vault-server` | `0.1.0-beta.3`, same tags; depends on `@redact-secret/vault@0.1.0-beta.3` exactly |
-| `redact-secret-vault` (PyPI) | `0.1.0a3`, `0.1.0b1`, `0.1.0b2`, `0.1.0b3` published |
+| `redact-secret-vault` (PyPI) | `0.1.0a3`, `0.1.0b1`, `0.1.0b2`, `0.1.0b3`, `0.1.0b4` published |
 | `@redact-secret/core` | `latest` and `beta` are `0.1.0-beta.12` |
 | `@redact-secret/vault-contracts`, `vault-crypto`, `store-memory`, `store-postgres`, `key-provider-local`, `key-provider-aws-kms` | None exists on npm (404) |
 | Open PRs | [#99](https://github.com/redact-secret/redact-secret-vault/pull/99), a stale `release/beta.2` PR superseded by the merged #98. Not touched by this workstream |
