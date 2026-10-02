@@ -244,7 +244,7 @@ None of these is supported. "Research only" means a document exists and no code 
 
 | Profile | State |
 | --- | --- |
-| Python persistence | Not implemented. [Plan only](../plans/python-persistence-parity.md) |
+| Python persistence | Not part of this record. Modules exist in the source tree, unpublished and not supported; see the [Python qualification record](qualification-python-persistence-0.1.0b3.md) and the [plan](../plans/python-persistence-parity.md) |
 | Browser, dedicated Worker, and edge persistence | Out of scope of the specification (§1). `@redact-secret/vault` persists nothing |
 | Streaming capture or restore | Not implemented |
 | An asynchronous replica as a failover target | Tested as a negative control and shown unsafe (report suite D) |
