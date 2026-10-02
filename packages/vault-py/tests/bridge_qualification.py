@@ -583,6 +583,95 @@ def run_fuzz(report: Report, *, cases: int, seed: int, parser_cases: int) -> Non
         f"{parser_cases} cases, outcomes {json.dumps(outcomes, sort_keys=True)}, {len(bad)} escaped exceptions, {time.monotonic() - started:.1f} s"
         + "".join(f"; VIOLATION {b}" for b in bad[:5]),
     )
+    run_fuzz_strings(report, seed=seed, cases=max(1000, parser_cases // 5))
+
+
+_HOSTILE_STRINGS = (
+    PLAINTEXT_MARKER,
+    PLAINTEXT_MARKER + "\n",
+    PLAINTEXT_MARKER.replace("-", " "),
+    f"input {PLAINTEXT_MARKER}",
+    f"SECRET={PLAINTEXT_MARKER}",
+    PLAINTEXT_MARKER.lower(),
+    "A" * 65,
+    "a" * 4096,
+    "é" * 8 + PLAINTEXT_MARKER,
+    "",
+    "\x00" + PLAINTEXT_MARKER,
+    "\ud800" + PLAINTEXT_MARKER,
+)
+
+
+def _string_slots(frame: dict[str, Any]) -> list[Callable[[Any], None]]:
+    """A setter for every string a response can carry."""
+    slots: list[Callable[[Any], None]] = []
+
+    def at(container: dict[str, Any], key: str) -> None:
+        if isinstance(container[key], str):
+            slots.append(lambda value, c=container, k=key: c.__setitem__(k, value))
+
+    for key in list(frame):
+        if key != "id":
+            at(frame, key)
+    if isinstance(frame.get("error"), dict):
+        for key in list(frame["error"]):
+            at(frame["error"], key)
+    for finding in frame.get("findings") or []:
+        for key in list(finding):
+            at(finding, key)
+    return slots
+
+
+def run_fuzz_strings(report: Report, *, seed: int, cases: int) -> None:
+    """Every string field of a response replaced by hostile text: a refusal must carry none of it. A string that
+    passes its field's shape (a short token of the allowed alphabet) is accepted and counted, not hidden: the shapes
+    bound what can come through, they do not prove that a short token is not a secret."""
+    started = time.monotonic()
+    bridge = NodeCoreBridge(node_executable=NODE)
+    rng = random.Random(seed ^ 0x5EED)
+    finding = {
+        "id": "finding-1", "type": "github_token", "detector": "d", "confidence": "high",
+        "obfuscation": "none", "start": 0, "end": 5, "action": "redact",
+    }  # fmt: skip
+    success = {
+        "id": 1,
+        "findings": [finding],
+        "coreVersion": PINNED_CORE_VERSION,
+        "artifact": "wasm",
+        "piiActivation": None,
+    }
+    failure = {"id": 1, "error": {"message": "core scan failed", "code": "CORE_ERROR"}}
+    refused = accepted = carried = 0
+    bad: list[str] = []
+    needle = PLAINTEXT_MARKER.lower()
+    for index in range(cases):
+        frame = json.loads(json.dumps(rng.choice((success, failure))))
+        slots = _string_slots(frame)
+        for setter in rng.sample(slots, k=1 if rng.random() < 0.7 else rng.randint(1, len(slots))):
+            setter(rng.choice(_HOSTILE_STRINGS))
+        try:
+            line = json.dumps(frame, separators=(",", ":")).encode("utf-8", "surrogatepass") + b"\n"
+        except (TypeError, ValueError):
+            continue
+        try:
+            outcome = bridge._parse(line, 1)  # noqa: SLF001
+            accepted += 1
+            if needle in repr(outcome).lower():
+                carried += 1
+        except VaultServerError as error:
+            refused += 1
+            shown = f"{error!s} {error!r} {error.args} {error.core_code} {error.__cause__!r} {error.__context__!r}"
+            if needle in shown.lower() or "\n" in shown:
+                bad.append(f"case {index}")
+        except BaseException as error:  # noqa: BLE001
+            bad.append(f"case {index}: {type(error).__name__}")
+    report.add(
+        "G5.fuzz-client-strings",
+        not bad,
+        "every string field of a response replaced by hostile text: no refusal carries any of it, and only a typed error leaves the parser",
+        f"{cases} cases from seed {seed}, {refused} refused, {accepted} accepted, {carried} accepted with the marker inside a field whose alphabet allows it (a bounded token, not free text), {len(bad)} violations, {time.monotonic() - started:.1f} s"
+        + "".join(f"; VIOLATION {b}" for b in bad[:5]),
+    )
 
 
 # ------------------------------------------------------------------------------------------------ lifetime
@@ -1189,22 +1278,35 @@ def run_failclosed(report: Report, workdir: Path) -> None:
 export async function initialize() {{}}
 export function artifact() {{ return {{ kind: "synthetic" }}; }}
 """
-    # A core that puts the input into the error code it reports.
+    # A core that puts the input into the error code it reports, for several shapes of input.
     nm = hostile(
         "echo-code", base + """export function scan(text) { const e = new Error("x"); e.code = text; throw e; }"""
     )
+    hostile_inputs = (
+        f"input {marker}",
+        marker,
+        marker.lower(),
+        f"{marker}\n{marker}",
+        "A" * 65,
+        "É" * 4,
+    )
     leaked = False
+    wrong_code = 0
     detail = "no error"
-    try:
-        NodeCoreBridge(node_modules=nm).scan(f"input {marker}", policy=None, limits=LIMITS)
-    except VaultServerError as error:
-        leaked = marker in str(error) or marker in repr(error) or marker in (error.core_code or "")
-        detail = error.code.value
+    for text in hostile_inputs:
+        try:
+            NodeCoreBridge(node_modules=nm).scan(text, policy=None, limits=LIMITS)
+        except VaultServerError as error:
+            shown = f"{error!s}{error!r}{error.args}{error.core_code or ''}"
+            leaked = leaked or marker.lower() in shown.lower()
+            if error.core_code != "BRIDGE_BAD_OUTPUT":
+                wrong_code += 1
+            detail = error.code.value
     report.add(
         "G5.sanitization.core-error-code",
-        not leaked,
-        "an error code reported by a (compromised or buggy) core is not copied into the exception unvalidated",
-        f"the input marker reached the exception message and core_code: {leaked} ({detail})",
+        not leaked and wrong_code == 0,
+        "an error code reported by a (compromised or buggy) core is not copied into the exception unvalidated: only [A-Z][A-Z0-9_]{0,63} passes, anything else is BRIDGE_BAD_OUTPUT with a fixed message",
+        f"{len(hostile_inputs)} hostile codes through the real child; the input marker reached an exception: {leaked}; refused with a code other than BRIDGE_BAD_OUTPUT: {wrong_code} ({detail})",
     )
     # Version string only: a replaced core that reports the pinned version is accepted.
     nm = hostile("replaced", base + "export function scan() { return []; }")

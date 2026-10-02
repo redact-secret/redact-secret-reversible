@@ -566,6 +566,118 @@ def test_a_bridge_error_response_discards_the_process(scripted):
     assert len(processes) == 2 and processes[0].returncode == -9
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "leak-synthetic",
+        "LEAK synthetic",
+        "lower_case",
+        "1_STARTS_WITH_A_DIGIT",
+        "_STARTS_WITH_UNDERSCORE",
+        "A" * 65,
+        "TRAILING_NEWLINE\n",
+        "E\u00c9",
+        "",
+        "X" + "\u0000",
+        "SECRET=leak-synthetic",
+    ],
+)
+def test_an_error_code_of_the_wrong_shape_is_bad_output_with_a_fixed_message(scripted, code):
+    """A code the child reports is passed on only if it matches ``[A-Z][A-Z0-9_]{0,63}``; otherwise the response is
+    ``BRIDGE_BAD_OUTPUT`` and nothing the child wrote reaches the exception."""
+
+    def error(request):
+        return {"id": request["id"], "error": {"message": "leak-synthetic", "code": code}}
+
+    processes = scripted(error, _ok)
+    bridge = _fake_bridge()
+    with pytest.raises(VaultServerError) as excinfo:
+        bridge.scan("x")
+    assert _core_code(excinfo) == "BRIDGE_BAD_OUTPUT"
+    shown = f"{excinfo.value!s}{excinfo.value!r}{excinfo.value.args}{excinfo.value.core_code}"
+    assert "leak" not in shown.lower() and "synthetic" not in shown.lower() and "\n" not in shown
+    assert excinfo.value.__cause__ is None
+    assert processes[0].returncode == -9
+    bridge.scan("x")
+
+
+@pytest.mark.parametrize("code", ["A", "X_SYNTHETIC", "PII_SELECTOR_INVALID", "A" + "9" * 63, None])
+def test_an_error_code_of_the_right_shape_is_passed_on(scripted, code):
+    error_body = {"message": "core scan failed"} if code is None else {"message": "m", "code": code}
+    scripted(lambda request: {"id": request["id"], "error": error_body})
+    with pytest.raises(VaultServerError) as excinfo:
+        _fake_bridge().scan("x")
+    assert _core_code(excinfo) == code
+
+
+_GOOD_FINDING = {
+    "id": "finding-1",
+    "type": "github_token",
+    "detector": "github-token",
+    "confidence": "high",
+    "obfuscation": "none",
+    "start": 0,
+    "end": 1,
+    "action": "redact",
+}
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"id": "leak synthetic"},
+        {"id": ""},
+        {"id": "f" * 129},
+        {"type": "leak\nsynthetic"},
+        {"type": "a b"},
+        {"type": "\u00e9"},
+        {"detector": "x" * 200},
+        {"confidence": "leak-synthetic"},
+        {"obfuscation": "leak-synthetic"},
+        {"action": "leak-synthetic"},
+        {"action": "REDACT"},
+        {"start": True},
+        {"end": 1.0},
+    ],
+)
+def test_a_finding_field_of_the_wrong_shape_is_bad_output(scripted, patch):
+    scripted(lambda request: {**_ok(request), "findings": [{**_GOOD_FINDING, **patch}]})
+    with pytest.raises(VaultServerError) as excinfo:
+        _fake_bridge().scan("x")
+    assert _core_code(excinfo) == "BRIDGE_BAD_OUTPUT"
+    assert "leak" not in repr(excinfo.value).lower()
+
+
+def test_a_finding_of_the_expected_shape_is_accepted(scripted):
+    second = {**_GOOD_FINDING, "id": "finding-2", "type": "pii_email"}
+    scripted(lambda request: {**_ok(request), "findings": [_GOOD_FINDING, second]})
+    outcome = _fake_bridge().scan("x")
+    assert [f.id for f in outcome.findings] == ["finding-1", "finding-2"]
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"coreVersion": "leak synthetic"},
+        {"coreVersion": "9" * 65},
+        {"coreVersion": ""},
+        {"artifact": "leak synthetic"},
+        {"artifact": "Addon"},
+        {"artifact": "a" * 33},
+        {"artifact": ""},
+        {"piiActivation": "leak synthetic"},
+        {"piiActivation": "x\ny"},
+        {"piiActivation": "\u00e9"},
+        {"piiActivation": "a" * 513},
+    ],
+)
+def test_a_version_artifact_or_activation_of_the_wrong_shape_is_bad_output(scripted, patch):
+    scripted(lambda request: {**_ok(request), **patch})
+    with pytest.raises(VaultServerError) as excinfo:
+        _fake_bridge().scan("x")
+    assert _core_code(excinfo) == "BRIDGE_BAD_OUTPUT"
+
+
 def test_a_restarted_process_is_rechecked_against_the_pinned_activation(scripted):
     other = "credentials=full;selectors=pii:global;fake=2"
     processes = scripted(_ok, lambda r: _ok(r, other), lambda r: _ok(r, other))

@@ -52,6 +52,7 @@ def test_adversarial_frames_are_refused_without_echo_hang_or_stderr(tmp_path: Pa
 def test_a_seeded_fuzz_run_finds_no_violation_in_the_child_or_the_client_parser() -> None:
     results = _run(bq.run_fuzz, cases=100, seed=7, parser_cases=5000)
     assert _unmet(results) == []
+    assert results["G5.fuzz-client-strings"].verdict == "MET"
 
 
 def test_lifetime_bounds_hold_on_the_real_core() -> None:
@@ -91,14 +92,10 @@ def test_a_waiting_caller_is_bounded_only_by_the_request_in_flight() -> None:
     assert waited and waited[0] >= 1.4, "the queued caller waited past timeout_s without an error"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="NOT MET: an error code from the child is copied into the exception message unvalidated "
-    "(core_client.py _parse); see the qualification record, G5",
-)
 def test_an_error_code_from_a_hostile_core_never_reaches_an_exception(tmp_path: Path) -> None:
     results = _run(bq.run_failclosed, tmp_path)
-    assert results["G5.sanitization.core-error-code"].verdict == "MET"
+    result = results["G5.sanitization.core-error-code"]
+    assert result.verdict == "MET", result.numbers
 
 
 def test_a_finding_outside_the_input_is_refused_by_the_capture_plan(tmp_path: Path) -> None:

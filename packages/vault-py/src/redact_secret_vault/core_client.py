@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -149,6 +150,26 @@ _SUCCESS_KEYS = frozenset(("findings", "coreVersion", "artifact", "piiActivation
 _ERROR_KEYS = frozenset(("error",))
 _UNPINNED: Any = object()
 
+# Every string the child process reports is checked against a fixed shape before it is used, and a response that
+# breaks one is ``BRIDGE_BAD_OUTPUT`` with a fixed message that carries none of the child's text. The shapes are
+# deliberately narrow: they bound what a buggy or compromised core can smuggle into an exception, a log line, an audit
+# field or a stored payload (a short token of the allowed alphabet, never free text or the input). They cannot prove
+# that a short token of that alphabet is not a secret: a core that reports one is still a core that cannot be trusted.
+#: The ``code`` of an error frame; ``core_code`` and the exception message carry it.
+_CORE_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+#: A finding's ``id``, ``type`` and ``detector`` (``finding-3``, ``aws_access_key_id``, ``github-token``,
+#: ``pii_email``); 128 is the longest PII type (``pii_`` and 124 characters).
+_FINDING_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
+#: ``coreVersion`` (``0.1.0-beta.12``) and ``artifact`` (``addon`` or ``wasm``).
+_VERSION_TEXT = re.compile(r"[0-9A-Za-z][0-9A-Za-z._+-]{0,63}")
+_ARTIFACT_TEXT = re.compile(r"[a-z][a-z0-9_-]{0,31}")
+#: ``piiActivation`` is a canonical identity such as ``credentials=full;selectors=off;families=;vocabulary=...``:
+#: printable ASCII without a space, at most ``MAX_PII_ACTIVATION_LENGTH`` characters.
+_ACTIVATION_TEXT = re.compile(rf"[\x21-\x7e]{{1,{MAX_PII_ACTIVATION_LENGTH}}}")
+_CONFIDENCE = frozenset(("high", "medium", "low"))
+_OBFUSCATION = frozenset(("none", "invisible-characters"))
+_ACTION = frozenset(("redact", "block", "warn", "allow"))
+
 
 def _core_failure(core_code: str) -> VaultServerError:
     return VaultServerError(VaultServerErrorCode.CORE_FAILURE, core_code=core_code)
@@ -162,6 +183,10 @@ def _parse_finding(raw: Any) -> CoreFinding:
     if type(raw) is not dict or raw.keys() != _FINDING_KEYS:
         raise _bad_output()
     if not all(type(raw[key]) is str for key in _FINDING_STR_FIELDS):
+        raise _bad_output()
+    if not all(_FINDING_NAME.fullmatch(raw[key]) for key in ("id", "type", "detector")):
+        raise _bad_output()
+    if raw["confidence"] not in _CONFIDENCE or raw["obfuscation"] not in _OBFUSCATION or raw["action"] not in _ACTION:
         raise _bad_output()
     if type(raw["start"]) is not int or type(raw["end"]) is not int:
         raise _bad_output()
@@ -584,7 +609,8 @@ class NodeCoreBridge:
             if data.keys() != _ERROR_KEYS or type(error) is not dict:
                 raise _bad_output()
             code = error.get("code")
-            if code is not None and type(code) is not str:
+            # Only a code of the fixed shape is passed on; `message` is never read.
+            if code is not None and (type(code) is not str or _CORE_CODE.fullmatch(code) is None):
                 raise _bad_output()
             if code == "PII_UNAVAILABLE":
                 raise VaultServerError(VaultServerErrorCode.PII_UNAVAILABLE)
@@ -598,9 +624,9 @@ class NodeCoreBridge:
         raw_findings = data["findings"]
         if type(core_version) is not str or type(artifact) is not str or type(raw_findings) is not list:
             raise _bad_output()
-        if activation is not None and (
-            type(activation) is not str or not (1 <= len(activation) <= MAX_PII_ACTIVATION_LENGTH)
-        ):
+        if _VERSION_TEXT.fullmatch(core_version) is None or _ARTIFACT_TEXT.fullmatch(artifact) is None:
+            raise _bad_output()
+        if activation is not None and (type(activation) is not str or _ACTIVATION_TEXT.fullmatch(activation) is None):
             raise _bad_output()
         if self._expected_version is not None and core_version != self._expected_version:
             raise _core_failure("CORE_VERSION_MISMATCH")
