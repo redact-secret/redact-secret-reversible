@@ -18,16 +18,19 @@ for example) without changing ``InMemoryVaultServer``.
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 import os
+import random
 import re
 import shutil
 import subprocess
 import threading
 import time
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -78,6 +81,30 @@ _MAX_SECONDS = 24 * 60 * 60.0
 _MAX_SCANS_PER_PROCESS = 10_000_000
 # How long to wait for a killed bridge process to be reaped.
 _REAP_TIMEOUT_S = 5.0
+#: Failures of a process's first request that a retry cannot cure: the deployment is wrong (no ``node``, no core, a
+#: core that does not load, another version, another artifact). After the second in a row a bridge refuses to spawn
+#: again, failing with the same code, for a delay that doubles from ``_SPAWN_BACKOFF_BASE_S`` up to
+#: ``_SPAWN_BACKOFF_CAP_S`` (each jittered to 50 to 100 percent); a success resets it. A timeout, a crash, or an error
+#: the core reports for an input does not count: a caller must not be able to hold the bridge in backoff with an input
+#: that makes the core fail.
+_START_FAILURES = frozenset(
+    (
+        "BRIDGE_SPAWN_FAILED",
+        "BRIDGE_CORE_NOT_FOUND",
+        "BRIDGE_CORE_LOAD_FAILED",
+        "CORE_INTEGRITY_MISMATCH",
+        "CORE_VERSION_MISMATCH",
+    )
+)
+_SPAWN_BACKOFF_BASE_S = 0.1
+_SPAWN_BACKOFF_CAP_S = 5.0
+#: Threads of the executor a bridge owns for ``run_in_scan_executor``. The bridge serves one request at a time, so a
+#: second thread only lets the next caller build its frame while the first scan runs; more would only be threads
+#: waiting on the bridge's lock.
+_EXECUTOR_THREADS = 2
+#: ``(state, deadline)`` of the call ``run_in_scan_executor`` is running on this thread, so that the deadline of a
+#: ``scan`` made from that call starts when the call was submitted and not when a worker thread picked it up.
+_SUBMITTED = threading.local()
 
 
 def _resolve_node_modules(value: str | os.PathLike[str] | None) -> str | None:
@@ -359,13 +386,41 @@ class _BridgeState:
     """Process-lifetime state, held apart from ``NodeCoreBridge`` so that its
     finalizer and the fork hook never keep the bridge itself alive."""
 
-    __slots__ = ("lock", "proc", "closed", "watchdog", "__weakref__")
+    __slots__ = (
+        "lock",
+        "proc",
+        "closed",
+        "watchdog",
+        "start_failures",
+        "spawn_blocked_until",
+        "spawn_blocked_code",
+        "executor",
+        "executor_lock",
+        "__weakref__",
+    )
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.proc: _BridgeProcess | None = None
         self.closed = False
         self.watchdog = _Watchdog()
+        # Backoff after repeated start failures (see ``NodeCoreBridge._note_start``).
+        self.start_failures = 0
+        self.spawn_blocked_until = 0.0
+        self.spawn_blocked_code: str | None = None
+        # The executor ``run_in_scan_executor`` uses, created on first use.
+        self.executor: ThreadPoolExecutor | None = None
+        self.executor_lock = threading.Lock()
+
+    def scan_executor(self) -> ThreadPoolExecutor:
+        with self.executor_lock:
+            if self.closed:
+                raise _core_failure("BRIDGE_CLOSED")
+            if self.executor is None:
+                self.executor = ThreadPoolExecutor(
+                    max_workers=_EXECUTOR_THREADS, thread_name_prefix="redact-secret-vault-bridge-scan"
+                )
+            return self.executor
 
     def discard(self) -> None:
         proc, self.proc = self.proc, None
@@ -376,6 +431,12 @@ class _BridgeState:
         self.closed = True
         self.discard()
         self.watchdog.stop()
+        with self.executor_lock:
+            executor, self.executor = self.executor, None
+        if executor is not None:
+            # Work already queued still runs, finds the bridge closed, and fails with BRIDGE_CLOSED at once; nothing
+            # waits for it here.
+            executor.shutdown(wait=False)
 
     def after_fork_in_child(self) -> None:
         # The child must never write to the parent's bridge process: two
@@ -387,6 +448,12 @@ class _BridgeState:
             self.proc.abandon()
         self.proc = None
         self.watchdog = _Watchdog()
+        self.start_failures = 0
+        self.spawn_blocked_until = 0.0
+        self.spawn_blocked_code = None
+        # The parent's worker threads do not exist in the child.
+        self.executor = None
+        self.executor_lock = threading.Lock()
 
 
 _LIVE_STATES: weakref.WeakSet[_BridgeState] = weakref.WeakSet()
@@ -576,22 +643,44 @@ class NodeCoreBridge:
             raise VaultServerError(VaultServerErrorCode.LIMIT_EXCEEDED)
 
         state = self._state
-        with state.lock:
+        # `timeout_s` is end to end from here: the wait for the lock (every caller ahead of this one), the start of a
+        # process when one is needed, the write, the scan, and the read. Building the frame above is not counted: it
+        # is the caller's own work and grows with the input. A call made through ``run_in_scan_executor`` counts from
+        # when it was submitted, so the time it waited for a worker thread is inside the same budget.
+        submitted = getattr(_SUBMITTED, "entry", None)
+        if submitted is not None and submitted[0] is state:
+            deadline = submitted[1]
+        else:
+            deadline = time.monotonic() + self._timeout_s
+        budget = deadline - time.monotonic()
+        if budget <= 0 or not state.lock.acquire(timeout=budget):
+            # Nothing was sent and the process in flight is another caller's: it is left alone.
+            raise _core_failure("BRIDGE_TIMEOUT")
+        try:
             if state.closed:
                 raise _core_failure("BRIDGE_CLOSED")
+            if deadline - time.monotonic() <= 0:
+                raise _core_failure("BRIDGE_TIMEOUT")  # the wait used the whole budget; the process is untouched
             proc = self._ready_process(state)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _core_failure("BRIDGE_TIMEOUT")  # starting a process used the whole budget
             request_id = proc.next_id
-            proc.next_id += 1
             # The integrity pins go with the first request of a process, which verifies them before it loads the core.
             first = request_id == 1
-            pins = self._integrity_field if first else b""
             try:
-                line = self._exchange(state, proc, b'{"id":%d,' % request_id + pins + body[1:] + b"\n")
+                proc.next_id += 1
+                pins = self._integrity_field if first else b""
+                line = self._exchange(state, proc, b'{"id":%d,' % request_id + pins + body[1:] + b"\n", remaining)
                 outcome = self._parse(line, request_id, first=first)
-            except BaseException:
+            except BaseException as error:
                 # Whatever went wrong, this process is never asked again.
                 state.discard()
+                if first:
+                    self._note_start(state, error)
                 raise
+            if first:
+                state.start_failures = 0
             proc.served += 1
             proc.last_used = time.monotonic()
             if proc.served >= self._max_scans:
@@ -599,6 +688,56 @@ class NodeCoreBridge:
                 # process outlives its scan budget holding the last input.
                 state.discard()
             return outcome
+        finally:
+            state.lock.release()
+
+    async def run_in_scan_executor(self, function: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+        """Runs ``function(*args, **kwargs)``, a blocking call that scans through this bridge, on a thread this bridge
+        owns, and returns its result. For an asyncio caller: the persistent server uses it so that its scans do not
+        occupy the threads of the loop's default executor, which an application shares with everything else that calls
+        ``asyncio.to_thread`` (128 queued captures held all of them, and an unrelated call waited 28 to 62 s).
+
+        The bridge serves one request at a time, so queued work waits in this executor's queue, not on threads. The
+        ``timeout_s`` budget starts here: work that waits for a thread or for the bridge's lock past it fails with
+        ``BRIDGE_TIMEOUT`` and nothing is sent. A call that has not started when its task is cancelled never starts;
+        one that has started finishes, and its result is discarded (a returned value is not retained by the bridge)."""
+
+        import asyncio
+
+        state = self._state
+        executor = state.scan_executor()
+        deadline = time.monotonic() + self._timeout_s
+        call = functools.partial(self._run_submitted, state, deadline, function, args, kwargs)
+        return await asyncio.get_running_loop().run_in_executor(executor, call)
+
+    @staticmethod
+    def _run_submitted(
+        state: _BridgeState,
+        deadline: float,
+        function: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        _SUBMITTED.entry = (state, deadline)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _SUBMITTED.entry = None
+
+    def _note_start(self, state: _BridgeState, error: BaseException) -> None:
+        """Records a failure of a process's first request when it is one that repeating cannot cure (see
+        ``_START_FAILURES``). The next spawn is refused until a jittered, capped, exponentially growing delay has
+        passed; the first failure costs nothing, so one transient error is retried at once."""
+        code = error.core_code if isinstance(error, VaultServerError) else None
+        if code not in _START_FAILURES:
+            return
+        state.start_failures += 1
+        if state.start_failures < 2:
+            return
+        delay = min(_SPAWN_BACKOFF_CAP_S, _SPAWN_BACKOFF_BASE_S * 2 ** (state.start_failures - 2))
+        # Jitter in [0.5, 1.0) of the delay, so that bridges that fail together do not retry together.
+        state.spawn_blocked_until = time.monotonic() + delay * (0.5 + 0.5 * random.random())
+        state.spawn_blocked_code = code
 
     def _ready_process(self, state: _BridgeState) -> _BridgeProcess:
         """The process for the next request, replacing one that is exited,
@@ -617,6 +756,12 @@ class NodeCoreBridge:
                 state.discard()
                 proc = None
         if proc is None:
+            if state.spawn_blocked_code is not None:
+                if time.monotonic() < state.spawn_blocked_until:
+                    # In the backoff after repeated start failures: fail closed with the same code, without a spawn
+                    # and without waiting.
+                    raise _core_failure(state.spawn_blocked_code)
+                state.spawn_blocked_code = None
             idle_exit_ms = max(1, round(self._idle_timeout_s * 1000))
             try:
                 popen = subprocess.Popen(
@@ -626,16 +771,18 @@ class NodeCoreBridge:
                     stderr=subprocess.DEVNULL,
                 )
             except (OSError, ValueError) as exc:
-                raise _core_failure("BRIDGE_SPAWN_FAILED") from exc
+                error = _core_failure("BRIDGE_SPAWN_FAILED")
+                self._note_start(state, error)
+                raise error from exc
             proc = state.proc = _BridgeProcess(popen)
         return proc
 
-    def _exchange(self, state: _BridgeState, proc: _BridgeProcess, frame: bytes) -> bytes:
+    def _exchange(self, state: _BridgeState, proc: _BridgeProcess, frame: bytes, timeout_s: float) -> bytes:
         """Writes one request frame and reads one response line, under the
         watchdog's deadline."""
         limit = MAX_RESPONSE_FRAME_BYTES
         line: bytes | None = None
-        state.watchdog.arm(proc.popen, self._timeout_s)
+        state.watchdog.arm(proc.popen, timeout_s)
         try:
             try:
                 proc.stdin.write(frame)

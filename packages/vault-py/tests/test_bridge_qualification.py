@@ -67,9 +67,9 @@ def test_a_core_that_never_returns_is_killed_and_the_bridge_recovers(tmp_path: P
     assert _unmet(results) == []
 
 
-def test_a_waiting_caller_is_bounded_only_by_the_request_in_flight() -> None:
-    """Characterization of the design (docs/specs/threat-model.md, "unbounded queuing delay"): the deadline is armed
-    when a request is written, so callers queued behind the lock wait for as long as the queue is long."""
+def test_a_waiting_caller_is_bounded_by_timeout_s_end_to_end() -> None:
+    """The deadline covers the wait for the lock (docs/specs/threat-model.md, "queuing delay"): a caller behind a
+    request that takes longer than ``timeout_s`` fails with ``BRIDGE_TIMEOUT`` when its own budget is spent."""
 
     import threading
     import time
@@ -78,19 +78,23 @@ def test_a_waiting_caller_is_bounded_only_by_the_request_in_flight() -> None:
         bridge.scan("warm")  # the first request pays for the child's start-up and the core's load
         bridge._timeout_s = 0.5  # noqa: SLF001
         lock = bridge._state.lock  # noqa: SLF001
-        waited: list[float] = []
+        outcome: list[tuple[float, str]] = []
 
         def waiter() -> None:
             started = time.monotonic()
-            bridge.scan("x")
-            waited.append(time.monotonic() - started)
+            try:
+                bridge.scan("x")
+                code = "completed"
+            except VaultServerError as error:
+                code = error.core_code or error.code.value
+            outcome.append((time.monotonic() - started, code))
 
         with lock:  # another caller is in the middle of a request
             thread = threading.Thread(target=waiter)
             thread.start()
-            time.sleep(1.5)  # three times timeout_s
-        thread.join(10)
-    assert waited and waited[0] >= 1.4, "the queued caller waited past timeout_s without an error"
+            thread.join(10)
+    assert outcome and outcome[0][1] == "BRIDGE_TIMEOUT"
+    assert 0.4 <= outcome[0][0] <= 5.0, "the queued caller was not bounded by timeout_s"
 
 
 @pytest.fixture(scope="module")

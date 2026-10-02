@@ -740,6 +740,18 @@ class PersistentServerVault:
 
     # ------------------------------------------------------------------ helpers
 
+    def _off_loop(self, function: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Awaitable[Any]:
+        """Runs a blocking call that scans through the core off the event loop. A ``CoreClient`` that offers
+        ``run_in_scan_executor`` (``NodeCoreBridge`` does) runs it on threads of its own, so scans never occupy the
+        loop's default executor, which the application shares with everything else that calls ``asyncio.to_thread``;
+        any other client keeps the default executor. Cancelling the awaiting task leaves a call that is already
+        running to finish, and its result is discarded."""
+
+        runner = getattr(self._core, "run_in_scan_executor", None)
+        if callable(runner):
+            return runner(function, *args, **kwargs)  # type: ignore[no-any-return]
+        return asyncio.to_thread(function, *args, **kwargs)
+
     def _open_check(self) -> None:
         if self._closed:
             raise _stop(VaultServerErrorCode.CLOSED)
@@ -897,7 +909,7 @@ class PersistentServerVault:
 
         stop: _Stop | None = None
         try:
-            outcome = await asyncio.to_thread(
+            outcome = await self._off_loop(
                 self._core.scan,
                 "",
                 policy=None,
@@ -955,7 +967,7 @@ class PersistentServerVault:
         plan: CapturePlan | None = None
         plan_error: tuple[VaultServerErrorCode, str | None] | None = None
         try:
-            plan = await asyncio.to_thread(
+            plan = await self._off_loop(
                 plan_capture,
                 self._core,
                 input_text,

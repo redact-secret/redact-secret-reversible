@@ -1065,22 +1065,64 @@ def run_timeouts(report: Report, workdir: Path, *, runs: int = 20) -> None:
         "the first scan on a new child (spawn, core load, scan) against the next scan: timeout_s covers both",
         f"10 runs, first scan p50 {cold[5] * 1000:.0f} ms max {cold[-1] * 1000:.0f} ms; second scan p50 {warm[5] * 1000:.1f} ms max {warm[-1] * 1000:.1f} ms",
     )
-    # A failing core costs one spawn per request: no backoff.
+    # A core that cannot load: repeated start failures are backed off (two in a row, then a capped, jittered
+    # exponential delay in which a request fails at once with the same code and no process is spawned).
+    import redact_secret_vault.core_client as core_client_module
+
+    real_popen = core_client_module.subprocess.Popen
+    spawned = 0
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        nonlocal spawned
+        spawned += 1
+        return real_popen(*args, **kwargs)
+
+    results: dict[str, str] = {}
     with tempfile.TemporaryDirectory() as empty:
-        started = time.monotonic()
-        failures = 0
-        with NodeCoreBridge(node_modules=empty) as bridge:
-            for _ in range(30):
-                try:
-                    bridge.scan("x", policy=None, limits=LIMITS)
-                except VaultServerError as error:
-                    failures += error.core_code == "BRIDGE_CORE_NOT_FOUND"
-        per = (time.monotonic() - started) / 30
+        core_client_module.subprocess.Popen = counting  # type: ignore[misc]
+        try:
+            with NodeCoreBridge(node_modules=empty) as bridge:
+                started = time.monotonic()
+                codes: dict[str, int] = {}
+                for _ in range(30):
+                    try:
+                        bridge.scan("x", policy=None, limits=LIMITS)
+                    except VaultServerError as error:
+                        codes[error.core_code or "?"] = codes.get(error.core_code or "?", 0) + 1
+                results["burst"] = (
+                    f"30 back-to-back requests: {spawned} spawns, codes {json.dumps(codes, sort_keys=True)}, "
+                    f"{(time.monotonic() - started) * 1000:.0f} ms in all"
+                )
+            spawned = 0
+            with NodeCoreBridge(node_modules=empty) as bridge:
+                started = time.monotonic()
+                longest = 0.0
+                refused_fast = 0
+                requests = 0
+                while time.monotonic() - started < 6.0:
+                    t0 = time.monotonic()
+                    spawns_before = spawned
+                    try:
+                        bridge.scan("x", policy=None, limits=LIMITS)
+                    except VaultServerError:
+                        pass
+                    took = time.monotonic() - t0
+                    longest = max(longest, took)
+                    refused_fast += spawned == spawns_before
+                    requests += 1
+                    time.sleep(0.05)
+                results["paced"] = (
+                    f"one request every 50 ms for 6 s: {requests} requests, {spawned} spawns, "
+                    f"{refused_fast} refused without a spawn, slowest request {longest * 1000:.0f} ms"
+                )
+        finally:
+            core_client_module.subprocess.Popen = real_popen  # type: ignore[misc]
+    paced_spawns = int(results["paced"].split(", ")[1].split()[0])
     report.add(
         "G5.timeout.restart-storm",
-        None,
-        "a core that cannot load: every request spawns a child, fails, and discards it (no backoff, no circuit breaker)",
-        f"30 requests, {failures} BRIDGE_CORE_NOT_FOUND, {per * 1000:.0f} ms per request",
+        paced_spawns <= 12,
+        "a core that cannot load: repeated start failures back off (capped, jittered exponential), failing closed at once with no spawn and no waiting",
+        f"{results['burst']}; {results['paced']} (unbacked, that is one spawn per request)",
     )
 
 
@@ -1127,7 +1169,7 @@ def run_concurrency(report: Report) -> None:
         "throughput of 1 and 4 bridges (a 1.1 KiB input with one secret)",
         "; ".join(rows),
     )
-    # Unbounded waiting behind the lock: the timeout counts only the request in flight.
+    # Waiting behind the lock: timeout_s is end to end, so no caller waits longer than it, whatever the queue.
     big = "z " * 6_000_000  # about 12 MB: one scan takes a noticeable time
     with NodeCoreBridge(timeout_s=60.0) as bridge:
         _scan(bridge, "warm")  # the first request pays for the start-up
@@ -1135,31 +1177,37 @@ def run_concurrency(report: Report) -> None:
         t0 = time.monotonic()
         _scan(bridge, big)
         one = time.monotonic() - t0
-        waits: list[float] = []
-        errors: list[str] = []
+        elapsed: list[float] = []
+        completed = 0
+        errors: dict[str, int] = {}
         lock = threading.Lock()
-        # Enough callers that the last one waits several times timeout_s behind scans that each finish in time.
+        # Enough callers that the last one would wait several times timeout_s behind scans that each finish in time.
         callers = min(64, max(12, int(3 * 5.0 / max(one, 0.01)) + 2))
 
         def waiter(_: int) -> None:
+            nonlocal completed
             start = time.monotonic()
             try:
                 _scan(bridge, big)
-                with lock:
-                    waits.append(time.monotonic() - start)
+                ok, code = True, ""
             except VaultServerError as error:
-                with lock:
-                    errors.append(error.core_code or error.code.value)
+                ok, code = False, error.core_code or error.code.value
+            took = time.monotonic() - start
+            with lock:
+                elapsed.append(took)
+                completed += ok
+                if code:
+                    errors[code] = errors.get(code, 0) + 1
 
         with ThreadPoolExecutor(max_workers=callers) as pool:
             list(pool.map(waiter, range(callers)))
-    waits.sort()
-    longest = waits[-1] if waits else 0.0
+    elapsed.sort()
+    longest = elapsed[-1] if elapsed else 0.0
     report.add(
         "G5.concurrency.bounded-queue",
-        bool(waits) and longest <= 5.0 * 1.2,
-        "a caller waiting for the bridge lock is bounded by timeout_s (the design counts only the request in flight)",
-        f"one scan {one:.2f} s, timeout_s 5.0, {callers} callers: {len(waits)} completed, longest wait {longest:.2f} s, errors {errors}",
+        completed > 0 and longest <= 5.0 * 1.5 and set(errors) <= {"BRIDGE_TIMEOUT"},
+        "a caller waiting for the bridge lock is bounded by timeout_s end to end (lock wait included), failing closed with BRIDGE_TIMEOUT",
+        f"one scan {one:.2f} s, timeout_s 5.0, {callers} callers: {completed} completed, longest call {longest:.2f} s (limit 7.50: timeout_s and the kill of a scan past its deadline on a loaded host), errors {json.dumps(errors, sort_keys=True)}",
     )
 
 
@@ -1197,18 +1245,27 @@ def run_server_concurrency(report: Report) -> None:
         started = time.monotonic()
         await asyncio.to_thread(lambda: None)
         starved = time.monotonic() - started
-        await asyncio.gather(*captures)
+        results = await asyncio.gather(*captures, return_exceptions=True)
+        failed: dict[str, int] = {}
+        for result in results:
+            if isinstance(result, BaseException):
+                code = getattr(result, "core_code", None) or type(result).__name__
+                failed[code] = failed.get(code, 0) + 1
         out.append(
-            f"an unrelated asyncio.to_thread behind 128 queued 0.5 MB captures waited {starved:.2f} s (default executor: {workers} threads)"
+            f"an unrelated asyncio.to_thread behind 128 queued 0.5 MB captures waited {starved:.2f} s "
+            f"(default executor: {workers} threads; the scans run on the bridge's own {2} threads); "
+            f"{128 - sum(failed.values())} of the 128 completed, failures {json.dumps(failed, sort_keys=True)}"
         )
         bridge.close()
+        out.append(f"STARVED={starved:.3f}")
         return out
 
     lines = asyncio.run(scenario())
+    starved = float(lines.pop().split("=")[1])
     report.add(
         "G5.concurrency.server",
-        None,
-        "capture throughput of one persistent server over one bridge (reference store), and head-of-line blocking of the default executor",
+        starved < 2.0,
+        "capture throughput of one persistent server over one bridge (reference store), and whether queued scans starve the default executor (an unrelated asyncio.to_thread must not wait for them)",
         "; ".join(lines),
     )
 

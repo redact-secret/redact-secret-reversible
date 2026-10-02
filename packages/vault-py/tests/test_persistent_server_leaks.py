@@ -23,8 +23,11 @@ import gc
 import logging
 import pickle
 import sys
+import threading
+import time
 import traceback
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -594,6 +597,78 @@ def test_cancellation_at_every_await_returns_no_field_and_leaves_no_buffer_or_ta
 
     total = run(scenario())
     assert total >= (5 if operation == "capture" else 6), "the instrumentation saw too few await points"
+
+
+class ExecutorCore(FakeCore):
+    """A core client that, like ``NodeCoreBridge``, offers its own executor for the server's blocking scans."""
+
+    def __init__(self, delay: float = 0.0) -> None:
+        super().__init__()
+        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="synthetic-scan-executor")
+        self.delay = delay
+        self.ran_on: list[str] = []
+        self.finished = 0
+
+    async def run_in_scan_executor(self, function: Any, /, *args: Any, **kwargs: Any) -> Any:
+        def call() -> Any:
+            self.ran_on.append(threading.current_thread().name)
+            if self.delay:
+                time.sleep(self.delay)
+            result = function(*args, **kwargs)
+            self.finished += 1
+            return result
+
+        return await asyncio.get_running_loop().run_in_executor(self.pool, call)
+
+
+def test_a_core_client_with_its_own_executor_runs_every_scan_there(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The server's probe and its captures go to ``run_in_scan_executor`` when the client offers it, and the loop's
+    default executor (``asyncio.to_thread``) is not used for a scan."""
+
+    def forbidden(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("a scan used asyncio.to_thread although the client has its own executor")
+
+    monkeypatch.setattr(asyncio, "to_thread", forbidden)
+
+    async def scenario() -> ExecutorCore:
+        core = ExecutorCore()
+        rig = await make_rig(core=core)
+        await rig.capture(f"{SECRET_A} and {SECRET_B}")
+        await rig.capture("nothing to protect")
+        core.pool.shutdown(wait=True)
+        return core
+
+    core = run(scenario())
+    assert core.scans >= 3  # the probe at open, and two captures
+    assert core.ran_on and all(name.startswith("synthetic-scan-executor") for name in core.ran_on)
+
+
+def test_cancellation_while_a_scan_runs_in_the_clients_executor_finishes_it_and_discards_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keeps the cancellation semantics of the default executor: the scan that started finishes, its result is
+    discarded, nothing is stored and no value is left in a buffer."""
+
+    created = track_buffers(monkeypatch)
+
+    async def scenario() -> ExecutorCore:
+        core = ExecutorCore(delay=0.3)
+        rig = await make_rig(core=core)
+        core.delay = 0.3
+        before = core.finished
+        task = asyncio.ensure_future(rig.capture(f"{SECRET_A} {SECRET_B}"))
+        await asyncio.sleep(0.1)  # the scan is running on the client's thread
+        task.cancel()
+        await asyncio.wait({task})
+        assert task.cancelled()
+        await asyncio.sleep(0.5)  # the scan runs to its end
+        assert core.finished == before + 1, "the scan that had started did not finish"
+        assert rig.store.mutations() == 0 and rig.provider.calls["generate"] == 0
+        assert all_zero(_transient(created))
+        core.pool.shutdown(wait=True)
+        return core
+
+    run(scenario())
 
 
 def test_cancellation_while_the_core_scans_stores_nothing_and_returns_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
