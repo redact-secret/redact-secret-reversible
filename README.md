@@ -18,7 +18,7 @@ Hide secrets from a model, then put them back where you allow it.
 ## Quick start
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.4
+npm install @redact-secret/vault@0.1.0-beta.5
 ```
 
 npm also installs the one `@redact-secret/core` version this release works with.

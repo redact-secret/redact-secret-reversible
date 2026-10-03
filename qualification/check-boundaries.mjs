@@ -42,7 +42,7 @@ for (const required of REQUIRED_FILES) check(files.includes(required), `missing 
 
 const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
 check(pkg.dependencies === undefined || Object.keys(pkg.dependencies).length === 0, "vault must have no runtime dependencies");
-check(JSON.stringify(pkg.peerDependencies) === JSON.stringify({ "@redact-secret/core": "0.1.0-beta.12" }), "core peer must be pinned exactly");
+check(JSON.stringify(pkg.peerDependencies) === JSON.stringify({ "@redact-secret/core": "0.1.0-beta.13" }), "core peer must be pinned exactly");
 check(pkg.sideEffects === false, "package must declare sideEffects: false");
 check(pkg.publishConfig?.tag === "beta", "publishConfig.tag must be beta");
 check(!("scripts" in pkg) || !Object.keys(pkg.scripts).some((s) => /install|prepare|prepack|postpack/.test(s)), "no install-time scripts");
@@ -138,5 +138,5 @@ if (failures.length) {
   console.error(`boundary check failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`boundary check passed: ${files.length} packed files, 0 runtime dependencies, core peer 0.1.0-beta.12`);
+console.log(`boundary check passed: ${files.length} packed files, 0 runtime dependencies, core peer 0.1.0-beta.13`);
 console.log(files.map((f) => `  ${f}`).join("\n"));

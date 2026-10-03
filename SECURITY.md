@@ -17,14 +17,15 @@ Detection problems (a secret the core misses or misclassifies) belong to the cor
 
 | Package | Version | Security fixes |
 | --- | --- | --- |
-| `@redact-secret/vault` | `0.1.0-beta.4` (npm dist-tag `beta`) | Latest beta only |
-| `@redact-secret/vault-server` | `0.1.0-beta.4` (npm dist-tag `beta`) | Latest beta only |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.3` (core `0.1.0-beta.12`) | None; upgrade to `0.1.0-beta.4` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.2` (core `0.1.0-beta.11`) | None; upgrade to `0.1.0-beta.4` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.1` (core `0.1.0-beta.10`) | None; upgrade to `0.1.0-beta.4` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.3` | None; upgrade to `0.1.0-beta.4` |
-| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.2` | None; upgrade to `0.1.0-beta.4` |
-| `@redact-secret/vault` | `0.1.0-alpha.1` (core `0.1.0-beta.9`) | None; upgrade to `0.1.0-beta.4` |
+| `@redact-secret/vault` | `0.1.0-beta.5` (npm dist-tag `beta`) | Latest beta only |
+| `@redact-secret/vault-server` | `0.1.0-beta.5` (npm dist-tag `beta`) | Latest beta only |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.4` (core `0.1.0-beta.12`) | None; upgrade to `0.1.0-beta.5` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.3` (core `0.1.0-beta.12`) | None; upgrade to `0.1.0-beta.5` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.2` (core `0.1.0-beta.11`) | None; upgrade to `0.1.0-beta.5` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-beta.1` (core `0.1.0-beta.10`) | None; upgrade to `0.1.0-beta.5` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.3` | None; upgrade to `0.1.0-beta.5` |
+| `@redact-secret/vault`, `@redact-secret/vault-server` | `0.1.0-alpha.2` | None; upgrade to `0.1.0-beta.5` |
+| `@redact-secret/vault` | `0.1.0-alpha.1` (core `0.1.0-beta.9`) | None; upgrade to `0.1.0-beta.5` |
 
 Alpha and beta releases may change their API between versions. Only the runtimes and core version listed in the [beta.10 qualification record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-core-0.1.0-beta.10.md) and the [Worker-mode record](https://github.com/redact-secret/redact-secret-vault/blob/0db9a33a654704f1afad9388f5fdf0cf403a6b01/docs/research/qualification-worker-mode.md) are supported: Node.js and browser main-thread use, the optional dedicated-Worker mode, and `@redact-secret/vault-server`'s single-process, in-memory server authority. The persistent server profile and its packages (alpha, on npm since 2026-10-02; see the [persistence qualification record](docs/research/qualification-persistence-0.1.0-alpha.1.md)) and the research-grade Python package (`redact-secret-vault`, on PyPI as `0.1.0b3`) are unsupported, and reports about them are treated as design input.
 
@@ -33,7 +34,7 @@ Alpha and beta releases may change their API between versions. Only the runtimes
 Releases are signed with [Sigstore](https://www.sigstore.dev/) keyless signing: the release workflow ([`release.yml`](.github/workflows/release.yml)) publishes from GitHub Actions through OIDC, and the registries record a signed attestation tying each package to this repository, the workflow, and the commit it was built from. There is no long-lived signing key to obtain; the trust root is Sigstore's public-good instance, which the tools below fetch automatically.
 
 - **npm** (`@redact-secret/vault` and `@redact-secret/vault-server` from `0.1.0-alpha.3`, and `@redact-secret/vault@0.1.0-alpha.2`): after installing, run `npm audit signatures`. It verifies the registry signature and the provenance attestation of every installed package. The package page on npmjs.com also shows the provenance, including the source commit and the workflow run.
-- **PyPI** (`redact-secret-vault` from `0.1.0a3`, current `0.1.0b4`): each file carries a [PEP 740](https://peps.python.org/pep-0740/) attestation, shown on the file's page on pypi.org. To verify a downloaded file: `pip install pypi-attestations`, then `pypi-attestations verify pypi --repository https://github.com/redact-secret/redact-secret-vault pypi:<file name>`, for example `pypi:redact_secret_vault-0.1.0a3-py3-none-any.whl`.
+- **PyPI** (`redact-secret-vault` from `0.1.0a3`, current `0.1.0b5`): each file carries a [PEP 740](https://peps.python.org/pep-0740/) attestation, shown on the file's page on pypi.org. To verify a downloaded file: `pip install pypi-attestations`, then `pypi-attestations verify pypi --repository https://github.com/redact-secret/redact-secret-vault pypi:<file name>`, for example `pypi:redact_secret_vault-0.1.0a3-py3-none-any.whl`.
 
 `@redact-secret/vault@0.1.0-alpha.1` and `@redact-secret/vault-server@0.1.0-alpha.2` were published manually and carry no provenance ([RELEASING.md](RELEASING.md#provenance)). Neither is supported; upgrade.
 

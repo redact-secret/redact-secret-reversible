@@ -16,14 +16,14 @@ Swap secrets for random tokens before text leaves your server (for example, to a
 
 - Python 3.10 to 3.13 for the in-memory server (the classifiers list these; CI runs 3.10, 3.12, and 3.13). The persistent modules need Python 3.11+ and refuse to import on 3.10 (CI runs them on 3.11 and 3.12)
 - Node.js 20, 22, or 24 on `PATH`
-- `@redact-secret/core` at exactly `0.1.0-beta.12`, installed with npm in a directory your application owns
+- `@redact-secret/core` at exactly `0.1.0-beta.13`, installed with npm in a directory your application owns
 
 ## Install
 
 ```bash
-pip install redact-secret-vault==0.1.0b4
+pip install redact-secret-vault==0.1.0b5
 # In a directory of your choice, for example /srv/myapp/core:
-npm install @redact-secret/core@0.1.0-beta.12
+npm install @redact-secret/core@0.1.0-beta.13
 ```
 
 Tell the bridge where that `node_modules` is, in code or through the environment:
@@ -45,7 +45,7 @@ python -m redact_secret_vault doctor --node-modules /srv/myapp/core/node_modules
 ```text
 ok    node: v22.16.0
 ok    core location: /srv/myapp/core/node_modules (from --node-modules)
-ok    core: @redact-secret/core 0.1.0-beta.12 loaded (addon)
+ok    core: @redact-secret/core 0.1.0-beta.13 loaded (addon)
 ok    scan: 1 finding(s) in the synthetic input
 ```
 
@@ -123,7 +123,7 @@ A complete version that also shows a denied restore: [examples/05-python-server.
 
 ## Persistent modules (shipped in 0.1.0b4 behind extras, not supported)
 
-`pip install redact-secret-vault==0.1.0b4` puts these modules in the environment; `0.1.0b3` does not contain them. Each is behind an extra that brings its dependency (for example `pip install "redact-secret-vault[postgres]==0.1.0b4"`), and the base install keeps no runtime dependency. They need Python 3.11 or later. The API is `async` only (`Store`, `KeyProvider`, and `RecordCrypto` are protocols with `async def` methods); there is no synchronous twin. Status words follow [CONVENTIONS.md](https://github.com/redact-secret/redact-secret-vault/blob/main/CONVENTIONS.md#status-language): **implemented** here means the code exists and passed the runs named in the record, **not supported** means no support claim is made.
+`pip install redact-secret-vault==0.1.0b5` puts these modules in the environment; `0.1.0b3` does not contain them. Each is behind an extra that brings its dependency (for example `pip install "redact-secret-vault[postgres]==0.1.0b4"`), and the base install keeps no runtime dependency. They need Python 3.11 or later. The API is `async` only (`Store`, `KeyProvider`, and `RecordCrypto` are protocols with `async def` methods); there is no synchronous twin. Status words follow [CONVENTIONS.md](https://github.com/redact-secret/redact-secret-vault/blob/main/CONVENTIONS.md#status-language): **implemented** here means the code exists and passed the runs named in the record, **not supported** means no support claim is made.
 
 | Import path | Extra | What it is | Status |
 | --- | --- | --- | --- |

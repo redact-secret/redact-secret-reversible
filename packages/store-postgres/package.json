@@ -24,10 +24,10 @@
     "pg": "^8.11.0"
   },
   "devDependencies": {
-    "@redact-secret/core": "0.1.0-beta.12",
+    "@redact-secret/core": "0.1.0-beta.13",
     "@redact-secret/vault-conformance": "0.1.0-alpha.1",
     "@redact-secret/vault-crypto": "0.1.0-alpha.1",
-    "@redact-secret/vault-server": "0.1.0-beta.4",
+    "@redact-secret/vault-server": "0.1.0-beta.5",
     "pg": "8.23.1"
   },
   "engines": {

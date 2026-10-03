@@ -6,6 +6,12 @@
 
 - `@redact-secret/key-provider-aws-kms` ([#145](https://github.com/redact-secret/redact-secret-vault/issues/145)): [finding](docs/research/aws-sdk-v3-logger-and-key-material.md) and a regression test. A `logger` in the AWS SDK v3 client configuration never receives the plaintext data key (`Plaintext` is marked sensitive); it does receive the key ARN, the wrapped key, and the context digest. No provider change.
 
+## @redact-secret/vault 0.1.0-beta.5, @redact-secret/vault-server 0.1.0-beta.5, redact-secret-vault 0.1.0b5 (Python)
+
+**Release date: not yet released.** npm dist-tag `beta`. `@redact-secret/core` peer moves to `0.1.0-beta.13` exactly; `@redact-secret/vault-server` depends on `@redact-secret/vault` `0.1.0-beta.5` exactly. The persistence packages stay at `0.1.0-alpha.1`: they use the core only as a development dependency, so nothing they publish changes. No API change from `0.1.0-beta.4` / `0.1.0b4`.
+
+- **Core peer `0.1.0-beta.13`.** `@redact-secret/vault` and `@redact-secret/vault-server` peer-depend on `@redact-secret/core` `0.1.0-beta.13` exactly, and the Python bridge's `PINNED_CORE_VERSION` and integrity pin are `0.1.0-beta.13`. The published `0.1.0-beta.3` / `0.1.0-beta.4` / `0.1.0b3` / `0.1.0b4` pin `0.1.0-beta.12`. Root and wheel-smoke lockfiles and the qualification pins are updated; no code change.
+
 ## redact-secret-vault 0.1.0b4 (Python)
 
 **Release date: 2026-10-02.** A Python-only release: it ships from a `workflow_dispatch` run of `release.yml` on `main`, with no new tag ([RELEASING.md](RELEASING.md#python)). The bridge still pins `@redact-secret/core` `0.1.0-beta.12`. **Python persistence is not supported.** The persistent modules are in the wheel now, and the only document that may state support for a cell is the [qualification record](docs/research/qualification-python-persistence-0.1.0b3.md) (file name kept; it describes the tree that became `0.1.0b4`). Its gates are not all passed: the Node.js core bridge (G5) is not named qualified for any cell, and the support matrix (G9) is not passed in full.
