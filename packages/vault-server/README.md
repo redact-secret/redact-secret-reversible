@@ -13,10 +13,10 @@
 ## Install
 
 ```bash
-npm install @redact-secret/vault-server@0.1.0-beta.4
+npm install @redact-secret/vault-server@0.1.0-beta.5
 ```
 
-npm also installs the matching `@redact-secret/vault` and `@redact-secret/core` (an exact dependency and an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
+npm also installs the matching `@redact-secret/vault` and `@redact-secret/core` (an exact dependency and an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.13` yourself.
 
 ## Use
 

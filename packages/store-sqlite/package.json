@@ -21,10 +21,10 @@
     "@redact-secret/vault-contracts": "0.1.0-alpha.1"
   },
   "devDependencies": {
-    "@redact-secret/core": "0.1.0-beta.12",
+    "@redact-secret/core": "0.1.0-beta.13",
     "@redact-secret/vault-conformance": "0.1.0-alpha.1",
     "@redact-secret/vault-crypto": "0.1.0-alpha.1",
-    "@redact-secret/vault-server": "0.1.0-beta.4"
+    "@redact-secret/vault-server": "0.1.0-beta.5"
   },
   "engines": {
     "node": "20.x || 22.x || 24.x"

@@ -37,7 +37,7 @@ from .types import (
     VaultServerStats,
 )
 
-__version__ = "0.1.0b4"
+__version__ = "0.1.0b5"
 
 __all__ = [
     "__version__",

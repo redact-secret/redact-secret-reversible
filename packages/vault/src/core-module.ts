@@ -11,7 +11,7 @@ import * as core from "@redact-secret/core";
 
 import { coreCodeOf, VaultError } from "./errors.js";
 
-/** The part of the core's public module the vault uses. Satisfied by beta.9 through beta.12. */
+/** The part of the core's public module the vault uses. Satisfied by beta.9 through beta.13. */
 export interface CoreModule {
   readonly initialize: () => Promise<void>;
   readonly scan: typeof core.scan;

@@ -13,10 +13,10 @@ Swap secrets for random tokens before text leaves your code (for example, to an 
 ## Install
 
 ```bash
-npm install @redact-secret/vault@0.1.0-beta.4
+npm install @redact-secret/vault@0.1.0-beta.5
 ```
 
-npm also installs `@redact-secret/core` at the one version this release works with (an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.12` yourself.
+npm also installs `@redact-secret/core` at the one version this release works with (an exact peer dependency). If your package manager does not install peers, add `@redact-secret/core@0.1.0-beta.13` yourself.
 
 ## Use
 

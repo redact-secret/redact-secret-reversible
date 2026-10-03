@@ -45,7 +45,7 @@ DEFAULT_BRIDGE_SCRIPT = Path(__file__).parent / "boundary" / "core_bridge.mjs"
 # The exact core release this boundary is qualified against, matching the
 # pin in this repository's root package.json. A response reporting a
 # different version is treated as CORE_FAILURE rather than silently trusted.
-PINNED_CORE_VERSION = "0.1.0-beta.12"
+PINNED_CORE_VERSION = "0.1.0-beta.13"
 
 #: The integrity pin of that release: the "rsv-tree-v1" digest of each package directory the core needs (the core,
 #: its WebAssembly package, and the addon package of each platform it publishes). The bridge process hashes the
@@ -224,7 +224,7 @@ _CORE_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 #: A finding's ``id``, ``type`` and ``detector`` (``finding-3``, ``aws_access_key_id``, ``github-token``,
 #: ``pii_email``); 128 is the longest PII type (``pii_`` and 124 characters).
 _FINDING_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
-#: ``coreVersion`` (``0.1.0-beta.12``) and ``artifact`` (``addon`` or ``wasm``).
+#: ``coreVersion`` (``0.1.0-beta.13``) and ``artifact`` (``addon`` or ``wasm``).
 _VERSION_TEXT = re.compile(r"[0-9A-Za-z][0-9A-Za-z._+-]{0,63}")
 _ARTIFACT_TEXT = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 #: ``piiActivation`` is a canonical identity such as ``credentials=full;selectors=off;families=;vocabulary=...``:

@@ -155,7 +155,7 @@ if that matters for your deployment.
 
 **Status: implemented since `0.1.0a2` (never published); `0.1.0a3` is the first PyPI release.** PII detection needs
 `@redact-secret/core@0.1.0-beta.10` or later; this repository pins
-`0.1.0-beta.12` (`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
+`0.1.0-beta.13` (`PINNED_CORE_VERSION`). A core without PII support (`0.1.0-beta.9`) gets the
 fail-closed rules below. The rules are
 the [PII retention and activation decision record](../decisions/decide-pii-retention-and-activation-ownership.md)
 (§1 and §3 "Python bridge"), the same ones `@redact-secret/vault` follows.
